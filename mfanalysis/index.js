@@ -32,7 +32,6 @@ const getMutualFundsData = async (mutualFundId) => {
     name: responseJSON?.["meta"]?.["scheme_name"],
     nav: responseJSON?.["data"],
   };
-  console.log(data);
   return data;
 };
 
@@ -93,9 +92,31 @@ const main = async () => {
     console.log(`Mutual Fund ID: ${mutualFundId}`);
     const { name, nav } = await getMutualFundsData(mutualFundId);
     const monthlyAverageNav = getMonthlyAverageNAV(nav);
-    console.log(JSON.stringify(monthlyAverageNav));
+    
     return;
   });
 };
 
-main();
+const getEverHighestDays = async mfId => {
+  const {nav} = await getMutualFundsData(mfId);
+  // console.log(JSON.stringify(nav));
+  // Ever High calculation
+  let daysSinceLastEverHighest, everHighSoFar = 0, daysOfEverHighest = [];
+  for (let i = nav.length - 1; i >=0; i--) {
+    if (parseFloat(nav[i].nav) > parseFloat(everHighSoFar)) {
+      everHighSoFar = nav[i].nav;
+      daysOfEverHighest.push({
+        date: nav[i].date,
+        daysSinceLastEverHighest,
+        nav: nav[i].nav
+      });
+      daysSinceLastEverHighest = 1;
+    } else {
+      daysSinceLastEverHighest = daysSinceLastEverHighest + 1;
+    }
+  }
+  console.log(JSON.stringify(daysOfEverHighest));
+};
+
+
+getEverHighestDays(135320);
