@@ -1,0 +1,12 @@
+{
+  "name": "redis-test",
+  "version": "1.0.0",
+  "description": "Test script for Redis connection",
+  "main": "test-redis.js",
+  "scripts": {
+    "test": "node test-redis.js"
+  },
+  "dependencies": {
+    "ioredis": "^5.3.2"
+  }
+} 
