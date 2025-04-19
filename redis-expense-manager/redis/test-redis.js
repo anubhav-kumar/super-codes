@@ -1,14 +1,16 @@
 const Redis = require('ioredis');
 const { execSync } = require('child_process');
+const path = require('path');
 
-// Create a Redis client
+// Create a Redis client with better error handling
 const redis = new Redis({
   host: 'localhost',
   port: 6379,
   retryStrategy: (times) => {
     const delay = Math.min(times * 50, 2000);
     return delay;
-  }
+  },
+  maxRetriesPerRequest: 3
 });
 
 // Test key and value
@@ -18,15 +20,31 @@ const TEST_VALUE = 'Redis persistence is working!';
 async function cleanupRedisContainer() {
   try {
     console.log('Cleaning up Redis container...');
-    execSync('./cleanup-redis.sh', { stdio: 'inherit' });
+    execSync(path.join(__dirname, 'cleanup-redis.sh'), { stdio: 'inherit' });
   } catch (error) {
     console.log('Note: Container might not have existed:', error.message);
+  }
+}
+
+async function startRedisContainer() {
+  try {
+    console.log('Starting Redis container...');
+    execSync(path.join(__dirname, 'run-redis.sh'), { stdio: 'inherit' });
+    // Wait for Redis to be ready
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  } catch (error) {
+    console.error('❌ Error starting Redis container:', error.message);
+    process.exit(1);
   }
 }
 
 async function testRedisPersistence() {
   try {
     console.log('\n=== Testing Redis Persistence ===');
+    
+    // Ensure Redis is running
+    await startRedisContainer();
+    
     console.log('Step 1: Setting initial data...');
     
     // Set initial data
@@ -50,8 +68,7 @@ async function testRedisPersistence() {
     await cleanupRedisContainer();
     
     // Start new container
-    console.log('Starting new Redis container...');
-    execSync('./run-redis.sh', { stdio: 'inherit' });
+    await startRedisContainer();
     
     // Create new Redis client
     const newRedis = new Redis({
@@ -60,11 +77,9 @@ async function testRedisPersistence() {
       retryStrategy: (times) => {
         const delay = Math.min(times * 50, 2000);
         return delay;
-      }
+      },
+      maxRetriesPerRequest: 3
     });
-
-    // Wait a bit for Redis to be ready
-    await new Promise(resolve => setTimeout(resolve, 2000));
 
     console.log('\nStep 2: Testing data persistence...');
     
