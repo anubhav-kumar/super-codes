@@ -91,13 +91,13 @@ function TripList() {
                     </Badge>
                   </div>
                   <p className="text-muted mb-3">
-                    {new Date(trip.startDate).toLocaleDateString()} -{' '}
+                    {new Date(trip.startDate).toLocaleDateString()} -{" "}
                     {new Date(trip.endDate).toLocaleDateString()}
                   </p>
                   <div className="d-flex justify-content-between align-items-center">
                     <div>
                       <small className="text-muted">Total Expenses</small>
-                      <h4 className="mb-0">${trip.totalExpenses || 0}</h4>
+                      <h4 className="mb-0">₹ {trip.totalExpenses || 0}</h4>
                     </div>
                     <Button
                       as={Link}

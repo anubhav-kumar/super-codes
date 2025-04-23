@@ -11,7 +11,7 @@ class Trip {
   async createTrip(tripData) {
     const tripId = await this.redis.incr('trip:counter');
     const tripKey = `trip:${tripId}`;
-    
+
     const trip = {
       id: tripId,
       name: tripData.name,
@@ -26,7 +26,7 @@ class Trip {
 
     await this.redis.hmset(tripKey, trip);
     await this.redis.sadd('trips', tripId);
-    
+
     return trip;
   }
 
@@ -37,9 +37,13 @@ class Trip {
     if (!trip.id) {
       return null;
     }
-
     // Get expenses for the trip
-    trip.expenses = await this.expenseManager.getTripExpenses(tripId);
+    const expenses = await this.expenseManager.getTripExpenses(tripId);
+    const totalExpenses = expenses.reduce((sum, expense) => {
+      return sum = parseFloat(sum) + parseFloat(expense.amount);
+    }, 0);
+    trip.totalExpenses = totalExpenses;
+    console.log(`TRIP: ${JSON.stringify(trip)}`);
     return trip;
   }
 
@@ -47,7 +51,7 @@ class Trip {
   async updateTrip(tripId, tripData) {
     const tripKey = `trip:${tripId}`;
     const existingTrip = await this.getTrip(tripId);
-    
+
     if (!existingTrip) {
       throw new Error('Trip not found');
     }
@@ -66,7 +70,7 @@ class Trip {
   async deleteTrip(tripId) {
     const tripKey = `trip:${tripId}`;
     const trip = await this.getTrip(tripId);
-    
+
     if (!trip) {
       throw new Error('Trip not found');
     }
@@ -85,14 +89,14 @@ class Trip {
   async listTrips() {
     const tripIds = await this.redis.smembers('trips');
     const trips = [];
-    
+
     for (const tripId of tripIds) {
       const trip = await this.getTrip(tripId);
       if (trip) {
         trips.push(trip);
       }
     }
-    
+
     return trips;
   }
 }

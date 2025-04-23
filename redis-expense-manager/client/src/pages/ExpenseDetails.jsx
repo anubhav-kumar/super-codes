@@ -89,19 +89,27 @@ function ExpenseDetails() {
         <Card.Body>
           <Row>
             <Col md={6}>
-              <p><strong>Amount:</strong> ${expense.amount}</p>
-              <p><strong>Date:</strong> {new Date(expense.date).toLocaleDateString()}</p>
-              <p><strong>Currency:</strong> {expense.currency}</p>
-              <p><strong>Payment Method:</strong> {expense.paymentMethod}</p>
-              <p><strong>Paid By:</strong> {expense.paidBy}</p>
+              <p>
+                <strong>Amount:</strong> ₹{expense.amount}
+              </p>
+              <p>
+                <strong>Date:</strong>{" "}
+                {new Date(expense.date).toLocaleDateString()}
+              </p>
+              <p>
+                <strong>Currency:</strong> {expense.currency}
+              </p>
             </Col>
             <Col md={6}>
-              <p><strong>Status:</strong> 
-                <Badge bg={expense.remainingAmount === 0 ? 'success' : 'warning'}>
-                  {expense.remainingAmount === 0 ? 'Paid' : 'Pending'}
-                </Badge>
+              <p>
+                <strong>Payment Method:</strong> {expense.paymentMethod}
               </p>
-              <p><strong>Remaining Amount:</strong> ${expense.remainingAmount}</p>
+              <p>
+                <strong>Paid By:</strong> {expense.paidBy}
+              </p>
+              <p>
+                <strong>Remaining Amount:</strong> ₹{expense.remainingAmount}
+              </p>
             </Col>
           </Row>
         </Card.Body>
@@ -132,7 +140,11 @@ function ExpenseDetails() {
                   <td>{new Date(payment.date).toLocaleDateString()}</td>
                   <td>{payment.paymentMethod}</td>
                   <td>
-                    <Badge bg={payment.status === 'completed' ? 'success' : 'warning'}>
+                    <Badge
+                      bg={
+                        payment.status === "completed" ? "success" : "warning"
+                      }
+                    >
                       {payment.status}
                     </Badge>
                   </td>

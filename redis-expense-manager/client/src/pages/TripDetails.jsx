@@ -81,7 +81,6 @@ function TripDetails() {
                 <th>Amount</th>
                 <th>Date</th>
                 <th>Paid By</th>
-                <th>Status</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -92,11 +91,6 @@ function TripDetails() {
                   <td>${expense.amount}</td>
                   <td>{new Date(expense.date).toLocaleDateString()}</td>
                   <td>{expense.paidBy}</td>
-                  <td>
-                    <Badge bg={expense.remainingAmount === 0 ? 'success' : 'warning'}>
-                      {expense.remainingAmount === 0 ? 'Paid' : 'Pending'}
-                    </Badge>
-                  </td>
                   <td>
                     <Button
                       variant="info"

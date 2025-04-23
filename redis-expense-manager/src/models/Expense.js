@@ -17,7 +17,7 @@ class Expense {
       amount: expenseData.amount,
       date: expenseData.date,
       description: expenseData.description,
-      currency: expenseData.currency || 'USD',
+      currency: expenseData.currency || 'INR',
       paymentMethod: expenseData.paymentMethod,
       paidBy: expenseData.paidBy,
       remainingAmount: expenseData.amount,
