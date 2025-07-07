@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Anubhav Kumar - Developer & Explorer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(to bottom right, #f0f4ff, #cce0ff);
+      color: #2c3e50;
+      padding: 20px;
+    }
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 2.5rem;
+      text-align: center;
+      margin-top: 40px;
+    }
+    p.subtitle {
+      text-align: center;
+      font-size: 1.2rem;
+      margin-bottom: 50px;
+    }
+    .card {
+      background: white;
+      padding: 20px;
+      border-radius: 16px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+      margin-bottom: 30px;
+    }
+    .card h2 {
+      font-size: 1.5rem;
+      margin-bottom: 10px;
+    }
+    ul {
+      padding-left: 20px;
+    }
+    .carousel {
+      display: flex;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+      gap: 16px;
+    }
+    .carousel-item {
+      flex: 0 0 80%;
+      scroll-snap-align: center;
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+      text-align: center;
+    }
+    .carousel-item h3 {
+      margin-top: 10px;
+    }
+    .carousel-item a {
+      color: #1e3a8a;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .carousel-item img {
+      width: 100px;
+      height: auto;
+      border-radius: 8px;
+      margin-bottom: 10px;
+    }
+    .diary-entry {
+      margin-top: 20px;
+    }
+    .diary-entry img {
+      width: 100%;
+      border-radius: 12px;
+      margin-top: 10px;
+    }
+    .contact-icons {
+      display: flex;
+      gap: 15px;
+      margin-top: 15px;
+    }
+    .icon-btn {
+      width: 12px;
+      height: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #ccc;
+      border-radius: 50%;
+      background: #fff;
+      text-decoration: none;
+      color: #333;
+    }
+    .icon-btn img {
+        height: 30px;
+        width: 30px;
+    }
+    footer {
+      text-align: center;
+      margin-top: 50px;
+      font-size: 0.9rem;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Anubhav Kumar</h1>
+    <p class="subtitle">Software Developer • Explorer • Storyteller</p>
+
+    <div class="card">
+      <h2>About Me</h2>
+      <p>I’m Anubhav — a software developer by profession and a curious traveler at heart. When I'm not coding scalable systems or experimenting with new frameworks, I’m often capturing sunsets on hills, sipping chai in remote villages, or journaling my journeys.</p>
+    </div>
+
+    <div class="card">
+      <h2>Professional Skills</h2>
+      <ul>
+        <li>Languages: JavaScript, TypeScript, Python</li>
+        <li>Frameworks: React, Node.js, Express</li>
+        <li>Databases: PostgreSQL, MongoDB</li>
+        <li>DevOps: AWS, Docker, CI/CD</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>Companies I've Worked At</h2>
+      <div class="carousel">
+        <div class="carousel-item">
+            <img src="https://logo.clearbit.com/wego.com" alt="WegoPro logo">
+            <h3>WegoPro</h3>
+            <p>B2B wing of Wego. I worked in streamlining the data pipeline flow and adding new metrics with revamped designs in the Insights page of WegoPro webapp.</p>
+            <a href="https://idfy.com" target="_blank">Visit Company</a>
+          </div>
+        <div class="carousel-item">
+          <img src="https://logo.clearbit.com/idfy.com" alt="Idfy logo">
+          <h3>Idfy</h3>
+          <p>Worked in data plaform team of Idfy known for processing 150 Tb of data every month and showing 300+ realtime metrics to the clients.</p>
+          <a href="https://idfy.com" target="_blank">Visit Company</a>
+        </div>
+        <div class="carousel-item">
+          <img src="https://logo.clearbit.com/dreamsetgo.com" alt="Dreamsetgo logo">
+          <h3>Dreamsetgo</h3>
+          <p>Founding engineer at Dreamsetgo and was responsible for creating the internal MIS system which replaced Zoho CRM and handled many nuances of International Travel like currency exchange and Indian tax scenarios that previous system couldn't. </p>
+          <a href="https://cloudzen.io" target="_blank">Visit Company</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Travel Diaries (Updating soon)</h2>
+      <div class="diary-entry">
+        <strong>Kashmir</strong>: Refreshing tour of Pahalgam, house boat stay at Dal lake and snow clad Thajiwas glacier. 
+        <img src="https://picsum.photos/seed/leh/800/400" alt="Leh & Ladakh">
+      </div>
+      <div class="diary-entry">
+        <strong>Kerala</strong>: Living in a houseboat for 3 days with the rhythm of nature.
+        <img src="https://picsum.photos/seed/kerala/800/400" alt="Kerala Backwaters">
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Contact</h2>
+      <p>Let’s collaborate, code, or explore together. Feel free to connect:</p>
+      <div class="contact-icons">
+        <a href="https://www.linkedin.com/in/anubhav-prabhat-kumar/" class="icon-btn" title="LinkedIn"><img src="https://logo.clearbit.com/linkedin.com" alt="Linkedin logo"></a>
+        <a href="https://www.instagram.com/anubhav_p_kumar/" class="icon-btn" title="Email"><img src="https://logo.clearbit.com/instagram.com" alt="Instagram logo"></a>
+      </div>
+    </div>
+
+    <footer>
+      © <span id="year"></span> Anubhav Kumar. Made with passion and wanderlust.
+    </footer>
+  </div>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
