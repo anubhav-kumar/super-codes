@@ -3,19 +3,29 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Anubhav Kumar - Developer & Explorer</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <title>Anubhav Kumar</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
   <style>
     body {
       margin: 0;
-      font-family: 'Inter', sans-serif;
+      font-family: 'Playfair Display', serif;
       background: linear-gradient(to bottom right, #f0f4ff, #cce0ff);
       color: #2c3e50;
       padding: 20px;
     }
+    h1, h2, h3 {
+      font-family: 'Inter', sans-serif;
+    }
     .container {
       max-width: 1000px;
       margin: 0 auto;
+    }
+    .banner {
+      width: 100%;
+      max-height: 300px;
+      object-fit: cover;
+      border-radius: 12px;
+      margin-bottom: 30px;
     }
     h1 {
       font-size: 2.5rem;
@@ -25,7 +35,12 @@
     p.subtitle {
       text-align: center;
       font-size: 1.2rem;
-      margin-bottom: 50px;
+      margin-bottom: 10px;
+    }
+    .contact-info {
+      text-align: center;
+      font-size: 1rem;
+      margin-bottom: 30px;
     }
     .card {
       background: white;
@@ -41,43 +56,33 @@
     ul {
       padding-left: 20px;
     }
-    .carousel {
-      display: flex;
-      overflow-x: auto;
-      scroll-snap-type: x mandatory;
-      -webkit-overflow-scrolling: touch;
+    .skills-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 16px;
     }
-    .carousel-item {
-      flex: 0 0 80%;
-      scroll-snap-align: center;
-      background: #fff;
-      border-radius: 12px;
-      padding: 20px;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.08);
-      text-align: center;
+    .job-entry {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      margin-bottom: 25px;
     }
-    .carousel-item h3 {
-      margin-top: 10px;
-    }
-    .carousel-item a {
-      color: #1e3a8a;
-      text-decoration: none;
-      font-weight: 600;
-    }
-    .carousel-item img {
-      width: 100px;
-      height: auto;
+    .job-entry img {
+      width: 50px;
+      height: 50px;
+      object-fit: contain;
       border-radius: 8px;
-      margin-bottom: 10px;
+      flex-shrink: 0;
     }
-    .diary-entry {
-      margin-top: 20px;
+    .job-entry-content {
+      flex: 1;
     }
-    .diary-entry img {
-      width: 100%;
-      border-radius: 12px;
-      margin-top: 10px;
+    .job-entry-content h3 {
+      margin: 0 0 8px;
+      font-size: 1.1rem;
+    }
+    .job-entry-content p {
+      margin: 0;
     }
     .contact-icons {
       display: flex;
@@ -97,8 +102,8 @@
       color: #333;
     }
     .icon-btn img {
-        height: 30px;
-        width: 30px;
+      height: 30px;
+      width: 30px;
     }
     footer {
       text-align: center;
@@ -110,67 +115,77 @@
 </head>
 <body>
   <div class="container">
+    <img class="banner" src="https://picsum.photos/1200/400?grayscale&blur=1" alt="Banner Image">
     <h1>Anubhav Kumar</h1>
-    <p class="subtitle">Software Developer • Explorer • Storyteller</p>
-
-    <div class="card">
-      <h2>About Me</h2>
-      <p>I’m Anubhav — a software developer by profession and a curious traveler at heart. When I'm not coding scalable systems or experimenting with new frameworks, I’m often capturing sunsets on hills, sipping chai in remote villages, or journaling my journeys.</p>
+    <p class="subtitle">Senior Full-Stack Engineer | Cloud Computing & AI Enthusiast | 📍 Mumbai, Maharashtra India</p>
+    <div class="contact-info">
+      📞 +91-7259621634 | 📧 anubhav.p.kumar@gmail.com | 🔗 <a href="https://www.linkedin.com/in/anubhav-prabhat-kumar/" target="_blank">LinkedIn</a>
     </div>
 
     <div class="card">
-      <h2>Professional Skills</h2>
-      <ul>
-        <li>Languages: JavaScript, TypeScript, Python</li>
-        <li>Frameworks: React, Node.js, Express</li>
-        <li>Databases: PostgreSQL, MongoDB</li>
-        <li>DevOps: AWS, Docker, CI/CD</li>
-      </ul>
+      <h2>Summary</h2>
+      <p>
+        Full-stack engineer with <strong>7+ years</strong> building scalable solutions across multiple tech stacks. Specialized in <strong>Fullstack product development</strong> and <strong>data systems architecture</strong> with focus on <strong>AI-powered automation</strong> with proven track record of delivering impactful solutions at WegoPro, Idfy, and as founding engineer at Dreamsetgo.
+      </p>
     </div>
 
     <div class="card">
-      <h2>Companies I've Worked At</h2>
-      <div class="carousel">
-        <div class="carousel-item">
-            <img src="https://logo.clearbit.com/wego.com" alt="WegoPro logo">
-            <h3>WegoPro</h3>
-            <p>B2B wing of Wego. I worked in streamlining the data pipeline flow and adding new metrics with revamped designs in the Insights page of WegoPro webapp.</p>
-            <a href="https://idfy.com" target="_blank">Visit Company</a>
-          </div>
-        <div class="carousel-item">
-          <img src="https://logo.clearbit.com/idfy.com" alt="Idfy logo">
-          <h3>Idfy</h3>
-          <p>Worked in data plaform team of Idfy known for processing 150 Tb of data every month and showing 300+ realtime metrics to the clients.</p>
-          <a href="https://idfy.com" target="_blank">Visit Company</a>
-        </div>
-        <div class="carousel-item">
-          <img src="https://logo.clearbit.com/dreamsetgo.com" alt="Dreamsetgo logo">
-          <h3>Dreamsetgo</h3>
-          <p>Founding engineer at Dreamsetgo and was responsible for creating the internal MIS system which replaced Zoho CRM and handled many nuances of International Travel like currency exchange and Indian tax scenarios that previous system couldn't. </p>
-          <a href="https://cloudzen.io" target="_blank">Visit Company</a>
+      <h2>Technical Expertise</h2>
+      <div class="skills-grid">
+        <div><strong>Languages & Frameworks</strong><br/>MERN Stack, Python, Java, GraphQL, TypeScript</div>
+        <div><strong>Cloud & DevOps</strong><br/>AWS, Serverless, Docker, Jenkins, CI/CD</div>
+        <div><strong>Data Technologies</strong><br/>Data Pipelines, Analytics, OLAP Databases (Clickhouse, VictoriaMetrics)</div>
+        <div><strong>AI/ML Applications</strong><br/>Generative AI, Business Intelligence, Automated Reporting</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Professional Experience</h2>
+
+      <div class="job-entry">
+        <img src="https://logo.clearbit.com/wego.com" alt="WegoPro logo">
+        <div class="job-entry-content">
+          <h3>WegoPro | Senior Software Engineer | 2024–Present</h3>
+          <p>Created serverless analytics reporting, real-time alerts, and automated data pipelines using Node.js, AWS Lambda, Redshift and Serverless Framework.</p>
         </div>
       </div>
+
+      <div class="job-entry">
+        <img src="https://logo.clearbit.com/idfy.com" alt="Idfy logo">
+        <div class="job-entry-content">
+          <h3>Idfy | Senior Software Engineer | 2023–2024</h3>
+          <p>Led AI-powered tools like Semantic Search, Natural Language to Query system (AWS Bedrock, Clickhouse), and Automated QBR with OpenAI. Revamped analytics platform in Elixir, improving usability and engagement.</p>
+        </div>
+      </div>
+
+      <div class="job-entry">
+        <img src="https://logo.clearbit.com/dreamsetgo.com" alt="Dreamsetgo logo">
+        <div class="job-entry-content">
+          <h3>Dreamsetgo | Founding Engineer | 2020–2023</h3>
+          <p>Built Dreamsetgo's initial AWS/MERN/GraphQL tech stack. Delivered CRM replacement platform, virtual passes for MCFC & CFC, and automated MIS with real-time reporting and tax compliance features.</p>
+        </div>
+      </div>
+
+      <div class="job-entry">
+        <img src="https://logo.clearbit.com/carwale.com" alt="Carwale logo">
+        <div class="job-entry-content">
+          <h3>Carwale | Software Engineer | 2018–2020</h3>
+          <p>Transitioned Bikewale to microservices, unified data stack (MySQL, Elastic, Cassandra), and automated price crawling system with Python Scrapy.</p>
+        </div>
+      </div>
+
+      <div class="job-entry">
+        <img src="https://logo.clearbit.com/wipro.com" alt="Wipro logo">
+        <div class="job-entry-content">
+          <h3>Wipro Technologies | Project Engineer | 2017–2018</h3>
+          <p>Automated toll-free systems with Java, developed NE Testing Framework, and reduced regression test cycles from 2 days to 4 hours using Robo-Sikuli framework.</p>
+        </div>
+      </div>
     </div>
 
     <div class="card">
-      <h2>Travel Diaries (Updating soon)</h2>
-      <div class="diary-entry">
-        <strong>Kashmir</strong>: Refreshing tour of Pahalgam, house boat stay at Dal lake and snow clad Thajiwas glacier. 
-        <img src="https://picsum.photos/seed/leh/800/400" alt="Leh & Ladakh">
-      </div>
-      <div class="diary-entry">
-        <strong>Kerala</strong>: Living in a houseboat for 3 days with the rhythm of nature.
-        <img src="https://picsum.photos/seed/kerala/800/400" alt="Kerala Backwaters">
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Contact</h2>
-      <p>Let’s collaborate, code, or explore together. Feel free to connect:</p>
-      <div class="contact-icons">
-        <a href="https://www.linkedin.com/in/anubhav-prabhat-kumar/" class="icon-btn" title="LinkedIn"><img src="https://logo.clearbit.com/linkedin.com" alt="Linkedin logo"></a>
-        <a href="https://www.instagram.com/anubhav_p_kumar/" class="icon-btn" title="Email"><img src="https://logo.clearbit.com/instagram.com" alt="Instagram logo"></a>
-      </div>
+      <h2>Education</h2>
+      <p><strong>B.Tech in Electrical And Electronics Engineering</strong><br/>Manipal Institute of Technology | 2013–2017</p>
     </div>
 
     <footer>

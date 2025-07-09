@@ -53,3 +53,6 @@ Outputs:
   WebsiteURL:
     Description: "CloudFront URL of the website"
     Value: !Sub "https://${CloudFrontDistribution.DomainName}"
+  DistributionID:
+    Description: "ID of the CloudFront distribution"
+    Value: !Ref CloudFrontDistribution
