@@ -1,14 +1,15 @@
 {
-  "name": "rera",
+  "name": "podman-cli",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "podman.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "Anubhav",
+  "type": "module",
+  "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "pouchdb": "^9.0.0"
+    "inquirer": "^12.6.3"
   }
 }
