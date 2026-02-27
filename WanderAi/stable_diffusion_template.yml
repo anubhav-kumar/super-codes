@@ -1,0 +1,127 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  CloudFormation template to deploy an AWS EC2 GPU instance
+  configured for Stable Diffusion and GFPGAN.
+
+Parameters:
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance.
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: Must be the name of an existing EC2 KeyPair.
+
+  InstanceType:
+    Description: EC2 instance type for the GPU server. g4dn.2xlarge is a good starting point.
+    Type: String
+    Default: g4dn.xlarge
+    AllowedValues:
+      - g4dn.xlarge
+      - g4dn.2xlarge
+      - g4dn.4xlarge
+      - p3.2xlarge
+      - p3.8xlarge
+    ConstraintDescription: Must be a valid GPU instance type.
+
+  SSHLocation:
+    Description: The IP address range that can be used to SSH into the EC2 instance.
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 0.0.0.0/0
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: Must be a valid IP CIDR range of the form x.x.x.x/x.
+
+  VolumeSize:
+    Description: Size of the root EBS volume in GB.
+    Type: Number
+    Default: 100
+    MinValue: 50
+    MaxValue: 1000
+    ConstraintDescription: Must be between 50 and 1000 GB.
+
+Mappings:
+  AWSRegionToAMI:
+    # Deep Learning AMI GPU PyTorch 2.0.1 (Ubuntu 22.04) 20231018
+    us-east-1:
+      AMI: ami-04f7c11f12286702d
+    us-east-2:
+      AMI: ami-01438965651c6c039
+    us-west-1:
+      AMI: ami-065997235581335b7
+    us-west-2:
+      AMI: ami-0c46927a76059b024
+    eu-west-1:
+      AMI: ami-027581b0a85536417
+    ap-southeast-1:
+      AMI: ami-06900a65646199468
+    ap-southeast-2:
+      AMI: ami-08e8b69324700d810
+    ap-northeast-1:
+      AMI: ami-023a1a36411516769
+    ap-south-1:
+      AMI: ami-00483f0e3d9f1eeda # Deep Learning AMI GPU PyTorch 2.0.1 (Ubuntu 22.04) 20231018
+
+Resources:
+  StableDiffusionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH access to the Stable Diffusion instance
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SSHLocation
+
+  StableDiffusionInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !FindInMap [AWSRegionToAMI, !Ref 'AWS::Region', AMI]
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      SecurityGroupIds:
+        - !GetAtt StableDiffusionSecurityGroup.GroupId
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1 # Standard root device for Ubuntu AMIs
+          Ebs:
+            VolumeSize: !Ref VolumeSize
+            VolumeType: gp2 # General Purpose SSD
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+          export DEBIAN_FRONTEND=noninteractive
+
+          echo "Updating apt packages..."
+          sudo apt-get update -y
+          sudo apt-get upgrade -y
+
+          echo "Installing Python and pip..."
+          sudo apt-get install -y python3-pip python3-venv git wget
+
+          echo "Creating and activating virtual environment..."
+          python3 -m venv ~/sd_env
+          source ~/sd_env/bin/activate
+
+          echo "Installing PyTorch with CUDA support..."
+          # Install PyTorch for CUDA 11.8 (compatible with most recent NVIDIA drivers on DLAMI)
+          pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+          echo "Installing diffusers, transformers, accelerate, Pillow, numpy..."
+          pip install diffusers transformers accelerate Pillow numpy
+
+          echo "Cloning GFPGAN repository..."
+          git clone https://github.com/TencentARC/GFPGAN.git
+          cd GFPGAN
+
+          echo "Downloading GFPGAN model..."
+          mkdir -p experiments/pretrained_models
+          wget https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.4.pth -P experiments/pretrained_models/
+
+          echo "Installation complete. You can now SSH into the instance and run your script."
+          echo "Remember to activate the virtual environment: source ~/sd_env/bin/activate"
+          echo "And navigate to the GFPGAN directory to run your script: cd ~/GFPGAN"
+
+Outputs:
+  InstancePublicIp:
+    Description: The public IP address of the EC2 instance.
+    Value: !GetAtt StableDiffusionInstance.PublicIp

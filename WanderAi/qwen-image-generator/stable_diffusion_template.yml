@@ -1,0 +1,93 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  CloudFormation template to deploy an AWS EC2 GPU instance
+  configured for Stable Diffusion and GFPGAN.
+
+Parameters:
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance.
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: Must be the name of an existing EC2 KeyPair.
+
+  InstanceType:
+    Description: EC2 instance type for the GPU server. g4dn.2xlarge is a good starting point.
+    Type: String
+    Default: g4dn.xlarge
+    AllowedValues:
+      - g4dn.xlarge
+      - g4dn.2xlarge
+      - g4dn.4xlarge
+      - p3.2xlarge
+      - p3.8xlarge
+    ConstraintDescription: Must be a valid GPU instance type.
+
+  SSHLocation:
+    Description: The IP address range that can be used to SSH into the EC2 instance.
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 0.0.0.0/0
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: Must be a valid IP CIDR range of the form x.x.x.x/x.
+
+  VolumeSize:
+    Description: Size of the root EBS volume in GB.
+    Type: Number
+    Default: 100
+    MinValue: 50
+    MaxValue: 1000
+    ConstraintDescription: Must be between 50 and 1000 GB.
+
+Mappings:
+  AWSRegionToAMI:
+    # Deep Learning AMI GPU PyTorch 2.0.1 (Ubuntu 22.04) 20231018
+    us-east-1:
+      AMI: ami-04f7c11f12286702d
+    us-east-2:
+      AMI: ami-01438965651c6c039
+    us-west-1:
+      AMI: ami-065997235581335b7
+    us-west-2:
+      AMI: ami-0c46927a76059b024
+    eu-west-1:
+      AMI: ami-027581b0a85536417
+    ap-southeast-1:
+      AMI: ami-06900a65646199468
+    ap-southeast-2:
+      AMI: ami-08e8b69324700d810
+    ap-northeast-1:
+      AMI: ami-023a1a36411516769
+    ap-south-1:
+      AMI: ami-00483f0e3d9f1eeda # Deep Learning AMI GPU PyTorch 2.0.1 (Ubuntu 22.04) 20231018
+
+Resources:
+  StableDiffusionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH access to the Stable Diffusion instance
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SSHLocation
+
+  StableDiffusionInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-01b6d88af12965bb6
+      InstanceType: t3.micro
+      KeyName: !Ref KeyName
+      SecurityGroupIds:
+        - !GetAtt StableDiffusionSecurityGroup.GroupId
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1 # Standard root device for Ubuntu AMIs
+          Ebs:
+            VolumeSize: !Ref VolumeSize
+            VolumeType: gp2 # General Purpose SSD
+            DeleteOnTermination: true
+          
+
+Outputs:
+  InstancePublicIp:
+    Description: The public IP address of the EC2 instance.
+    Value: !GetAtt StableDiffusionInstance.PublicIp

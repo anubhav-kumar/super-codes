@@ -1,0 +1,76 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "CloudFormation template for Ubuntu EC2 instance in free tier with SSH access - No parameters required"
+
+Resources:
+  UbuntuSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH access via port 22
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: Ubuntu-SSH-SecurityGroup
+
+  ExternalVolume:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 500
+      VolumeType: gp3
+      AvailabilityZone: ap-south-1a
+      Tags:
+        - Key: Name
+          Value: Ubuntu-External-Storage-500GB
+
+  UbuntuEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      # Ubuntu 22.04 LTS AMI for ap-south-1
+      ImageId: ami-01714eff9eeea7efb
+      InstanceType: g4dn.large
+      KeyName: UbuntuGPUKeyPair
+      AvailabilityZone: ap-south-1a
+      SecurityGroups:
+        - !Ref UbuntuSecurityGroup
+      Tags:
+        - Key: Name
+          Value: Ubuntu-FreeTier-Instance
+
+  VolumeAttachment:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      Device: /dev/xvdf
+      InstanceId: !Ref UbuntuEC2Instance
+      VolumeId: !Ref ExternalVolume
+
+Outputs:
+  InstanceId:
+    Description: Instance ID of the Ubuntu EC2 instance
+    Value: !Ref UbuntuEC2Instance
+    Export:
+      Name: UbuntuInstanceId
+
+  PublicIP:
+    Description: Public IP address of the Ubuntu EC2 instance
+    Value: !GetAtt UbuntuEC2Instance.PublicIp
+    Export:
+      Name: UbuntuPublicIP
+
+  PublicDNS:
+    Description: Public DNS name of the Ubuntu EC2 instance
+    Value: !GetAtt UbuntuEC2Instance.PublicDnsName
+    Export:
+      Name: UbuntuPublicDNS
+
+  VolumeId:
+    Description: ID of the 500GB external storage volume (attached as /dev/xvdf)
+    Value: !Ref ExternalVolume
+    Export:
+      Name: ExternalVolumeId
+
+  SSHCommand:
+    Description: SSH command to connect to the instance
+    Value: !Sub "ssh -i MyKeyPair.pem ubuntu@${UbuntuEC2Instance.PublicIp}"
