@@ -1,9 +1,35 @@
-
+import json
 class Sudoku:
     def __init__(self, board):
         self.board = board
         self.input_cells = [list(map(lambda x: x > 0, row)) for row in board]
         self.possible_values = [list(map(lambda _: [], row)) for row in board]
+        self.start_row = 0
+        self.start_col = 0
+
+    def initialise(self):
+        self.populate_input_cells()
+        self.populate_possible_values()
+        while True:
+            is_optimising = False
+            for row in range(9):
+                for col in range(9):
+                    if len(self.possible_values[row][col]) == 1:
+                        self.set_cell_value(row, col, self.possible_values[row][col].pop())
+                        is_optimising = True
+            if not is_optimising:
+                break
+            self.populate_input_cells()
+            self.populate_possible_values()
+    
+    def set_start_row_col(self):
+        min_length_of_possible_values = 10
+        for row in range(9):
+            for col in range(9):
+                if (len(self.possible_values[row][col]) < min_length_of_possible_values):
+                    min_length_of_possible_values = len(self.possible_values[row][col])
+                    self.start_row = row
+                    self.start_col = col
 
     def get_non_occuring_numbers(self, row, col):
         if (not self.input_cells[row][col]):
@@ -30,14 +56,23 @@ class Sudoku:
 
     def next_cell(self, row, col):
         if (row == 8 and col == 8):
-            return None
-        col += 1
-        if col == 9:
+            row = 0
             col = 0
-            row += 1
+        else:
+            col += 1
+            if col == 9:
+                col = 0
+                row += 1
+        if (row == self.start_row and col == self.start_col):
+            return None
         return row, col
 
     def prev_cell(self, row, col):
+        if (row == self.start_row and col == self.start_col):
+            return None
+        if (row == 0 and col == 0):
+            row = 8
+            col = 8
         col -= 1
         if col < 0:
             col = 8
@@ -67,69 +102,58 @@ class Sudoku:
             for col in range(9):
                 self.input_cells[row][col] = self.board[row][col] == 0
 
-    def solve(self, row = 0, col = 0, is_back = False):
-        # print("Now at " + str(row) + "," + str(col))
-        if (not self.input_cells[row][col]):
-            # print("Detected non input cell")
-            next_cell = self.next_cell(row, col)
-            if (next_cell is None):
-                # print("No next cell present. Returning")
-                self.print_board()
-                return
-            elif (not is_back):
-                [next_row, next_col] = next_cell
-                # print("Moving to next cell")
-                return self.solve(next_row, next_col)
-            else: 
-                [prev_row, prev_col] = self.prev_cell(row, col)
-                return self.solve(prev_row, prev_col, is_back)
-        if (not is_back):
-            self.get_non_occuring_numbers(row, col)
-        # print("Possible values at cell: " +
-        str(self.possible_values[row][col])
-        if (len(self.possible_values[row][col]) > 0):
-            # print("Possible values found")
-            # print("Setting cell value")
-            # print(self.possible_values[row][col])
-            self.set_cell_value(row, col, self.possible_values[row][col].pop())
-            # print(self.possible_values[row][col])
-            next_cell = self.next_cell(row, col)
-            if (next_cell is None):
-                self.print_board()
-                return
+    def solve(self):
+        row, col = 0, 0
+        is_back = False
+        while True:
+            if not self.input_cells[row][col]:
+                if not is_back:
+                    next_cell = self.next_cell(row, col)
+                    if next_cell is None:
+                        self.print_board()
+                        return
+                    row, col = next_cell
+                else:
+                    prev_cell = self.prev_cell(row, col)
+                    if prev_cell is None:
+                        self.print_board()
+                        return
+                    row, col = prev_cell
+                continue
+            if not is_back:
+                self.get_non_occuring_numbers(row, col)
+            if len(self.possible_values[row][col]) > 0:
+                self.set_cell_value(row, col, self.possible_values[row][col].pop())
+                next_cell = self.next_cell(row, col)
+                if next_cell is None:
+                    self.print_board()
+                    return
+                row, col = next_cell
+                is_back = False
             else:
-                [next_row, next_col] = next_cell
-                return self.solve(next_row, next_col, False)
-        else:
-            # print("Possible values not found")
-            self.set_cell_value(row, col, 0)
-            prev_cell = self.prev_cell(row, col)
-            if (prev_cell is None):
-                # print("No previous cell")
-                self.print_board()
-                return
-            else:
-                # print("Moving to previous cell")
-                [prev_row, prev_col] = prev_cell
-                return self.solve(prev_row, prev_col, True)
+                self.set_cell_value(row, col, 0)
+                prev_cell = self.prev_cell(row, col)
+                if prev_cell is None:
+                    self.print_board()
+                    return
+                row, col = prev_cell
+                is_back = True
 
-sudoku = Sudoku([
-    [0, 0, 0, 0, 0, 0, 1, 0, 0],
-    [0, 8, 1, 0, 9, 3, 0, 4, 5],
-    [4, 0, 0, 0, 5, 0, 0, 3, 2],
-    [9, 0, 0, 5, 0, 4, 0, 7, 8],
-    [0, 5, 8, 3, 0, 0, 0, 0, 9],
-    [0, 0, 0, 8, 2, 0, 0, 0, 0],
-    [5, 0, 0, 2, 7, 0, 0, 8, 4],
-    [6, 0, 4, 1, 3, 8, 2, 0, 7],
-    [8, 0, 2, 9, 0, 0, 6, 0, 0]
-])
+unsolved_problems = 0
+with open("sudoku_input.jsonl") as f:
+    for line in f:
+        data = json.loads(line)
+        s = data['mission']
+        s_id = data['id']
+        sudoku_input = [[int(s[r*9 + c]) for c in range(9)] for r in range(9)]
+        print("-----" * 10)
+        try:
+            sudoku = Sudoku(sudoku_input)
+            sudoku.initialise()
+            sudoku.set_start_row_col()
+            sudoku.solve()
+        except Exception as e:
+            print(type(e).__name__)
+            unsolved_problems = unsolved_problems + 1
 
-sudoku.populate_input_cells()
-sudoku.populate_possible_values()
-
-print('Input board : ')
-sudoku.print_board()
-sudoku.solve()
-# sudoku.print_board()
-# print(sudoku.possible_values)
+print('Total Unsolved problems: ' + str(unsolved_problems))
