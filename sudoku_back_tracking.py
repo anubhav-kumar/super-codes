@@ -1,4 +1,15 @@
-import json
+import re, time
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+app = FastAPI()
+class InputData(BaseModel):
+    problem: str 
+
+class OutputData(BaseModel):
+    result: str
+    time: int
+
 class Sudoku:
     def __init__(self, board):
         self.board = board
@@ -81,16 +92,12 @@ class Sudoku:
             return None  # start of board
         return row, col
 
-    def print_board(self):
-        for i, row in enumerate(self.board):
-            if i % 3 == 0 and i != 0:
-                print("------+-------+------")
-            row_str = ""
-            for j, val in enumerate(row):
-                if j % 3 == 0 and j != 0:
-                    row_str += " | "
-                row_str += str(val) + " "
-            print(row_str)
+    def return_board(self):
+        output = ""
+        for row in range(9):
+            for col in range(9):
+                output = output + str(self.get_cell_value(row, col))
+        return output
     
     def populate_possible_values(self):
         for row in range(9):
@@ -110,14 +117,12 @@ class Sudoku:
                 if not is_back:
                     next_cell = self.next_cell(row, col)
                     if next_cell is None:
-                        self.print_board()
-                        return
+                        return self.return_board()
                     row, col = next_cell
                 else:
                     prev_cell = self.prev_cell(row, col)
                     if prev_cell is None:
-                        self.print_board()
-                        return
+                        return self.return_board()
                     row, col = prev_cell
                 continue
             if not is_back:
@@ -126,34 +131,28 @@ class Sudoku:
                 self.set_cell_value(row, col, self.possible_values[row][col].pop())
                 next_cell = self.next_cell(row, col)
                 if next_cell is None:
-                    self.print_board()
-                    return
+                    return self.return_board()
                 row, col = next_cell
                 is_back = False
             else:
                 self.set_cell_value(row, col, 0)
                 prev_cell = self.prev_cell(row, col)
                 if prev_cell is None:
-                    self.print_board()
-                    return
+                    return self.return_board()
                 row, col = prev_cell
                 is_back = True
 
-unsolved_problems = 0
-with open("sudoku_input.jsonl") as f:
-    for line in f:
-        data = json.loads(line)
-        s = data['mission']
-        s_id = data['id']
-        sudoku_input = [[int(s[r*9 + c]) for c in range(9)] for r in range(9)]
-        print("-----" * 10)
-        try:
-            sudoku = Sudoku(sudoku_input)
-            sudoku.initialise()
-            sudoku.set_start_row_col()
-            sudoku.solve()
-        except Exception as e:
-            print(type(e).__name__)
-            unsolved_problems = unsolved_problems + 1
-
-print('Total Unsolved problems: ' + str(unsolved_problems))
+@app.get("/solve")
+def solve(q: str):
+    print(q)
+    print(type(q))
+    if (bool(re.match(r'^\d{81}$', q))):
+        sudoku_input = [[int(q[r*9 + c]) for c in range(9)] for r in range(9)]
+        start = time.time()
+        sudoku = Sudoku(sudoku_input)
+        sudoku.initialise()
+        sudoku.set_start_row_col()
+        solution = sudoku.solve()
+        end = time.time()
+        seconds_elasped = (end - start)
+    return {"solution": solution, "seconds_elasped": seconds_elasped}
