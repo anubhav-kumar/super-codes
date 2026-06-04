@@ -1,0 +1,21 @@
+{
+  "name": "super-codes",
+  "version": "1.0.0",
+  "private": true,
+  "description": "",
+  "main": "ticket.js",
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.1",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-plugin-import": "^2.32.0",
+    "jest": "^29.7.0"
+  },
+  "dependencies": {
+    "uuid": "^14.0.0"
+  }
+}
