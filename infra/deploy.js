@@ -42,6 +42,9 @@ const CONFIG = {
     // VpcCidr: '10.0.0.0/16',
     // PublicSubnetCidr: '10.0.1.0/24',
     AmiId: 'ami-09b8e07b064480ad8',
+    // ARN of the ACM certificate for the HTTPS listener. Must be in ACM in the
+    // same region (ap-south-1) as this stack. REQUIRED — replace before deploy.
+    CertificateArn: 'arn:aws:acm:ap-south-1:739418138388:certificate/f72ae526-106d-491f-a489-15a9185e33a5',
   },
 
   // SSH connection assumptions used only for printing the connect command.
