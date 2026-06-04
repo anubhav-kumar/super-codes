@@ -1,9 +1,10 @@
 const { Worker } = require('worker_threads');
-const { v4: uuidV4 } = require('uuid');
+const path = require('path');
 
-const ticket1 = new Worker('./ticket.js', { workerData: { ticketId: 'anubhav' } });
-const ticket2 = new Worker('./ticket.js', { workerData: { ticketId: 'saumya' } });
-const ticket3 = new Worker('./ticket.js', { workerData: { ticketId: 'anuja' } });
+const ticketPath = path.join(__dirname, '../src/ticket.js');
+const ticket1 = new Worker(ticketPath, { workerData: { ticketId: 'anubhav' } });
+const ticket2 = new Worker(ticketPath, { workerData: { ticketId: 'saumya' } });
+const ticket3 = new Worker(ticketPath, { workerData: { ticketId: 'anuja' } });
 
 const ticketPool = [ticket1, ticket2, ticket3];
 

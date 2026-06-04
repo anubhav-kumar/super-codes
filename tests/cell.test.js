@@ -1,5 +1,5 @@
 /* eslint-env jest */
-const Cell = require('./cell');
+const Cell = require('../src/cell');
 
 describe('Cell', () => {
   describe('constructor', () => {

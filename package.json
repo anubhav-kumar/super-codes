@@ -3,19 +3,25 @@
   "version": "1.0.0",
   "private": true,
   "description": "",
-  "main": "ticket.js",
+  "main": "src/ticket.js",
   "scripts": {
+    "start": "node src/server.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test": "jest"
+    "test": "jest",
+    "test:api": "jest tests/server.api.test.js",
+    "test:e2e": "start-server-and-test start http://localhost:3000/game test:api"
   },
   "devDependencies": {
+    "@aws-sdk/client-cloudformation": "^3.1061.0",
     "eslint": "^8.57.1",
     "eslint-config-airbnb-base": "^15.0.0",
     "eslint-plugin-import": "^2.32.0",
-    "jest": "^29.7.0"
+    "jest": "^29.7.0",
+    "start-server-and-test": "^3.0.7"
   },
   "dependencies": {
+    "express": "^4.22.2",
     "uuid": "^14.0.0"
   }
 }

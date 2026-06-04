@@ -1,11 +1,11 @@
 /* eslint-env jest */
-jest.mock('./utility', () => ({
+jest.mock('../src/utility', () => ({
   generateHousieTicket: jest.fn(),
 }));
 
-const { generateHousieTicket } = require('./utility');
-const Ticket = require('./ticket');
-const Cell = require('./cell');
+const { generateHousieTicket } = require('../src/utility');
+const Ticket = require('../src/ticket');
+const Cell = require('../src/cell');
 
 // Deterministic 3x9 ticket — each row has exactly 5 filled numbers.
 // Corners (first/last filled in row 0 and row 2): 1, 72, 2, 85.

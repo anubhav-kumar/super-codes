@@ -24,3 +24,21 @@
 2. User socket connection:
     - Check the status of their ticket and numbers drawn.
     - Check what patterns are remaining
+
+## Deployment
+#### Script on remote server
+```
+rm -rf src && rm -f src.zip && \
+aws s3 cp s3://housie-ec2-deployment-739418138388/src.zip . && \
+unzip -o src.zip && \
+aws s3 cp s3://housie-ec2-deployment-739418138388/package.json . && \
+npm install && \
+node src/server.js 
+````
+
+#### Script on local machine
+```
+rm src.zip && zip src.zip src/* && \
+aws s3 cp src.zip s3://housie-ec2-deployment-739418138388 && \
+aws s3 cp package.json s3://housie-ec2-deployment-739418138388
+```
