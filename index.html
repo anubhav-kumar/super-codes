@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Chat Rooms</title>
+  <style>
+    body { font-family: monospace; background: #d8d4c8; margin: 8px; color: #000; }
+    h1 { font-size: 16px; font-weight: normal; border-bottom: 2px solid #000; }
+    #grid { display: flex; flex-wrap: wrap; gap: 6px; }
+    .box {
+      width: 300px; border: 2px solid #000; background: #efece2; padding: 4px;
+    }
+    .box .title { font-weight: bold; background: #000; color: #efece2; padding: 2px 4px; }
+    .setup { padding: 4px 0; }
+    select, input, button { font-family: monospace; font-size: 12px; border: 1px solid #000; }
+    button { background: #cfc8b6; cursor: pointer; padding: 2px 6px; }
+    button:active { background: #999; }
+    .chat { display: none; }
+    .messages {
+      height: 150px; border: 1px solid #000; background: #fff; overflow-y: auto;
+      padding: 2px; font-size: 12px; white-space: pre-wrap;
+    }
+    .messages div { border-bottom: 1px dotted #aaa; padding: 1px 0; }
+    .inputline { margin-top: 2px; display: flex; gap: 2px; }
+    .inputline input { flex: 1; }
+    .status { font-size: 11px; color: #600; padding: 2px 0; }
+  </style>
+</head>
+<body>
+  <h1>Chat Rooms -- 6 clients, 2 rooms</h1>
+  <div id="grid"></div>
+
+  <script>
+    var BOX_COUNT = 6;
+    var ROOM_COUNT = 2;
+    var rooms = []; // list of room ids
+    var grid = document.getElementById('grid');
+
+    // ---- build the 6 boxes ----
+    for (var i = 0; i < BOX_COUNT; i++) {
+      makeBox(i + 1);
+    }
+
+    function makeBox(n) {
+      var box = document.createElement('div');
+      box.className = 'box';
+      box.innerHTML =
+        '<div class="title">Client ' + n + '</div>' +
+        '<div class="setup">' +
+          'Room: <select class="room"></select> ' +
+          '<button class="connect">Connect</button>' +
+        '</div>' +
+        '<div class="chat">' +
+          '<div class="messages"></div>' +
+          '<div class="inputline">' +
+            '<input class="msg" placeholder="type a message">' +
+            '<button class="send">Send</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="status"></div>';
+      grid.appendChild(box);
+
+      var select = box.querySelector('.room');
+      var connectBtn = box.querySelector('.connect');
+      var chat = box.querySelector('.chat');
+      var messages = box.querySelector('.messages');
+      var msgInput = box.querySelector('.msg');
+      var sendBtn = box.querySelector('.send');
+      var status = box.querySelector('.status');
+      var ws = null;
+
+      box._fillRooms = function () {
+        select.innerHTML = '';
+        for (var r = 0; r < rooms.length; r++) {
+          var opt = document.createElement('option');
+          opt.value = rooms[r];
+          opt.textContent = 'Room ' + (r + 1) + ' (' + rooms[r].slice(0, 8) + ')';
+          select.appendChild(opt);
+        }
+      };
+
+      function append(line) {
+        var d = document.createElement('div');
+        d.textContent = line;
+        messages.appendChild(d);
+        messages.scrollTop = messages.scrollHeight;
+      }
+
+      connectBtn.onclick = function () {
+        var roomId = select.value;
+        if (!roomId) { status.textContent = 'no room selected'; return; }
+        status.textContent = 'getting token...';
+        fetch('/roomtoken/room/' + roomId)
+          .then(function (res) { return res.json(); })
+          .then(function (data) {
+            if (!data.token) { throw new Error('no token'); }
+            connect(roomId, data.token);
+          })
+          .catch(function (e) { status.textContent = 'token error: ' + e.message; });
+      };
+
+      function connect(roomId, token) {
+        status.textContent = 'connecting...';
+        var proto = location.protocol === 'https:' ? 'wss' : 'ws';
+        ws = new WebSocket(proto + '://' + location.host);
+
+        ws.onopen = function () {
+          ws.send(JSON.stringify({ type: 'ID', data: { roomId: roomId, token: token } }));
+        };
+
+        ws.onmessage = function (ev) {
+          var m;
+          try { m = JSON.parse(ev.data); } catch (e) { return; }
+          if (m.type === 'SUCCESS') {
+            status.textContent = 'connected to ' + roomId.slice(0, 8);
+            box.querySelector('.setup').style.display = 'none';
+            chat.style.display = 'block';
+          } else if (m.type === 'BROADCAST') {
+            var payload = m.message;
+            if (payload && typeof payload === 'object') {
+              append(payload.from + ': ' + payload.text);
+            } else {
+              append(String(payload));
+            }
+          }
+        };
+
+        ws.onclose = function (ev) {
+          status.textContent = 'disconnected' + (ev.reason ? ' (' + ev.reason + ')' : '');
+          chat.style.display = 'none';
+          box.querySelector('.setup').style.display = 'block';
+        };
+
+        ws.onerror = function () { status.textContent = 'ws error'; };
+      }
+
+      function doSend() {
+        var text = msgInput.value.trim();
+        if (!text || !ws || ws.readyState !== WebSocket.OPEN) { return; }
+        ws.send(JSON.stringify({ type: 'BROADCAST', data: { from: 'Client ' + n, text: text } }));
+        msgInput.value = '';
+      }
+
+      sendBtn.onclick = doSend;
+      msgInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { doSend(); }
+      });
+    }
+
+    // ---- on page load: create the rooms, then populate dropdowns ----
+    function createRooms() {
+      var jobs = [];
+      for (var i = 0; i < ROOM_COUNT; i++) {
+        jobs.push(
+          fetch('/room', { method: 'POST' })
+            .then(function (res) { return res.json(); })
+            .then(function (data) { return data.id; })
+        );
+      }
+      Promise.all(jobs)
+        .then(function (ids) {
+          rooms = ids;
+          var boxes = document.querySelectorAll('.box');
+          for (var b = 0; b < boxes.length; b++) {
+            boxes[b]._fillRooms();
+          }
+        })
+        .catch(function (e) {
+          alert('Failed to create rooms: ' + e.message);
+        });
+    }
+
+    createRooms();
+  </script>
+</body>
+</html>
