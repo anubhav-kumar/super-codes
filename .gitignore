@@ -1,1 +1,10 @@
 **/node_modules/*
+node_modules/
+.env
+.env.local
+npm-debug.log*
+*.log
+.DS_Store
+src/data/*
+.eslintrc.json
+package-lock.json
