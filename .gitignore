@@ -1,1 +1,48 @@
 **/node_modules/*
+node_modules/
+.next/
+```
+# Environment variables
+.env
+.env.local
+.env.*
+
+# Dependencies
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+
+# Editors and IDEs
+.vscode/
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Coverage reports
+.coverage
+coverage/
+htmlcov/
+
+# Distribution / packaging
+Nothing should be ignored based on the provided file changes. The only modified file is `telegram_tui.py`, which is a source code file and should not be added to .gitignore.node_modules/
+.next/
+dist/
+build/
+*.log
+
+# Downloaded photos
+media/
+
+.env
+telegram_session.session
+__pycache__
