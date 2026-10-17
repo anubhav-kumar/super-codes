@@ -19,7 +19,12 @@ export async function appendMessage({ chatId, message, chat = {} }) {
     if (attempt > 0) await sleep(Math.random() * BACKOFF_BASE_MS * 2 ** attempt);
 
     const current = await readChatHead(chatId);
-    const prepared = { ...item, prevMessageId: current.headMessageId };
+    // Fresh timestamp per attempt keeps createdAt/lastMessageAt in list order after a retry.
+    const prepared = {
+      ...item,
+      prevMessageId: current.headMessageId,
+      createdAt: new Date().toISOString(),
+    };
 
     const outcome = await tryAppend(prepared, current, chat);
     if (outcome === 'ok') return { message: toMessage(prepared), duplicate: false };
