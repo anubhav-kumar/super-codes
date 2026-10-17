@@ -28,6 +28,17 @@ Read the WhatsApp values with `getParams(['WA_PHONE_NUMBER_ID', 'WA_APP_SECRET',
 ## Logging
 Log event counts, wamids and the last 4 digits of phone numbers. Never log message text or full numbers.
 
+## Implementation notes
+- **Event:** API Gateway HTTP API, payload v2. The signature is computed over the raw body bytes (base64-decoded first when `isBase64Encoded`). A missing, non-`sha256=` or wrong-length header returns `401` without throwing.
+- **Settings errors:** if `getParams` fails (env var missing, parameter unset), both `GET` and `POST` return `500`, so Meta retries once it is fixed. A correctly signed body that is not JSON returns `400`. Other methods return `405`.
+- **`hub.verify_token`** is compared timing-safe as well.
+- **Inbound message fields:** `status: 'delivered'` (the schema requires an enum value; inbound messages have no delivery lifecycle, and `read` would wrongly suggest an agent has read it). `waMessageId` is also set to the wamid, so the item carries its WhatsApp ID like outbound ones. Status callbacks never target inbound messages; even if one did, `updateStatus` is a no-op because inbound items have no `statusRank`.
+- **Text** is cut to `MESSAGE_TEXT_MAX` (4096) so a long body can't fail validation. `clientName` is matched from `contacts[]` by `wa_id === from`; when there is no match it is left unchanged on the chat.
+- **Skipped items** (logged, not stored): a sender that doesn't normalize to E.164 (logged with its last 4 digits), a message without an `id`, and a status outside `sent | delivered | read | failed` (e.g. `deleted`).
+- **Order:** messages are processed one at a time in payload order, then statuses.
+- **Logs** are JSON lines (`level`, `msg`, fields). Errors log only `name`, `code` and `message`, not `AppError.details`.
+- **IAM:** the existing webhook role already covers every call: `GetItem` on chats; `PutItem` on messages and `UpdateItem` on chats (the transaction); `Query` on `byWaMessageId`; `UpdateItem` on messages.
+
 ## Done when
 - [ ] Meta's webhook verification succeeds against the deployed URL.
 - [ ] A text message from a test number creates an `UNASSIGNED` chat and a message linked to the head.
