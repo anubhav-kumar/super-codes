@@ -1,6 +1,6 @@
 # M8: Web UI (Next.js)
 
-**Phase:** 2 (against mocks) → 3 (real API) · **Depends on:** M0 contracts; then M7 · **Unblocks:** M9
+**Phase:** 3 · **Depends on:** M0 contracts, M7 (real API only; no mock mode, decided 2026-10-17) · **Unblocks:** M9
 
 ## Goal
 A basic, functional UI for agents and admins. Plain and usable, not polished.
@@ -10,7 +10,7 @@ A basic, functional UI for agents and admins. Plain and usable, not polished.
 - `apps/web/app/chats/page.js`, `apps/web/app/chats/[phone]/page.js`
 - `apps/web/app/admin/users/page.js`
 - `apps/web/app/account/password/page.js`
-- `apps/web/lib/client-api.js`: fetch wrapper. A `NEXT_PUBLIC_USE_MOCKS=true` flag switches it to fixtures in `apps/web/mocks/`.
+- `apps/web/lib/client-api.js`: fetch wrapper around the M7 API (same-origin `/api/...`, JSON, maps `{ error: { code } }` responses). There is no mock mode: local development runs against the deployed `dev` stack.
 
 ## Screens
 | Screen | Who | Contents |
@@ -29,6 +29,6 @@ A basic, functional UI for agents and admins. Plain and usable, not polished.
 - No component library is required; plain CSS modules are fine.
 
 ## Done when
-- [ ] Every screen works end to end against the mocks, and then against the real M7 API without code changes.
+- [ ] Every screen works end to end against the real M7 API on the `dev` stack.
 - [ ] An agent never sees admin-only controls.
 - [ ] A new inbound message appears within about 3 s while the conversation is open.

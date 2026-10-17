@@ -15,7 +15,7 @@ Requirements: [`docs/PRD.md`](../PRD.md) · Architecture: [`docs/arch/boilerplat
 | [M5](m5-webhook-lambda.md) | Webhook Lambda | M1, M2, M4 | Built (not yet verified on AWS) |
 | [M6](m6-sender-lambda.md) | Sender Lambda | M1, M2 | Built (not yet verified on AWS) |
 | [M7](m7-web-api.md) | Web API routes | M2, M3, M4 (+ M1 for real resources) | Built (not yet verified on AWS) |
-| [M8](m8-web-ui.md) | Web UI | M0 contracts (built against mocks), then M7 | Not started |
+| [M8](m8-web-ui.md) | Web UI | M0 contracts, M7 (real API, no mocks) | Not started |
 | [M9](m9-e2e.md) | End-to-end integration | All | Not started |
 
 **External prerequisite:** the client business sets up its Meta WhatsApp Business account (app, phone number ID, access token, app secret, test number). Start this now; M5, M6 and M9 cannot be verified without it.
@@ -26,8 +26,8 @@ Requirements: [`docs/PRD.md`](../PRD.md) · Architecture: [`docs/arch/boilerplat
             │                            ├─► M6 Sender ──┤
 M0 ─────────┼─► M2 Messages ────────────┤               │
 (contracts) ├─► M4 Chats/rules ─────────┼─► M7 Web API ─┼─► M9 E2E
-            ├─► M3 Users/auth ──────────┘       ▲       │
-            └─► M8 Web UI (on mocks) ───────────┴───────┘
+            └─► M3 Users/auth ──────────┘       │       │
+                                    M8 Web UI ◄─┘ ──────┘
 Meta setup (client) ──────────────────────────────────────► M5/M6/M9
 ```
 
@@ -35,8 +35,8 @@ Meta setup (client) ────────────────────
 | Phase | Modules | Notes |
 |---|---|---|
 | 1 | M0 | Keep it small, but get the contracts right. They are what make phase 2 parallel. |
-| 2 | M1, M2, M3, M4, M8 | Up to five parallel streams. M8 runs against mocked API responses. |
-| 3 | M5, M6, M7 | M5 and M6 need M1 + M2. M7 needs M2 + M3 + M4. M8 switches to the real API. |
+| 2 | M1, M2, M3, M4 | Four parallel streams. |
+| 3 | M5, M6, M7, then M8 | M5 and M6 need M1 + M2. M7 needs M2 + M3 + M4. M8 is built against the real M7 API (no mock mode). |
 | 4 | M9 | Full round trip with a real WhatsApp number. |
 
 - **Critical path:** M0 → M1 → M2 → M5 → M9.
