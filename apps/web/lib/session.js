@@ -25,7 +25,8 @@ export async function signSession(user) {
     .sign(getSecret());
 }
 
-// → { userId, role } | null. Bad, expired or foreign-signed tokens give null; a missing
+// → { userId, role, issuedAt /* ms */ } | null. Callers compare issuedAt with the user's
+// passwordChangedAt to reject sessions from before a password change. Bad, expired or foreign-signed tokens give null; a missing
 // JWT_SECRET still throws, because that is a deployment error, not a bad token.
 export async function verifySession(token) {
   const secret = getSecret();
@@ -36,7 +37,7 @@ export async function verifySession(token) {
     if (typeof payload.sub !== 'string' || !payload.sub || !ROLES.includes(payload.role)) {
       return null;
     }
-    return { userId: payload.sub, role: payload.role };
+    return { userId: payload.sub, role: payload.role, issuedAt: payload.iat * 1000 };
   } catch {
     return null;
   }

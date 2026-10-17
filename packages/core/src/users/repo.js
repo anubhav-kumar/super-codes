@@ -10,7 +10,7 @@ import {
 import { getConfig } from '../config.js';
 import { getDocClient } from '../db/client.js';
 import { AppError } from '../errors.js';
-import { PASSWORD_MIN_LENGTH, ROLES, UserSchema } from '../schemas/user.js';
+import { PASSWORD_MAX_BYTES, PASSWORD_MIN_LENGTH, ROLES, UserSchema } from '../schemas/user.js';
 
 const BCRYPT_COST = 10;
 const EMAIL_GUARD_PREFIX = 'EMAIL#';
@@ -37,6 +37,9 @@ function assertPasswordLength(password) {
   if (typeof password !== 'string' || password.length < PASSWORD_MIN_LENGTH) {
     throw new AppError('VALIDATION', `Password must be at least ${PASSWORD_MIN_LENGTH} characters`);
   }
+  if (Buffer.byteLength(password, 'utf8') > PASSWORD_MAX_BYTES) {
+    throw new AppError('VALIDATION', `Password must be at most ${PASSWORD_MAX_BYTES} bytes`);
+  }
 }
 
 // The only way a stored user leaves this module: drops passwordHash and anything else internal.
@@ -47,6 +50,7 @@ function toPublicUser(item) {
     name: item.name,
     role: item.role,
     active: item.active,
+    passwordChangedAt: item.passwordChangedAt ?? null,
   });
 }
 
@@ -74,6 +78,7 @@ export async function createUser({ email, name, role, password }) {
     name: String(name ?? '').trim(),
     role,
     active: true,
+    passwordChangedAt: null,
   });
   if (!user.success) {
     throw new AppError('VALIDATION', 'Invalid user', user.error.issues);
@@ -178,9 +183,9 @@ export async function changePassword(userId, currentPassword, newPassword) {
     new UpdateCommand({
       TableName: usersTable,
       Key: { userId },
-      UpdateExpression: 'SET passwordHash = :hash',
+      UpdateExpression: 'SET passwordHash = :hash, passwordChangedAt = :changedAt',
       ConditionExpression: 'attribute_exists(userId)',
-      ExpressionAttributeValues: { ':hash': passwordHash },
+      ExpressionAttributeValues: { ':hash': passwordHash, ':changedAt': new Date().toISOString() },
     }),
   );
 }

@@ -56,3 +56,7 @@ The cookie helpers are framework-light (header strings plus an options object us
 - [ ] Creating a user with an existing email (in any letter case) fails with `CONFLICT`.
 - [ ] `verifyCredentials` fails for a wrong password and for an inactive user.
 - [ ] A JWT signed with a different secret, or expired, is rejected by `verifySession`.
+
+## Security hardening (2026-10-17)
+- **bcrypt 72-byte limit:** passwords longer than 72 UTF-8 bytes are rejected (`PASSWORD_MAX_BYTES`), in both `createUser`/`changePassword` and the API schema. bcrypt silently ignores bytes past 72.
+- **Session cut-off on password change:** `changePassword` sets `passwordChangedAt`. The public `User` includes `passwordChangedAt` (ISO or `null`). `verifySession` returns `issuedAt` (ms). M7's `requireUser` must reject a session when `issuedAt < Date.parse(user.passwordChangedAt)`.
