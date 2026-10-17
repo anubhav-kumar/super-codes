@@ -8,11 +8,11 @@ Requirements: [`docs/PRD.md`](../PRD.md) · Architecture: [`docs/arch/boilerplat
 | ID | Module | Depends on | Status |
 |---|---|---|---|
 | [M0](m0-foundation.md) | Foundation and contracts | — | Done |
-| [M1](m1-infra.md) | AWS infrastructure | M0 | Built (not yet verified on AWS) |
+| [M1](m1-infra.md) | AWS infrastructure | M0 | Deployed to `dev`, smoke-tested |
 | [M2](m2-core-messages.md) | Core: messages (linked list) | M0 | Built (not yet verified on AWS) |
 | [M3](m3-core-users-auth.md) | Core: users and auth | M0 | Built (not yet verified on AWS) |
 | [M4](m4-core-chats.md) | Core: chats, access rules, assignment | M0 (uses M3 interfaces) | Built (not yet verified on AWS) |
-| [M5](m5-webhook-lambda.md) | Webhook Lambda | M1, M2, M4 | Built (not yet verified on AWS) |
+| [M5](m5-webhook-lambda.md) | Webhook Lambda | M1, M2, M4 | Deployed to `dev`, smoke-tested |
 | [M6](m6-sender-lambda.md) | Sender Lambda | M1, M2 | Built (not yet verified on AWS) |
 | [M7](m7-web-api.md) | Web API routes | M2, M3, M4 (+ M1 for real resources) | Built (not yet verified on AWS) |
 | [M8](m8-web-ui.md) | Web UI | M0 contracts, M7 (real API, no mocks) | Built (not yet verified on AWS) |

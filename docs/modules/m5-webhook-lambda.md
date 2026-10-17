@@ -45,3 +45,11 @@ Log event counts, wamids and the last 4 digits of phone numbers. Never log messa
 - [ ] Replaying the same webhook payload creates no duplicate.
 - [ ] A request with a bad signature gets `401` and writes nothing.
 - [ ] Status callbacks move an outbound message through `sent → delivered → read`.
+
+## Known limitations (v1)
+- Only `changes[].field === "messages"` is processed, and only for the configured `phone_number_id`.
+- Only `type: "text"` is stored as text. Images, audio, video, documents, stickers, locations, contacts, **button/list replies** (`button`, `interactive`) and **reactions** are stored as `[unsupported: <type>]`.
+- **WhatsApp Business app (coexistence):** messages staff send from the phone app arrive as `smb_message_echoes` and are ignored, so Vartalap doesn't show them.
+- Statuses for messages Vartalap didn't send (e.g. templates from another system) are logged as `status_unknown_message` and skipped.
+- Meta's dashboard **Test** webhook uses a fake `phone_number_id`, so it's skipped as `other_phone_number_id` (still 200).
+

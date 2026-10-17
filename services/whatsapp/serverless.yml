@@ -32,7 +32,7 @@ provider:
   runtime: nodejs22.x
   architecture: arm64
   stage: ${opt:stage, 'dev'}
-  region: ${opt:region, 'ap-southeast-1'}
+  region: ${opt:region, 'ap-south-1'}
   memorySize: 256
   logRetentionInDays: 14
   environment:

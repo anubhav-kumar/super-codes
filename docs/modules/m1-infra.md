@@ -10,9 +10,10 @@ Define every AWS resource in `services/whatsapp/serverless.yml`, so that one `se
 - Authenticate with `serverless login`, or set `SERVERLESS_ACCESS_KEY` in CI. The deploying business needs a Serverless account, and a paid license if its annual revenue is above USD 2M.
 - Pin the framework version with `frameworkVersion: "4"` in `serverless.yml`.
 - Use v4's built-in esbuild bundling (`build.esbuild`); do not add `serverless-esbuild` or other bundling plugins.
+- **The AWS SDK is bundled, not taken from the runtime:** it is imported through the workspace package `@vartalap/core`, so v4's automatic `@aws-sdk/*` external doesn't apply. The SDK is CommonJS and calls `require('node:https')`, which crashes in an ESM bundle ("Dynamic require ... is not supported"). `services/whatsapp/esbuild.config.cjs` (via `build.esbuild.configFile`) adds a `createRequire` banner to fix this. Keep it while the output format is ESM.
 
 ## Scope
-- **Provider:** `nodejs22.x`, region from config (`ap-southeast-1` assumed), stage parameter. The built-in esbuild bundling (`build.esbuild`, ESM output) includes `@vartalap/core` in each function.
+- **Provider:** `nodejs22.x`, region `ap-south-1` by default (override with `--region`), stage parameter. The built-in esbuild bundling (`build.esbuild`, ESM output) includes `@vartalap/core` in each function.
 - **DynamoDB tables** (on-demand, point-in-time recovery off for the trial):
   - `vartalap-<stage>-messages`: PK `messageId`; GSI `byWaMessageId` (PK `waMessageId`, projection ALL).
   - `vartalap-<stage>-chats`: PK `chatId`; GSI `byAssignee` (PK `assignedTo`, SK `lastMessageAt`, projection ALL).

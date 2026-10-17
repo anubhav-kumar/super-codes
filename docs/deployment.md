@@ -49,7 +49,7 @@ npx serverless login        # opens a browser; or set SERVERLESS_ACCESS_KEY in C
 ## 2. Deploy the AWS stack
 ```bash
 cd <repo>/whatsapp/services/whatsapp
-npx serverless deploy --stage dev                       # region defaults to ap-southeast-1
+npx serverless deploy --stage dev                       # region defaults to ap-south-1
 # other region:  npx serverless deploy --stage dev --region <region>
 ```
 When it finishes, show the outputs:
@@ -107,7 +107,7 @@ put WA_VERIFY_TOKEN    "$VERIFY_TOKEN"
 ## 4. Run the web app
 Create `apps/web/.env.local`, using `.env.example` as the template:
 ```dotenv
-AWS_REGION=ap-southeast-1
+AWS_REGION=ap-south-1           # must be the stack's region
 STAGE=dev
 MESSAGES_TABLE=vartalap-dev-messages
 CHATS_TABLE=vartalap-dev-chats
@@ -216,3 +216,6 @@ This deletes **everything in the stage**: tables and their data, queues, Lambdas
 | `npm run seed` or the web app fails with "Missing required env vars" | `apps/web/.env.local` is incomplete (step 4) |
 | Web app API calls return 500 / AccessDenied | AWS credentials expired (re-run `assume`), or the role lacks the web-app permissions (step 1.2) |
 | Signed out right after changing the password elsewhere | Expected: a password change ends all other sessions |
+| Lambda crashes at start: `Dynamic require of "node:https" is not supported` | The esbuild `configFile` banner is missing. Check `build.esbuild.configFile: ./esbuild.config.cjs` in `serverless.yml`, then redeploy |
+| Signed test webhook returns 200 but no chat appears; log `item_skipped` `other_phone_number_id` | The payload's `metadata.phone_number_id` doesn't match `/vartalap/<stage>/WA_PHONE_NUMBER_ID`. Use the same value in both. Meta's dashboard **Test** button also uses a fake ID, so it's skipped too; that's expected |
+| Webhook logs `message_stored` but the UI shows nothing | `apps/web/.env.local` `AWS_REGION` isn't the stack's region, or you're on the wrong tab (new chats are under **Unassigned**) |

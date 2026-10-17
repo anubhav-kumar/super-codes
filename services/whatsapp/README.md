@@ -6,7 +6,7 @@ AWS side of Vartalap, defined in `serverless.yml` (Serverless Framework v4):
 - SQS FIFO queue `vartalap-<stage>-outbound.fifo` and DLQ `vartalap-<stage>-outbound-dlq.fifo` (`maxReceiveCount: 3`).
 - Lambdas `webhook` (HTTP API `GET`/`POST /webhook`) and `sender` (SQS, `batchSize: 1`). Each has its own least-privilege IAM role.
 
-Handler code lives in `src/handlers/` (M5, M6). Bundling uses v4's built-in esbuild (ESM, `@vartalap/core` bundled in).
+Handler code lives in `src/handlers/` (M5, M6). Bundling uses v4's built-in esbuild (ESM, with `@vartalap/core` and the AWS SDK bundled in). `esbuild.config.cjs` adds a `createRequire` banner so the bundled CommonJS SDK can load Node built-ins. Without it the Lambdas crash at start with "Dynamic require ... is not supported".
 
 ## Prerequisites
 
@@ -42,18 +42,18 @@ aws ssm put-parameter --overwrite --type String --name /vartalap/dev/WA_ACCESS_T
 ```sh
 cd services/whatsapp
 npx serverless deploy --stage dev              # or: npm run deploy -- --stage dev
-npx serverless deploy --stage dev --region ap-southeast-1
+npx serverless deploy --stage dev --region <region>
 npx serverless package --stage dev             # build only, no deploy
 npx serverless remove --stage dev              # deletes the stack, including the tables and their data
 ```
 
-Stage defaults to `dev` and region to `ap-southeast-1`. The Graph API version (`WA_GRAPH_VERSION`) and sender timeout are set under `params` in `serverless.yml`.
+Stage defaults to `dev` and region to `ap-south-1`. The Graph API version (`WA_GRAPH_VERSION`) and sender timeout are set under `params` in `serverless.yml`.
 
 Deploy outputs (`npx serverless info --stage dev --verbose`): `MessagesTableName`, `ChatsTableName`, `UsersTableName`, `OutboundQueueUrl`, `OutboundDlqUrl`, `WaParameterNames`, `WebhookUrl` (register in the Meta app) and the Framework's `HttpApiUrl`. Copy the table names and queue URL into `apps/web/.env.local`.
 
 ## IAM for the local Next.js app
 
-The web app runs on localhost with `assume` credentials. That role needs read/write on the three tables and their indexes, plus `sqs:SendMessage` on the outbound queue. Sample policy for `dev` (replace `<account-id>`):
+The web app runs on localhost with `assume` credentials. That role needs read/write on the three tables and their indexes, plus `sqs:SendMessage` on the outbound queue. Sample policy for `dev` in `ap-south-1` (replace `<account-id>`, and the region if you deploy elsewhere):
 
 ```json
 {
@@ -72,19 +72,19 @@ The web app runs on localhost with `assume` credentials. That role needs read/wr
         "dynamodb:Scan"
       ],
       "Resource": [
-        "arn:aws:dynamodb:ap-southeast-1:<account-id>:table/vartalap-dev-messages",
-        "arn:aws:dynamodb:ap-southeast-1:<account-id>:table/vartalap-dev-messages/index/*",
-        "arn:aws:dynamodb:ap-southeast-1:<account-id>:table/vartalap-dev-chats",
-        "arn:aws:dynamodb:ap-southeast-1:<account-id>:table/vartalap-dev-chats/index/*",
-        "arn:aws:dynamodb:ap-southeast-1:<account-id>:table/vartalap-dev-users",
-        "arn:aws:dynamodb:ap-southeast-1:<account-id>:table/vartalap-dev-users/index/*"
+        "arn:aws:dynamodb:ap-south-1:<account-id>:table/vartalap-dev-messages",
+        "arn:aws:dynamodb:ap-south-1:<account-id>:table/vartalap-dev-messages/index/*",
+        "arn:aws:dynamodb:ap-south-1:<account-id>:table/vartalap-dev-chats",
+        "arn:aws:dynamodb:ap-south-1:<account-id>:table/vartalap-dev-chats/index/*",
+        "arn:aws:dynamodb:ap-south-1:<account-id>:table/vartalap-dev-users",
+        "arn:aws:dynamodb:ap-south-1:<account-id>:table/vartalap-dev-users/index/*"
       ]
     },
     {
       "Sid": "VartalapOutboundQueue",
       "Effect": "Allow",
       "Action": "sqs:SendMessage",
-      "Resource": "arn:aws:sqs:ap-southeast-1:<account-id>:vartalap-dev-outbound.fifo"
+      "Resource": "arn:aws:sqs:ap-south-1:<account-id>:vartalap-dev-outbound.fifo"
     }
   ]
 }

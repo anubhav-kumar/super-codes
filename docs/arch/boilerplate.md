@@ -199,4 +199,4 @@ The build is split into modules M0–M9. See [`docs/modules/README.md`](../modul
 ## 9. Open points
 1. ~~Deployment tool~~ **Decided (2026-10-17):** Serverless Framework v4. The deploying business needs a Serverless account and, if its annual revenue is above USD 2M, a paid license.
 2. **Node version:** Node 22, unless the target AWS account requires something else.
-3. **AWS region:** Not stated; `ap-southeast-1` (Singapore) is assumed until confirmed.
+3. ~~AWS region~~ **Decided (2026-10-17):** `ap-south-1` (Mumbai) is the default in `serverless.yml`; override with `--region`.
