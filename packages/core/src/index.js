@@ -9,3 +9,4 @@ export * from './schemas/user.js';
 export * from './schemas/api.js';
 
 export * from './messages/index.js';
+export * from './users/index.js';

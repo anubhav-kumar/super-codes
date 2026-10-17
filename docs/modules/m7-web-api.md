@@ -13,7 +13,7 @@ Implement the API contract from [M0](m0-foundation.md#api-implemented-in-m7-cons
 
 ## Shared helpers (`lib/api.js`)
 - `withHandler(fn)`: maps `AppError` codes to HTTP statuses using the M0 table; anything unknown becomes `INTERNAL` (logged, no message body).
-- `requireUser(req)` / `requireAdmin(req)`: read and verify the session cookie, load the user, and reject inactive users.
+- `requireUser(req)` / `requireAdmin(req)`: read and verify the session cookie, load the user, and reject inactive users. Also reject the session when `issuedAt < Date.parse(user.passwordChangedAt)`, so a password change logs out earlier sessions.
 - `parseBody(req, zodSchema)`: returns `VALIDATION` with the field errors when the body doesn't match.
 
 ## Route notes

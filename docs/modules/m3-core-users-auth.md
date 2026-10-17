@@ -12,32 +12,51 @@ Manage the `Users` table, password hashing, JWT sessions and seeding the first a
 
 ## Exposes
 ```js
-// packages/core
-createUser({ email, name, role, password })   // → User (public view). Throws CONFLICT if the email exists
-getUserById(userId)                           // → User | null
-getUserByEmail(email)                         // → { user, passwordHash } | null; internal, used for login only
-verifyCredentials(email, password)            // → User | null; rejects inactive users
-changePassword(userId, currentPassword, newPassword)
-listUsers()                                   // → User[]
-listActiveAgents()                            // → [{ userId, name, lastAutoAssignedAt }]; used by M4
-markAutoAssigned(userId, at)                  // used by M4 inside its transaction (or exposed as a transaction item builder)
+// packages/core (all re-exported from '@vartalap/core')
+createUser({ email, name, role, password })   // → User (public view), active: true. Throws CONFLICT if the email exists, VALIDATION on bad input
+getUserById(userId)                           // → User | null (never returns guard items)
+getUserByEmail(email)                         // → { user, passwordHash } | null; internal, used for login only (Query on GSI byEmail)
+verifyCredentials(email, password)            // → User | null; null for unknown email, wrong password or inactive user
+changePassword(userId, currentPassword, newPassword)  // → void. UNAUTHENTICATED if the current password is wrong
+                                              //   (or the user is unknown/inactive); VALIDATION if newPassword is too short
+listUsers()                                   // → User[] (Scan, guard items excluded), sorted by name
+listActiveAgents()                            // → [{ userId, name, lastAutoAssignedAt: string | null }]; used by M4
+buildMarkAutoAssignedItem(userId, at, previousAt)
+  // → TransactWriteItems entry { Update: { TableName, Key, UpdateExpression, ConditionExpression, ExpressionAttributeValues } }
+  //   for a lib-dynamodb TransactWriteCommand. Sets lastAutoAssignedAt = at.
+  //   Condition: previousAt === null → attribute_exists(userId) AND attribute_not_exists(lastAutoAssignedAt);
+  //              otherwise         → lastAutoAssignedAt = :previousAt.
+  //   M4 puts this in its auto-assign transaction next to the chat update.
 
 // apps/web/lib/session.js
-signSession(user)                     // → JWT string { sub, role }, 8 h expiry, signed with JWT_SECRET (HS256, jose)
-verifySession(token)                  // → { userId, role } | null
-setSessionCookie(res, token) / clearSessionCookie(res)   // httpOnly, Secure in prod, SameSite=Lax
+SESSION_COOKIE                        // cookie name: 'vartalap_session'
+SESSION_TTL_SECONDS                   // 8 h
+signSession(user)                     // → Promise<JWT string> { sub: userId, role }, 8 h expiry, HS256 (jose), JWT_SECRET
+verifySession(token)                  // → Promise<{ userId, role } | null>; never throws on a bad, expired or foreign token
+sessionCookieOptions()                // → { httpOnly: true, secure: NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: 8 h }
+buildSetCookie(token)                 // → Set-Cookie header string for the session
+buildClearCookie()                    // → Set-Cookie header string that clears it (Max-Age=0)
 ```
+The cookie helpers are framework-light (header strings plus an options object usable with Next.js `cookies().set(SESSION_COOKIE, token, sessionCookieOptions())`), because Next.js arrives in M7.
 
 ## Rules
 - Emails are lowercased and trimmed before storing.
 - Uniqueness: `createUser` puts the user and a guard item `{ userId: 'EMAIL#<email>' }` in one transaction, with `attribute_not_exists` on both.
 - bcrypt cost 10 (`bcryptjs`). Minimum password length 8.
-- `passwordHash` never leaves the repo layer.
+- `passwordHash` never leaves the repo layer (`toPublicUser` validates every returned user with `UserSchema`); the only exception is `getUserByEmail`, which is internal to login.
+- Guard items (`{ userId: 'EMAIL#<email>', ownerUserId }`) have no `email` attribute, so they never appear in `byEmail`; reads and scans also skip them by prefix.
+- `verifyCredentials` runs a dummy bcrypt compare for unknown emails to limit timing differences.
+- `JWT_SECRET` must be at least 32 characters; `signSession` / `verifySession` throw if it is missing or shorter (a deployment error, not a bad token).
 - Admins can create admins and agents. Any user can change their own password.
-- `seed-admin.js` reads `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`, creates the admin if none exists with that email, and exits without changes otherwise.
+- `seed-admin.js` reads `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` (optional `SEED_ADMIN_NAME`, default `Admin`), creates the admin if none exists with that email, and exits 0 without changes otherwise. It never prints the password.
+- `npm run seed` runs `node --env-file-if-exists=../.env --env-file-if-exists=../apps/web/.env.local seed-admin.js`, so env comes from the shell, the root `.env` or `apps/web/.env.local` (shell values win). It needs AWS credentials plus `AWS_REGION`, `STAGE` and the table/queue vars that `getConfig()` requires.
 
 ## Done when
 - [ ] The seed script creates the first admin, and running it again changes nothing.
 - [ ] Creating a user with an existing email (in any letter case) fails with `CONFLICT`.
 - [ ] `verifyCredentials` fails for a wrong password and for an inactive user.
 - [ ] A JWT signed with a different secret, or expired, is rejected by `verifySession`.
+
+## Security hardening (2026-10-17)
+- **bcrypt 72-byte limit:** passwords longer than 72 UTF-8 bytes are rejected (`PASSWORD_MAX_BYTES`), in both `createUser`/`changePassword` and the API schema. bcrypt silently ignores bytes past 72.
+- **Session cut-off on password change:** `changePassword` sets `passwordChangedAt`. The public `User` includes `passwordChangedAt` (ISO or `null`). `verifySession` returns `issuedAt` (ms). M7's `requireUser` must reject a session when `issuedAt < Date.parse(user.passwordChangedAt)`.

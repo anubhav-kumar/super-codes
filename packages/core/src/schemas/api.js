@@ -1,10 +1,15 @@
 import { z } from 'zod';
 import { MESSAGE_TEXT_MAX } from './message.js';
-import { PASSWORD_MIN_LENGTH, ROLES } from './user.js';
+import { PASSWORD_MAX_BYTES, PASSWORD_MIN_LENGTH, ROLES } from './user.js';
 
 const EmailSchema = z.string().trim().toLowerCase().pipe(z.email());
 
-const PasswordSchema = z.string().min(PASSWORD_MIN_LENGTH).max(128);
+const PasswordSchema = z
+  .string()
+  .min(PASSWORD_MIN_LENGTH)
+  .refine((p) => Buffer.byteLength(p, 'utf8') <= PASSWORD_MAX_BYTES, {
+    message: `Password must be at most ${PASSWORD_MAX_BYTES} bytes`,
+  });
 
 export const LoginBodySchema = z.object({
   email: EmailSchema,
