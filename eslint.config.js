@@ -17,4 +17,12 @@ export default [
       'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     },
   },
+  {
+    // Next.js app: JSX in .js files, and code that may run in the browser.
+    files: ['apps/web/**/*.js', 'apps/web/**/*.jsx'],
+    languageOptions: {
+      parserOptions: { ecmaFeatures: { jsx: true } },
+      globals: { ...globals.node, ...globals.browser },
+    },
+  },
 ];

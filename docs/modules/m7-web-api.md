@@ -6,7 +6,8 @@
 Implement the API contract from [M0](m0-foundation.md#api-implemented-in-m7-consumed-by-m8) as Next.js route handlers on top of `@vartalap/core`.
 
 ## Files
-- `apps/web/middleware.js`
+- `apps/web/proxy.js` (Next.js 16 renamed `middleware.js` to `proxy.js`; it runs on the Node.js runtime)
+- `apps/web/next.config.mjs`, `app/layout.js`, `app/page.js` (placeholder until M8)
 - `apps/web/lib/api.js`
 - `apps/web/lib/queue.js`
 - `apps/web/app/api/**/route.js` (routes listed in M0)
@@ -26,7 +27,20 @@ Implement the API contract from [M0](m0-foundation.md#api-implemented-in-m7-cons
   3. `lib/queue.js` sends `{ messageId, chatId }` to SQS (contract in M6).
   4. If the SQS send fails after the append: mark the message `failed` and return `INTERNAL`.
 - **Assign / auto-assign:** pass straight through to M4.
-- **`middleware.js`:** redirects to `/login` for pages without a valid session. API routes still check the session themselves; the middleware is only for UI convenience.
+- **`proxy.js`:** redirects to `/login` for pages without a valid session. API routes still check the session themselves; the middleware is only for UI convenience.
+
+## Implementation notes (2026-10-17)
+- **Next.js 16.4, App Router, JavaScript.** Every route exports `runtime = 'nodejs'` (AWS SDK, bcrypt). `[phone]` comes from `await context.params`; it is URL-decoded (safely) and passed through `normalizePhone`, and an invalid number gives `VALIDATION`.
+- **Status codes:** `POST /api/users` and `POST .../messages` return `201`; other successes `200`, or `204` where M0 says so. Errors use the M0 table; `VALIDATION` responses carry `details.issues: [{ path, message }]`.
+- **`INTERNAL`:** the body is always the generic `{ code: 'INTERNAL', message: 'Something went wrong' }`, also for an `AppError('INTERNAL')` thrown by core. The log has method, path (long digit runs masked to the last 4), error name and masked message, never request bodies.
+- **Session cut-off:** JWT `iat` has whole-second precision, so `requireUser` rejects when `issuedAt < passwordChangedAt` floored to the second. Role and `active` come from the Users table, not the token.
+- **`PUT /api/me/password`** re-issues the caller's session cookie, so the user who changed the password stays signed in while every older session is rejected.
+- **`POST /api/auth/logout`** needs no session: it always clears the cookie.
+- **Chat lookup:** `GET`/`POST .../messages` read the chat with a consistent `getChat`. A missing chat is `NOT_FOUND` for admins but `FORBIDDEN` for agents, so guessing phone numbers does not reveal which chats exist.
+- **`GET .../messages`** returns `chat` as a `ChatSummary` (adds `assignee` and `windowOpen`), so M8 can show the window state without listing chats. Assign and auto-assign return the plain `Chat`.
+- **`GET /api/chats`:** core's `listChatsForUser` already adds `assignee` (one `listUsers` call) and `windowOpen`; the route passes it through. `filter` defaults to `mine`.
+- **SQS failure after append:** the message is marked `failed` with `errorCode: 'ENQUEUE_FAILED'` (best effort; a failure to mark is logged), then `INTERNAL` is returned.
+- **`proxy.js`** only verifies the JWT (no Users table read). It skips `/api`, `/_next/*`, `/login` and any path with a dot. Unauthenticated page requests go to `/login`, with `?next=<path>` for paths other than `/`; M8 must only follow a relative `next`.
 
 ## Done when
 - [ ] Every route in the M0 table returns the documented shape and error codes.
