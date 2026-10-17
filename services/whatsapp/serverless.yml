@@ -40,11 +40,7 @@ provider:
     CHATS_TABLE: !Ref ChatsTable
     USERS_TABLE: !Ref UsersTable
     OUTBOUND_QUEUE_URL: !Ref OutboundQueue
-    WA_GRAPH_VERSION: ${param:waGraphVersion}
-    WA_PHONE_NUMBER_ID: ${ssm:/vartalap/${sls:stage}/WA_PHONE_NUMBER_ID}
-    WA_ACCESS_TOKEN: ${ssm:/vartalap/${sls:stage}/WA_ACCESS_TOKEN}
-    WA_APP_SECRET: ${ssm:/vartalap/${sls:stage}/WA_APP_SECRET}
-    WA_VERIFY_TOKEN: ${ssm:/vartalap/${sls:stage}/WA_VERIFY_TOKEN}
+    # WhatsApp secrets are set per function below, so each one only gets what it uses.
   iam:
     role:
       # Each function gets its own role with only the statements below.
@@ -53,6 +49,10 @@ provider:
 functions:
   webhook:
     handler: src/handlers/webhook.handler
+    environment:
+      WA_PHONE_NUMBER_ID: ${ssm:/vartalap/${sls:stage}/WA_PHONE_NUMBER_ID}
+      WA_APP_SECRET: ${ssm:/vartalap/${sls:stage}/WA_APP_SECRET}
+      WA_VERIFY_TOKEN: ${ssm:/vartalap/${sls:stage}/WA_VERIFY_TOKEN}
     timeout: 10
     events:
       - httpApi:
@@ -87,6 +87,10 @@ functions:
 
   sender:
     handler: src/handlers/sender.handler
+    environment:
+      WA_GRAPH_VERSION: ${param:waGraphVersion}
+      WA_PHONE_NUMBER_ID: ${ssm:/vartalap/${sls:stage}/WA_PHONE_NUMBER_ID}
+      WA_ACCESS_TOKEN: ${ssm:/vartalap/${sls:stage}/WA_ACCESS_TOKEN}
     timeout: ${param:senderTimeout}
     events:
       - sqs:
