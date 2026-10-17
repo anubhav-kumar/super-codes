@@ -4,7 +4,7 @@ Post-v1 features, built on top of modules M0–M8 ([`docs/modules/`](../modules/
 
 | ID | Feature | Note | Status |
 |---|---|---|---|
-| F1 | Modern UI polish | [f1-ui-polish.md](f1-ui-polish.md) | Research |
+| F1 | Modern UI polish | [f1-ui-polish.md](f1-ui-polish.md) | Built (P1–P3; P4 unread counts deferred) |
 | F2 | Media messages: images, video, video notes, audio and more | [f2-media-messages.md](f2-media-messages.md) | Research |
 | F3 | Hide the client's phone number from agents | [f3-hide-client-phone.md](f3-hide-client-phone.md) | Research |
 | F4 | Client attributes: description, notes, tags | [f4-client-attributes.md](f4-client-attributes.md) | Research |

@@ -1,5 +1,6 @@
 'use client';
 
+import { LoaderCircle } from 'lucide-react';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { api } from '../lib/client-api.js';
 
@@ -25,8 +26,18 @@ export function UserProvider({ children }) {
   }, []);
 
   if (failed) {
-    return <p className="page-message">Could not load your account. Refresh to try again.</p>;
+    return (
+      <p className="boot" role="alert">
+        Could not load your account. Refresh to try again.
+      </p>
+    );
   }
-  if (!user) return <p className="page-message muted">Loading…</p>;
+  if (!user) {
+    return (
+      <div className="boot" role="status" aria-label="Loading">
+        <LoaderCircle className="spin" size={28} aria-hidden="true" />
+      </div>
+    );
+  }
   return <UserContext.Provider value={user}>{children}</UserContext.Provider>;
 }

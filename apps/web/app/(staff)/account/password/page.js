@@ -1,6 +1,9 @@
 'use client';
 
+import { CircleAlert, CircleCheck, KeyRound, LoaderCircle } from 'lucide-react';
 import { useState } from 'react';
+import { PasswordInput } from '../../../../components/PasswordInput.js';
+import { useToast } from '../../../../components/Toast.js';
 import { api, errorText } from '../../../../lib/client-api.js';
 import { PASSWORD_MAX_BYTES, PASSWORD_MIN_LENGTH } from '../../../../lib/constants.js';
 
@@ -16,12 +19,15 @@ function passwordProblem(password, confirm) {
 }
 
 export default function PasswordPage() {
+  const toast = useToast();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [done, setDone] = useState(false);
+
+  const longEnough = next.length >= PASSWORD_MIN_LENGTH;
 
   const onSubmit = async (event) => {
     event.preventDefault();
@@ -34,6 +40,7 @@ export default function PasswordPage() {
     try {
       await api.changePassword(current, next);
       setDone(true);
+      toast.success('Password changed');
       setCurrent('');
       setNext('');
       setConfirm('');
@@ -46,48 +53,73 @@ export default function PasswordPage() {
 
   return (
     <div className="page narrow">
-      <h1 className="page-title">Change password</h1>
+      <header className="page-header">
+        <h1 className="page-title">Change password</h1>
+        <p className="page-subtitle">Changing it signs you out everywhere else.</p>
+      </header>
       <form className="card" onSubmit={onSubmit}>
-        <label className="field">
-          <span>Current password</span>
-          <input
-            className="input"
-            type="password"
+        {error && (
+          <p className="alert danger" role="alert" style={{ marginBottom: 'var(--space-4)' }}>
+            <CircleAlert size={16} aria-hidden="true" />
+            {error}
+          </p>
+        )}
+        {done && (
+          <p className="alert success" role="status" style={{ marginBottom: 'var(--space-4)' }}>
+            <CircleCheck size={16} aria-hidden="true" />
+            Password changed. Other signed-in sessions have been signed out.
+          </p>
+        )}
+        <div className="field">
+          <label className="field-label" htmlFor="current-password">
+            Current password
+          </label>
+          <PasswordInput
+            id="current-password"
             autoComplete="current-password"
             required
             value={current}
             onChange={(e) => setCurrent(e.target.value)}
           />
-        </label>
-        <label className="field">
-          <span>New password</span>
-          <input
-            className="input"
-            type="password"
+        </div>
+        <div className="field">
+          <label className="field-label" htmlFor="new-password">
+            New password
+          </label>
+          <PasswordInput
+            id="new-password"
             autoComplete="new-password"
             required
+            aria-describedby="new-password-hint"
             value={next}
             onChange={(e) => setNext(e.target.value)}
           />
-        </label>
-        <label className="field">
-          <span>Confirm new password</span>
-          <input
-            className="input"
-            type="password"
+          <span
+            id="new-password-hint"
+            className="field-hint"
+            style={longEnough ? { color: 'var(--success)' } : undefined}
+          >
+            {longEnough ? '✓ ' : ''}At least {PASSWORD_MIN_LENGTH} characters
+          </span>
+        </div>
+        <div className="field">
+          <label className="field-label" htmlFor="confirm-password">
+            Confirm new password
+          </label>
+          <PasswordInput
+            id="confirm-password"
             autoComplete="new-password"
             required
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
           />
-        </label>
-        {error && <p className="inline-error">{error}</p>}
-        {done && (
-          <p className="inline-success">
-            Password changed. Other signed-in sessions have been signed out.
-          </p>
-        )}
-        <button type="submit" className="button primary" disabled={busy}>
+        </div>
+        <button type="submit" className="button primary block" disabled={busy}>
+          {busy ? (
+            <LoaderCircle className="spin" size={18} aria-hidden="true" />
+          ) : (
+            <KeyRound size={18} aria-hidden="true" />
+          )}
           {busy ? 'Saving…' : 'Change password'}
         </button>
       </form>

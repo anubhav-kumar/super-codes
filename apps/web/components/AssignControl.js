@@ -1,22 +1,26 @@
 'use client';
 
+import { LoaderCircle, Shuffle } from 'lucide-react';
 import { useState } from 'react';
 import { UNASSIGNED } from '../lib/constants.js';
 import { api, errorText } from '../lib/client-api.js';
+import { useToast } from './Toast.js';
 
 // Admin only. users: active users from GET /api/users (may still be loading).
 export function AssignControl({ chat, users, onAssigned }) {
+  const toast = useToast();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
+
+  const nameOf = (userId) => users?.find((u) => u.userId === userId)?.name ?? 'the selected user';
 
   const run = async (action) => {
     setBusy(true);
-    setError(null);
     try {
-      await action();
+      const { chat: updated } = await action();
+      toast.success(`Assigned to ${nameOf(updated.assignedTo)}`);
       await onAssigned();
     } catch (err) {
-      if (err.status !== 401) setError(errorText(err));
+      if (err.status !== 401) toast.error(errorText(err));
     } finally {
       setBusy(false);
     }
@@ -29,7 +33,7 @@ export function AssignControl({ chat, users, onAssigned }) {
 
   return (
     <div className="assign">
-      <label className="assign-label" htmlFor="assignee">
+      <label className="sr-only" htmlFor="assignee">
         Assigned to
       </label>
       <select
@@ -53,10 +57,15 @@ export function AssignControl({ chat, users, onAssigned }) {
         className="button"
         disabled={busy}
         onClick={() => run(() => api.autoAssign(chat.chatId))}
+        title="Assign to the next agent in rotation"
       >
+        {busy ? (
+          <LoaderCircle className="spin" size={16} aria-hidden="true" />
+        ) : (
+          <Shuffle size={16} aria-hidden="true" />
+        )}
         Auto-assign
       </button>
-      {error && <span className="inline-error">{error}</span>}
     </div>
   );
 }

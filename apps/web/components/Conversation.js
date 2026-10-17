@@ -1,29 +1,56 @@
 'use client';
 
+import {
+  ArrowDown,
+  ArrowLeft,
+  Check,
+  CheckCheck,
+  CircleAlert,
+  Clock,
+  Lock,
+  PanelRight,
+  ShieldCheck,
+  WifiOff,
+} from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { api, errorText } from '../lib/client-api.js';
-import { chatTitle, formatDay, formatTime } from '../lib/format.js';
+import { chatTitle, formatDay, formatDayLabel, formatFull, formatTime } from '../lib/format.js';
+import { readPref, writePref } from '../lib/prefs.js';
 import { usePolling } from '../lib/use-polling.js';
+import { useShortcuts } from '../lib/use-shortcuts.js';
 import { AssignControl } from './AssignControl.js';
 import { Composer } from './Composer.js';
+import { DetailsPanel } from './DetailsPanel.js';
+import { useToast } from './Toast.js';
+import { Avatar, EmptyState, IconButton, MessagesSkeleton } from './ui.js';
 import { useUser } from './UserContext.js';
 
 const POLL_MS = 3000;
 const PAGE_SIZE = 30;
 const STICK_THRESHOLD_PX = 80;
-
-const STATUS_LABEL = {
-  pending: 'Sending…',
-  sent: '✓',
-  delivered: '✓✓',
-  read: '✓✓',
-};
+const GROUP_WINDOW_MS = 5 * 60 * 1000;
+const WIDE_QUERY = '(min-width: 1280px)';
 
 const ACCESS_ERRORS = {
   FORBIDDEN: 'This chat is not assigned to you any more.',
   NOT_FOUND: 'Chat not found.',
   VALIDATION: 'That is not a valid chat address.',
+};
+
+const STATUS = {
+  pending: [Clock, 'Sending'],
+  sent: [Check, 'Sent'],
+  delivered: [CheckCheck, 'Delivered'],
+  read: [CheckCheck, 'Read'],
 };
 
 // Newest-first lists → one oldest-first list without duplicates.
@@ -39,6 +66,14 @@ function mergeMessages(latest, older) {
   return merged.reverse();
 }
 
+// Consecutive messages from the same side and sender, same day, within 5 minutes.
+function isGroupedWith(prev, m) {
+  if (!prev || prev.direction !== m.direction) return false;
+  if (m.direction === 'out' && prev.senderId !== m.senderId) return false;
+  if (formatDay(prev.createdAt) !== formatDay(m.createdAt)) return false;
+  return Date.parse(m.createdAt) - Date.parse(prev.createdAt) < GROUP_WINDOW_MS;
+}
+
 function senderLabel(message, user, usersById) {
   if (message.senderId === user.userId) return 'You';
   const name = usersById?.get(message.senderId)?.name;
@@ -50,17 +85,46 @@ function StatusTick({ message }) {
   if (message.status === 'failed') {
     return (
       <span className="msg-status failed" title={message.errorCode ?? undefined}>
+        <CircleAlert size={13} aria-hidden="true" />
         Failed{message.errorCode ? ` (${message.errorCode})` : ''}
       </span>
     );
   }
+  const [Icon, label] = STATUS[message.status] ?? [];
+  if (!Icon) return null;
   return (
-    <span className={`msg-status ${message.status}`}>{STATUS_LABEL[message.status] ?? ''}</span>
+    <span className={`msg-status ${message.status}`} title={label}>
+      <Icon size={15} aria-hidden="true" />
+      <span className="sr-only">{label}</span>
+    </span>
   );
+}
+
+function useDetailsPanel() {
+  const [open, setOpen] = useState(false);
+  const [wide, setWide] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia(WIDE_QUERY);
+    const sync = () => {
+      setWide(media.matches);
+      setOpen(media.matches && readPref('details', 'open') !== 'closed');
+    };
+    sync();
+    media.addEventListener('change', sync);
+    return () => media.removeEventListener('change', sync);
+  }, []);
+
+  const set = (next) => {
+    setOpen(next);
+    if (wide) writePref('details', next ? 'open' : 'closed');
+  };
+  return { open, wide, set };
 }
 
 export function Conversation({ chatId }) {
   const user = useUser();
+  const toast = useToast();
   const isAdmin = user.role === 'admin';
 
   const [chat, setChat] = useState(null);
@@ -73,10 +137,13 @@ export function Conversation({ chatId }) {
   const [accessError, setAccessError] = useState(null);
   const [pollError, setPollError] = useState(null);
   const [users, setUsers] = useState(null);
+  const [showJump, setShowJump] = useState(false);
+  const details = useDetailsPanel();
 
   const listRef = useRef(null);
   const stickToBottom = useRef(true);
   const preserveScroll = useRef(null);
+  const newestSeen = useRef(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -96,6 +163,10 @@ export function Conversation({ chatId }) {
   usePolling(refresh, POLL_MS, [chatId]);
 
   useEffect(() => {
+    if (pollError) toast.error('Connection problem. Retrying…');
+  }, [pollError, toast]);
+
+  useEffect(() => {
     if (!isAdmin) return;
     api
       .listUsers()
@@ -103,9 +174,17 @@ export function Conversation({ chatId }) {
       .catch(() => setUsers([]));
   }, [isAdmin]);
 
+  useShortcuts({
+    Escape: () => {
+      if (details.wide || !details.open) return false;
+      details.set(false);
+    },
+  });
+
   const usersById = useMemo(() => new Map(users?.map((u) => [u.userId, u])), [users]);
   const messages = useMemo(() => mergeMessages(latest, older), [latest, older]);
   const hasOlder = older.length ? olderNextBefore !== null : latestNextBefore !== null;
+  const newestId = messages.at(-1)?.messageId ?? null;
 
   // Keep the view pinned to the newest message unless the user has scrolled up; when older
   // messages are prepended, keep the visible ones in place.
@@ -118,12 +197,23 @@ export function Conversation({ chatId }) {
       preserveScroll.current = null;
     } else if (stickToBottom.current) {
       el.scrollTop = el.scrollHeight;
+    } else if (newestSeen.current && newestId && newestId !== newestSeen.current) {
+      setShowJump(true);
     }
-  }, [messages.length, local.length]);
+    newestSeen.current = newestId;
+  }, [messages.length, local.length, newestId]);
 
   const onScroll = () => {
     const el = listRef.current;
     stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_THRESHOLD_PX;
+    if (stickToBottom.current) setShowJump(false);
+  };
+
+  const jumpToLatest = () => {
+    const el = listRef.current;
+    stickToBottom.current = true;
+    setShowJump(false);
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   };
 
   const loadOlder = async () => {
@@ -137,7 +227,7 @@ export function Conversation({ chatId }) {
       setOlder((prev) => [...prev, ...data.messages]);
       setOlderNextBefore(data.nextBefore);
     } catch (err) {
-      if (err.status !== 401) setPollError(err.message);
+      if (err.status !== 401) toast.error(`Could not load older messages: ${err.message}`);
     } finally {
       setLoadingOlder(false);
     }
@@ -171,105 +261,180 @@ export function Conversation({ chatId }) {
   if (accessError) {
     return (
       <div className="conversation empty">
-        <p className="page-message">{accessError}</p>
+        <EmptyState icon={Lock} title="No access">
+          {accessError}
+        </EmptyState>
         <Link href="/chats" className="button">
           Back to chats
         </Link>
       </div>
     );
   }
-  if (!chat) {
-    return (
-      <div className="conversation empty">
-        <p className="page-message muted">{pollError ?? 'Loading…'}</p>
-      </div>
-    );
-  }
 
+  const title = chat ? chatTitle(chat) : '';
   let lastDay = null;
+  let prev = null;
+
   return (
-    <div className="conversation">
-      <header className="conversation-header">
-        <Link href="/chats" className="back-link" aria-label="Back to chats">
-          ←
-        </Link>
-        <div className="conversation-title">
-          <h2 className="pane-title">{chatTitle(chat)}</h2>
-          <span className="muted small">
-            {chat.chatId}
-            {!isAdmin && ' · assigned to you'}
-          </span>
-        </div>
-        {isAdmin && <AssignControl chat={chat} users={users} onAssigned={refresh} />}
-      </header>
+    <div className="conversation-wrap">
+      <section
+        className="conversation"
+        aria-label={title ? `Conversation with ${title}` : 'Conversation'}
+      >
+        <header className="conversation-header">
+          <Link href="/chats" className="icon-button back-link" aria-label="Back to chats">
+            <ArrowLeft size={20} aria-hidden="true" />
+          </Link>
+          {chat && <Avatar name={chat.clientName} id={chat.chatId} />}
+          <div className="conversation-title">
+            <h2>{title || ' '}</h2>
+            {chat && (
+              <span className="conversation-subtitle">
+                <span>{chat.chatId}</span>
+                <span aria-hidden="true">·</span>
+                <span>{chat.assignee ? `Assigned to ${chat.assignee.name}` : 'Unassigned'}</span>
+                {pollError && (
+                  <span className="connection-dot" title={pollError}>
+                    <WifiOff size={12} aria-hidden="true" />
+                    Reconnecting
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
+          <div className="header-actions">
+            {isAdmin && chat && <AssignControl chat={chat} users={users} onAssigned={refresh} />}
+            {chat && (
+              <IconButton
+                label={details.open ? 'Hide client details' : 'Show client details'}
+                aria-pressed={details.open}
+                aria-controls="client-details"
+                onClick={() => details.set(!details.open)}
+              >
+                <PanelRight size={20} />
+              </IconButton>
+            )}
+          </div>
+        </header>
 
-      {pollError && <p className="inline-error banner">Connection problem: {pollError}</p>}
+        <div className="messages-area">
+          <div className="messages-scroll" ref={listRef} onScroll={onScroll}>
+            {!chat && <MessagesSkeleton />}
+            {chat && (
+              <div className="messages-inner">
+                {hasOlder && (
+                  <button
+                    type="button"
+                    className="button load-older"
+                    onClick={loadOlder}
+                    disabled={loadingOlder}
+                  >
+                    {loadingOlder ? 'Loading…' : 'Load older messages'}
+                  </button>
+                )}
 
-      <div className="messages" ref={listRef} onScroll={onScroll}>
-        {hasOlder && (
-          <button type="button" className="button ghost load-older" onClick={loadOlder}>
-            {loadingOlder ? 'Loading…' : 'Load older messages'}
-          </button>
-        )}
+                <div role="log" aria-label="Messages" className="message-log">
+                  {messages.map((m) => {
+                    const day = formatDay(m.createdAt);
+                    const divider = day !== lastDay;
+                    const grouped = !divider && isGroupedWith(prev, m);
+                    lastDay = day;
+                    prev = m;
+                    const outbound = m.direction === 'out';
+                    const byAdmin = outbound && m.senderType === 'admin';
+                    return (
+                      <Fragment key={m.messageId}>
+                        {divider && (
+                          <div className="day-divider">{formatDayLabel(m.createdAt)}</div>
+                        )}
+                        <div
+                          className={`msg-row ${outbound ? 'out' : 'in'} ${grouped ? 'grouped' : ''}`}
+                        >
+                          <div
+                            className={`msg ${outbound ? 'out' : 'in'} ${byAdmin ? 'by-admin' : ''}`}
+                          >
+                            {outbound && !grouped && (
+                              <div className="msg-sender">
+                                {byAdmin && <ShieldCheck size={12} aria-hidden="true" />}
+                                {senderLabel(m, user, usersById)}
+                                {byAdmin && m.senderId !== user.userId && (
+                                  <span className="sr-only">, sent by admin</span>
+                                )}
+                              </div>
+                            )}
+                            <div className="msg-text">{m.text}</div>
+                            <div className="msg-meta">
+                              <time dateTime={m.createdAt} title={formatFull(m.createdAt)}>
+                                {formatTime(m.createdAt)}
+                              </time>
+                              {outbound && <StatusTick message={m} />}
+                            </div>
+                          </div>
+                        </div>
+                      </Fragment>
+                    );
+                  })}
 
-        {messages.map((m) => {
-          const day = formatDay(m.createdAt);
-          const divider = day !== lastDay;
-          lastDay = day;
-          const outbound = m.direction === 'out';
-          return (
-            <div key={m.messageId} className="msg-row-wrap">
-              {divider && <div className="day-divider">{day}</div>}
-              <div className={`msg-row ${outbound ? 'out' : 'in'}`}>
-                <div
-                  className={`msg ${outbound ? 'out' : 'in'} ${m.senderType === 'admin' ? 'by-admin' : ''}`}
-                >
-                  {outbound && <div className="msg-sender">{senderLabel(m, user, usersById)}</div>}
-                  <div className="msg-text">{m.text}</div>
-                  <div className="msg-meta">
-                    <span>{formatTime(m.createdAt)}</span>
-                    {outbound && <StatusTick message={m} />}
-                  </div>
+                  {local.map((m) => (
+                    <div key={m.tempId} className="msg-row out">
+                      <div className={`msg out ${m.state === 'error' ? 'local-error' : ''}`}>
+                        <div className="msg-sender">You</div>
+                        <div className="msg-text">{m.text}</div>
+                        <div className="msg-meta">
+                          {m.state === 'sending' ? (
+                            <span className="msg-status pending">
+                              <Clock size={13} aria-hidden="true" />
+                              Sending…
+                            </span>
+                          ) : (
+                            <>
+                              <span className="msg-status failed">
+                                <CircleAlert size={13} aria-hidden="true" />
+                                Not sent: {m.error}
+                              </span>
+                              <button
+                                type="button"
+                                className="link-button"
+                                onClick={() => send(m.text, m.tempId)}
+                              >
+                                Retry
+                              </button>
+                              <button
+                                type="button"
+                                className="link-button"
+                                onClick={() => discard(m.tempId)}
+                              >
+                                Discard
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
-            </div>
-          );
-        })}
 
-        {local.map((m) => (
-          <div key={m.tempId} className="msg-row out">
-            <div className={`msg out ${m.state === 'error' ? 'local-error' : ''}`}>
-              <div className="msg-sender">You</div>
-              <div className="msg-text">{m.text}</div>
-              <div className="msg-meta">
-                {m.state === 'sending' ? (
-                  <span className="msg-status pending">Sending…</span>
-                ) : (
-                  <>
-                    <span className="msg-status failed">Not sent: {m.error}</span>
-                    <button
-                      type="button"
-                      className="link-button"
-                      onClick={() => send(m.text, m.tempId)}
-                    >
-                      Retry
-                    </button>
-                    <button type="button" className="link-button" onClick={() => discard(m.tempId)}>
-                      Discard
-                    </button>
-                  </>
+                {messages.length === 0 && local.length === 0 && (
+                  <EmptyState icon={Clock} title="No messages yet">
+                    Messages appear here as soon as they arrive.
+                  </EmptyState>
                 )}
               </div>
-            </div>
+            )}
           </div>
-        ))}
 
-        {messages.length === 0 && local.length === 0 && (
-          <p className="page-message muted">No messages yet.</p>
-        )}
-      </div>
+          {showJump && (
+            <button type="button" className="button jump-latest" onClick={jumpToLatest}>
+              <ArrowDown size={16} aria-hidden="true" />
+              New messages
+            </button>
+          )}
+        </div>
 
-      <Composer windowOpen={chat.windowOpen} onSend={(text) => send(text)} />
+        {chat && <Composer windowOpen={chat.windowOpen} onSend={(text) => send(text)} />}
+      </section>
+
+      {chat && <DetailsPanel chat={chat} open={details.open} onClose={() => details.set(false)} />}
     </div>
   );
 }

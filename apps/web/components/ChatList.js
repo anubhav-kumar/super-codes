@@ -1,11 +1,14 @@
 'use client';
 
+import { Clock, Inbox, Search, SearchX, X } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { useMemo, useRef, useState } from 'react';
 import { api } from '../lib/client-api.js';
-import { chatTitle, formatListTime } from '../lib/format.js';
+import { chatTitle, formatFull, formatListTime, isAwaitingReply } from '../lib/format.js';
 import { usePolling } from '../lib/use-polling.js';
+import { useShortcuts } from '../lib/use-shortcuts.js';
+import { Avatar, ChatListSkeleton, EmptyState, IconButton } from './ui.js';
 import { useUser } from './UserContext.js';
 
 const POLL_MS = 5000;
@@ -14,15 +17,30 @@ const ADMIN_FILTERS = [
   ['all', 'All'],
   ['mine', 'Mine'],
 ];
+const EMPTY_TEXT = {
+  unassigned: ['All caught up', 'New chats land here until someone is assigned.'],
+  all: ['No chats yet', 'Chats appear when a client messages your WhatsApp number.'],
+  mine: ['No chats assigned to you', 'Chats assigned to you show up here.'],
+};
+
+const chatHref = (chatId) => `/chats/${encodeURIComponent(chatId)}`;
+
+function matches(chat, query) {
+  const haystack = `${chat.clientName ?? ''} ${chat.chatId} ${chat.lastMessagePreview ?? ''}`;
+  return haystack.toLowerCase().includes(query);
+}
 
 export function ChatList() {
   const user = useUser();
   const isAdmin = user.role === 'admin';
+  const router = useRouter();
   const pathname = decodeURIComponent(usePathname());
+  const searchRef = useRef(null);
 
   const [filter, setFilter] = useState(isAdmin ? 'unassigned' : 'mine');
   const [chats, setChats] = useState(null);
   const [error, setError] = useState(null);
+  const [query, setQuery] = useState('');
 
   usePolling(
     async () => {
@@ -38,25 +56,78 @@ export function ChatList() {
     [filter],
   );
 
+  const q = query.trim().toLowerCase();
+  const visible = useMemo(
+    () => (chats && q ? chats.filter((c) => matches(c, q)) : chats),
+    [chats, q],
+  );
+  const activeIndex = visible?.findIndex((c) => pathname === `/chats/${c.chatId}`) ?? -1;
+
+  const step = (delta) => {
+    if (!visible?.length) return;
+    const next = activeIndex < 0 ? 0 : (activeIndex + delta + visible.length) % visible.length;
+    router.push(chatHref(visible[next].chatId));
+  };
+
+  useShortcuts({
+    '/': () => searchRef.current?.focus(),
+    j: () => step(1),
+    k: () => step(-1),
+    Escape: (event) => {
+      if (event.target !== searchRef.current) return false;
+      setQuery('');
+      searchRef.current.blur();
+    },
+  });
+
   const selectFilter = (next) => {
     if (next === filter) return;
     setChats(null);
     setFilter(next);
   };
 
+  const [emptyTitle, emptyText] = EMPTY_TEXT[filter];
+
   return (
-    <aside className="chat-list">
+    <aside className="chat-list" aria-label="Chats">
       <div className="chat-list-header">
-        <h1 className="pane-title">Chats</h1>
+        <div className="chat-list-title">
+          <h1 className="pane-title">Chats</h1>
+          {chats && <span className="count-pill">{chats.length}</span>}
+        </div>
+
+        <div className="search">
+          <Search size={16} aria-hidden="true" />
+          <input
+            ref={searchRef}
+            className="input"
+            type="search"
+            placeholder="Search name or message"
+            aria-label="Search chats"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <span className="search-aside">
+            {query ? (
+              <IconButton label="Clear search" onClick={() => setQuery('')}>
+                <X size={14} />
+              </IconButton>
+            ) : (
+              <kbd className="search-kbd" aria-hidden="true">
+                /
+              </kbd>
+            )}
+          </span>
+        </div>
+
         {isAdmin && (
-          <div className="tabs" role="tablist">
+          <div className="segmented" role="tablist" aria-label="Filter chats">
             {ADMIN_FILTERS.map(([value, label]) => (
               <button
                 key={value}
                 type="button"
                 role="tab"
                 aria-selected={filter === value}
-                className={filter === value ? 'tab active' : 'tab'}
                 onClick={() => selectFilter(value)}
               >
                 {label}
@@ -66,37 +137,82 @@ export function ChatList() {
         )}
       </div>
 
-      {error && <p className="inline-error">{error}</p>}
-      {!chats && !error && <p className="list-message muted">Loading…</p>}
-      {chats?.length === 0 && (
-        <p className="list-message muted">
-          {filter === 'unassigned' ? 'No unassigned chats.' : 'No chats yet.'}
+      {error && (
+        <p className="alert danger" role="alert" style={{ margin: 'var(--space-3)' }}>
+          {error}
         </p>
       )}
 
-      <ul className="chat-items">
-        {chats?.map((chat) => {
-          const href = `/chats/${encodeURIComponent(chat.chatId)}`;
-          const active = pathname === `/chats/${chat.chatId}`;
-          return (
-            <li key={chat.chatId}>
-              <Link href={href} className={active ? 'chat-item active' : 'chat-item'}>
-                <div className="chat-item-top">
-                  <span className="chat-item-title">{chatTitle(chat)}</span>
-                  <span className="chat-item-time">{formatListTime(chat.lastMessageAt)}</span>
-                </div>
-                <div className="chat-item-preview">{chat.lastMessagePreview}</div>
-                <div className="chat-item-meta">
-                  {isAdmin && filter !== 'unassigned' && (
-                    <span className="badge">{chat.assignee?.name ?? 'Unassigned'}</span>
-                  )}
-                  {!chat.windowOpen && <span className="badge warn">Window closed</span>}
-                </div>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+      <div className="chat-items">
+        {!chats && !error && <ChatListSkeleton />}
+
+        {chats?.length === 0 && (
+          <EmptyState icon={Inbox} title={emptyTitle}>
+            {emptyText}
+          </EmptyState>
+        )}
+
+        {chats?.length > 0 && visible.length === 0 && (
+          <EmptyState icon={SearchX} title="No matches">
+            Nothing matches “{query.trim()}” in this list.
+          </EmptyState>
+        )}
+
+        <ul>
+          {visible?.map((chat) => {
+            const active = pathname === `/chats/${chat.chatId}`;
+            const awaiting = isAwaitingReply(chat) && chat.windowOpen;
+            const title = chatTitle(chat);
+            const classes = ['chat-item', active && 'active', awaiting && 'awaiting']
+              .filter(Boolean)
+              .join(' ');
+            return (
+              <li key={chat.chatId}>
+                <Link
+                  href={chatHref(chat.chatId)}
+                  className={classes}
+                  aria-current={active ? 'page' : undefined}
+                >
+                  <Avatar name={chat.clientName} id={chat.chatId} />
+                  <div className="chat-item-body">
+                    <div className="chat-item-top">
+                      <span className="chat-item-title">{title}</span>
+                      <time
+                        className="chat-item-time"
+                        dateTime={chat.lastMessageAt}
+                        title={formatFull(chat.lastMessageAt)}
+                      >
+                        {formatListTime(chat.lastMessageAt)}
+                      </time>
+                    </div>
+                    <div className="chat-item-bottom">
+                      <span className="chat-item-preview">{chat.lastMessagePreview}</span>
+                      {awaiting && (
+                        <span className="awaiting-dot" title="Awaiting reply">
+                          <span className="sr-only">Awaiting reply</span>
+                        </span>
+                      )}
+                    </div>
+                    <div className="chat-item-meta">
+                      {isAdmin && filter !== 'unassigned' && (
+                        <span className={chat.assignee ? 'badge' : 'badge info'}>
+                          <span>{chat.assignee?.name ?? 'Unassigned'}</span>
+                        </span>
+                      )}
+                      {!chat.windowOpen && (
+                        <span className="badge warn">
+                          <Clock size={12} aria-hidden="true" />
+                          <span>Window closed</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
     </aside>
   );
 }

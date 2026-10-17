@@ -1,7 +1,10 @@
 'use client';
 
+import { CircleAlert, LoaderCircle } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
+import { PasswordInput } from '../../components/PasswordInput.js';
+import { BrandMark } from '../../components/ui.js';
 import { api, errorText, safeNext } from '../../lib/client-api.js';
 
 function LoginForm() {
@@ -25,35 +28,55 @@ function LoginForm() {
   };
 
   return (
-    <form className="card auth-card" onSubmit={onSubmit}>
-      <h1 className="brand-title">Vartalap</h1>
-      <p className="muted">Sign in to your workspace</p>
-      <label className="field">
-        <span>Email</span>
+    <form className="card auth-card" onSubmit={onSubmit} noValidate={false}>
+      <div className="auth-brand">
+        <BrandMark large />
+        <div>
+          <h1 className="auth-title">Vartalap</h1>
+          <p className="auth-subtitle">Sign in to your team inbox</p>
+        </div>
+      </div>
+
+      {error && (
+        <p className="alert danger" role="alert">
+          <CircleAlert size={16} aria-hidden="true" />
+          {error}
+        </p>
+      )}
+
+      <div className="field">
+        <label className="field-label" htmlFor="email">
+          Email
+        </label>
         <input
+          id="email"
           className="input"
           type="email"
           autoComplete="username"
+          autoFocus
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
-      </label>
-      <label className="field">
-        <span>Password</span>
-        <input
-          className="input"
-          type="password"
+      </div>
+      <div className="field">
+        <label className="field-label" htmlFor="password">
+          Password
+        </label>
+        <PasswordInput
+          id="password"
           autoComplete="current-password"
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
-      </label>
-      {error && <p className="inline-error">{error}</p>}
+      </div>
+
       <button type="submit" className="button primary block" disabled={busy}>
+        {busy && <LoaderCircle className="spin" size={18} aria-hidden="true" />}
         {busy ? 'Signing in…' : 'Sign in'}
       </button>
+      <p className="auth-footer">Ask an admin if you need an account or a password reset.</p>
     </form>
   );
 }

@@ -1,6 +1,6 @@
 # F1: Modern UI polish
 
-**Status:** Research · **Depends on:** M8 (web UI), M7 (API) · **Related:** F2 (media), F3 (hide phone), F4 (client attributes fill the details panel)
+**Status:** Built (P1–P3) · **Depends on:** M8 (web UI), M7 (API) · **Related:** F2 (media), F3 (hide phone), F4 (client attributes fill the details panel)
 
 ## 1. Goal
 M8 shipped a UI that was meant to be "plain and usable, not polished" ([m8-web-ui.md](../modules/m8-web-ui.md)). Agents spend their whole shift in it, so F1 makes it look and feel like a current agent inbox: faster scanning of the chat list, clearer message states, consistent controls, an accessible baseline (WCAG 2.2 AA) and good phone behavior.
@@ -192,3 +192,31 @@ Theme: keep the system-following theme. Optionally add a manual toggle (light / 
 - [ ] `/`, `J`, `K`, `Esc` work outside inputs and do nothing while typing in the composer.
 - [ ] No API, schema or polling changes. Existing M8 "Done when" checks still pass. An agent never sees admin controls.
 - [ ] The only new runtime dependency is `lucide-react`. No TypeScript files are added.
+
+## Implementation notes (2026-10-17)
+- **Decisions taken (defaults):**
+  - D1: plain CSS with tokens in `@layer`;
+  - D2: system font stack;
+  - D3: `lucide-react` 1.59 (the only new dependency);
+  - D4: light / dark / system toggle in the user menu, applied before first paint by a fixed boot script;
+  - D5: "Awaiting reply" dot only, no unread counts;
+  - D6: client-side search;
+  - D7: green accent and the "Vartalap" wordmark;
+  - D8: details panel open at 1280px and wider, remembered per browser;
+  - D9: `/`, `J`/`K`, `Esc` and `?`.
+- **Contrast:** every text pair in both themes, plus the control borders and the 8 avatar colours, was re-checked with the WCAG formula and passes AA. The light control border became `#7a8580` so it passes 3:1 on all light surfaces.
+- **Visual check:** screenshots of the real build were taken locally with mocked `/api/*` data (made-up names, not committed):
+  - desktop, light and dark;
+  - tablet drawer;
+  - phone list and chat;
+  - login, users and the user menu.
+
+  Two layout bugs were found and fixed this way: stretched form fields, and the phone header wrapping.
+- **New files:**
+  - `components/ui.js` (Avatar, IconButton, BrandMark, EmptyState, skeletons);
+  - `Toast.js`, `DetailsPanel.js`, `ShortcutsDialog.js`, `PasswordInput.js`;
+  - `lib/prefs.js`, `lib/use-shortcuts.js`.
+- **Not done:**
+  - P4 (real unread counts) and server-side search;
+  - screen-reader testing of the `role="log"` region (VoiceOver/NVDA) is still a manual step.
+
