@@ -1,3 +1,5 @@
+import './globals.css';
+
 export const metadata = {
   title: 'Vartalap',
   description: 'WhatsApp multi-agent chat',
