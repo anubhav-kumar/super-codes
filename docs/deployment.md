@@ -68,8 +68,8 @@ Note these values; later steps use them:
 
 ---
 
-## 3. Set the WhatsApp values in SSM
-The stack creates four `String` parameters with the value `CHANGE_ME`. Until you set them, the Lambdas fail with a clear "still the placeholder" error.
+## 3. Set the secrets in SSM
+All secrets live in SSM, never in env files. The stack creates five `String` parameters with the value `CHANGE_ME`. Until you set them, the Lambdas and the web app fail with a clear error.
 
 | Parameter | Value | Read by |
 |---|---|---|
@@ -77,6 +77,7 @@ The stack creates four `String` parameters with the value `CHANGE_ME`. Until you
 | `/vartalap/<stage>/WA_ACCESS_TOKEN` | Cloud API access token (use a System User token; the dashboard token expires in about 24 h) | sender |
 | `/vartalap/<stage>/WA_APP_SECRET` | Meta app secret (App settings → Basic) | webhook |
 | `/vartalap/<stage>/WA_VERIFY_TOKEN` | Any random string; you enter the same one in Meta | webhook |
+| `/vartalap/<stage>/JWT_SECRET` | Session signing key, a random string of at least 32 characters | web app |
 
 ```bash
 STAGE=dev
@@ -86,6 +87,7 @@ put WA_PHONE_NUMBER_ID '<phone-number-id>'
 put WA_ACCESS_TOKEN    '<access-token>'
 put WA_APP_SECRET      '<app-secret>'
 put WA_VERIFY_TOKEN    "$(openssl rand -hex 16)"
+put JWT_SECRET         "$(openssl rand -hex 32)"
 ```
 
 **Test values first?** To smoke-test before touching the live number (step 5), use test values instead and save them in your shell:
@@ -95,38 +97,37 @@ put WA_PHONE_NUMBER_ID 100000000000001
 put WA_ACCESS_TOKEN    dummy
 put WA_APP_SECRET      "$APP_SECRET"
 put WA_VERIFY_TOKEN    "$VERIFY_TOKEN"
+put JWT_SECRET         "$(openssl rand -hex 32)"
 ```
 
 **Notes:**
-- **No redeploy needed:** the Lambdas read these values at runtime and cache them for 5 minutes. A change takes effect within 5 minutes.
-- **Not encrypted:** the values are SSM `String` type, protected by IAM only (CloudFormation can't create `SecureString`). Each Lambda can read only the parameters it uses.
+- **No redeploy needed:** the Lambdas and the web app read these values at runtime and cache them for 5 minutes. A change takes effect within 5 minutes. Changing `JWT_SECRET` signs everyone out.
+- **Not encrypted:** the values are SSM `String` type, protected by IAM only (CloudFormation can't create `SecureString`). Each Lambda can read only the parameters it uses, and the web app's role needs `ssm:GetParameter` on `JWT_SECRET` only.
 - **Can be reset:** later deploys leave your values alone, unless you edit a parameter's `Value` or `Description` in `serverless.yml`. That resets it to `CHANGE_ME`.
 
 ---
 
 ## 4. Run the web app
-Create `apps/web/.env.local`, using `.env.example` as the template:
+Create `apps/web/.env.local`, using `.env.example` as the template. It holds **no secrets**, only names and settings. The session key comes from SSM (`JWT_SECRET`, step 3), and AWS credentials come from your shell:
 ```dotenv
 AWS_REGION=ap-south-1           # must be the stack's region
-STAGE=dev
+STAGE=dev                       # also selects the /vartalap/<stage>/JWT_SECRET parameter
 MESSAGES_TABLE=vartalap-dev-messages
 CHATS_TABLE=vartalap-dev-chats
 USERS_TABLE=vartalap-dev-users
 OUTBOUND_QUEUE_URL=<OutboundQueueUrl>
-JWT_SECRET=<output of: openssl rand -hex 32>
 SEED_ADMIN_EMAIL=<admin email>
-SEED_ADMIN_PASSWORD=<8–72 characters>
 SEED_ADMIN_NAME=Admin
 ```
-Never commit this file; it's gitignored.
+The file is gitignored, but keep it free of secrets anyway.
 
 With AWS credentials active in the same shell:
 ```bash
 cd <repo>/whatsapp
-npm run seed      # creates the first admin; running it again prints "already exists"
+npm run seed      # creates the first admin and prints a one-time password; running it again prints "already exists"
 npm run dev       # http://localhost:3000
 ```
-Open `http://localhost:3000` and sign in as the seeded admin. **Change the seeded password** under **Password**, then add agents under **Users**.
+`npm run seed` generates the first admin's password and **prints it once**; it is never stored in a file. Open `http://localhost:3000`, sign in with it, and **change it immediately** under **Password**. Then add agents under **Users**.
 
 ---
 
@@ -214,6 +215,8 @@ This deletes **everything in the stage**: tables and their data, queues, Lambdas
 | Replies fail with code `190` | The access token has expired or is invalid. Use a System User token |
 | Replies fail with code `131047` | More than 24 h since the client's last message |
 | `npm run seed` or the web app fails with "Missing required env vars" | `apps/web/.env.local` is incomplete (step 4) |
+| Web app fails with "SSM parameter /vartalap/<stage>/JWT_SECRET must be a random string…" | Set `JWT_SECRET` in SSM (step 3), and check `STAGE` and `AWS_REGION` in `.env.local` |
+| Lost the seeded admin's one-time password | Delete that user's item and its `EMAIL#<email>` guard item from the users table, then re-run `npm run seed` (or have another admin create a new admin) |
 | Web app API calls return 500 / AccessDenied | AWS credentials expired (re-run `assume`), or the role lacks the web-app permissions (step 1.2) |
 | Signed out right after changing the password elsewhere | Expected: a password change ends all other sessions |
 | Lambda crashes at start: `Dynamic require of "node:https" is not supported` | The esbuild `configFile` banner is missing. Check `build.esbuild.configFile: ./esbuild.config.cjs` in `serverless.yml`, then redeploy |

@@ -207,6 +207,16 @@ resources:
         Value: CHANGE_ME
         Description: Webhook verify token, also entered in the Meta webhook setup
 
+    # Session signing key for the web app (not read by the Lambdas). Set it to a random string
+    # of at least 32 characters, e.g. `openssl rand -hex 32`.
+    JwtSecretParam:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /vartalap/${sls:stage}/JWT_SECRET
+        Type: String
+        Value: CHANGE_ME
+        Description: Web app session signing key (HS256), at least 32 characters
+
     MessagesTable:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -313,6 +323,9 @@ resources:
           - !Ref WaAccessTokenParam
           - !Ref WaAppSecretParam
           - !Ref WaVerifyTokenParam
+    JwtSecretParameterName:
+      Description: SSM parameter holding the web app's session signing key.
+      Value: !Ref JwtSecretParam
     WebhookUrl:
       Description: Register this as the callback URL in the Meta app.
       Value: !Join

@@ -1,14 +1,19 @@
-// Creates the first admin from SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD (optional SEED_ADMIN_NAME).
-// Idempotent: if a user with that email exists, it changes nothing.
+// Creates the first admin from SEED_ADMIN_EMAIL (optional SEED_ADMIN_NAME). The password is
+// generated here and printed once, so it never has to sit in an env file; sign in and change
+// it under Password. Idempotent: if a user with that email exists, it changes nothing.
+import { randomBytes } from 'node:crypto';
 import { createUser, getUserByEmail } from '@vartalap/core';
+
+function generatePassword() {
+  return randomBytes(18).toString('base64url'); // 24 characters, well inside bcrypt's 72 bytes
+}
 
 async function main() {
   const email = process.env.SEED_ADMIN_EMAIL?.trim();
-  const password = process.env.SEED_ADMIN_PASSWORD;
   const name = process.env.SEED_ADMIN_NAME?.trim() || 'Admin';
 
-  if (!email || !password) {
-    console.error('SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD must be set');
+  if (!email) {
+    console.error('SEED_ADMIN_EMAIL must be set');
     process.exit(1);
   }
 
@@ -17,6 +22,7 @@ async function main() {
     return;
   }
 
+  const password = generatePassword();
   let user;
   try {
     user = await createUser({ email, name, role: 'admin', password });
@@ -29,6 +35,8 @@ async function main() {
     throw err;
   }
   console.log(`Created admin ${user.email} (${user.userId})`);
+  console.log(`One-time password (shown only now): ${password}`);
+  console.log('Sign in and change it under Password.');
 }
 
 main().catch((err) => {

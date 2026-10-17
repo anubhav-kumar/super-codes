@@ -24,6 +24,7 @@ The stack creates these SSM parameters as type `String`, with the placeholder va
 | `/vartalap/<stage>/WA_ACCESS_TOKEN`    | Cloud API access token                                    | sender          |
 | `/vartalap/<stage>/WA_APP_SECRET`      | Meta app secret (webhook signature check)                 | webhook         |
 | `/vartalap/<stage>/WA_VERIFY_TOKEN`    | Any random string; also entered in the Meta webhook setup | webhook         |
+| `/vartalap/<stage>/JWT_SECRET`         | Web app session signing key (random, 32+ characters)      | web app         |
 
 After the first deploy, set the real values once:
 
@@ -53,7 +54,7 @@ Deploy outputs (`npx serverless info --stage dev --verbose`): `MessagesTableName
 
 ## IAM for the local Next.js app
 
-The web app runs on localhost with `assume` credentials. That role needs read/write on the three tables and their indexes, plus `sqs:SendMessage` on the outbound queue. Sample policy for `dev` in `ap-south-1` (replace `<account-id>`, and the region if you deploy elsewhere):
+The web app runs on localhost with `assume` credentials. That role needs read/write on the three tables and their indexes, `sqs:SendMessage` on the outbound queue, and `ssm:GetParameter` on the `JWT_SECRET` parameter. Sample policy for `dev` in `ap-south-1` (replace `<account-id>`, and the region if you deploy elsewhere):
 
 ```json
 {
@@ -79,6 +80,12 @@ The web app runs on localhost with `assume` credentials. That role needs read/wr
         "arn:aws:dynamodb:ap-south-1:<account-id>:table/vartalap-dev-users",
         "arn:aws:dynamodb:ap-south-1:<account-id>:table/vartalap-dev-users/index/*"
       ]
+    },
+    {
+      "Sid": "VartalapSessionKey",
+      "Effect": "Allow",
+      "Action": "ssm:GetParameter",
+      "Resource": "arn:aws:ssm:ap-south-1:<account-id>:parameter/vartalap/dev/JWT_SECRET"
     },
     {
       "Sid": "VartalapOutboundQueue",

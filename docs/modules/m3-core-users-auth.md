@@ -32,7 +32,7 @@ buildMarkAutoAssignedItem(userId, at, previousAt)
 // apps/web/lib/session.js
 SESSION_COOKIE                        // cookie name: 'vartalap_session'
 SESSION_TTL_SECONDS                   // 8 h
-signSession(user)                     // → Promise<JWT string> { sub: userId, role }, 8 h expiry, HS256 (jose), JWT_SECRET
+signSession(user)                     // → Promise<JWT string> { sub: userId, role }, 8 h expiry, HS256 (jose), key from SSM JWT_SECRET
 verifySession(token)                  // → Promise<{ userId, role, issuedAt /* ms */ } | null>; never throws on a bad, expired or foreign token
 sessionCookieOptions()                // → { httpOnly: true, secure: NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: 8 h }
 buildSetCookie(token)                 // → Set-Cookie header string for the session
@@ -47,9 +47,9 @@ The cookie helpers are framework-light (header strings plus an options object us
 - `passwordHash` never leaves the repo layer (`toPublicUser` validates every returned user with `UserSchema`); the only exception is `getUserByEmail`, which is internal to login.
 - Guard items (`{ userId: 'EMAIL#<email>', ownerUserId }`) have no `email` attribute, so they never appear in `byEmail`; reads and scans also skip them by prefix.
 - `verifyCredentials` runs a dummy bcrypt compare for unknown emails to limit timing differences.
-- `JWT_SECRET` must be at least 32 characters; `signSession` / `verifySession` throw if it is missing or shorter (a deployment error, not a bad token).
+- **Signing key (updated 2026-10-17):** read from the SSM parameter `/vartalap/<STAGE>/JWT_SECRET` (override the name with `JWT_SECRET_PARAM`), never from env files. It's cached for 5 minutes. It must be at least 32 characters. `signSession` / `verifySession` throw if it is missing, too short or still `CHANGE_ME`, because that's a deployment error, not a bad token.
 - Admins can create admins and agents. Any user can change their own password.
-- `seed-admin.js` reads `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` (optional `SEED_ADMIN_NAME`, default `Admin`), creates the admin if none exists with that email, and exits 0 without changes otherwise. It never prints the password.
+- `seed-admin.js` reads `SEED_ADMIN_EMAIL` (optional `SEED_ADMIN_NAME`, default `Admin`). If no user with that email exists, it creates the admin with a **generated password and prints it once**, and the admin changes it after first sign-in. Otherwise it exits 0 without changes. No password is read from env files.
 - `npm run seed` runs `node --env-file-if-exists=../.env --env-file-if-exists=../apps/web/.env.local seed-admin.js`, so env comes from the shell, the root `.env` or `apps/web/.env.local` (shell values win). It needs AWS credentials plus `AWS_REGION`, `STAGE` and the table/queue vars that `getConfig()` requires.
 
 ## Done when
