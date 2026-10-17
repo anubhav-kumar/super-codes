@@ -1,0 +1,34 @@
+# M8: Web UI (Next.js)
+
+**Phase:** 2 (against mocks) → 3 (real API) · **Depends on:** M0 contracts; then M7 · **Unblocks:** M9
+
+## Goal
+A basic, functional UI for agents and admins. Plain and usable, not polished.
+
+## Files
+- `apps/web/app/login/page.js`
+- `apps/web/app/chats/page.js`, `apps/web/app/chats/[phone]/page.js`
+- `apps/web/app/admin/users/page.js`
+- `apps/web/app/account/password/page.js`
+- `apps/web/lib/client-api.js`: fetch wrapper. A `NEXT_PUBLIC_USE_MOCKS=true` flag switches it to fixtures in `apps/web/mocks/`.
+
+## Screens
+| Screen | Who | Contents |
+|---|---|---|
+| Login | public | Email, password, error message |
+| Chat list | all | Agent: their chats. Admin: tabs for Unassigned / All, plus each chat's assignee. Shows the preview, the time and a "window expired" marker. Polls every 5 s. |
+| Conversation | assignee, admin | History (newest at the bottom, "load older" via `nextBefore`), a status tick on outbound messages, a "sent by admin" label on admin messages (visible to staff only). Polls every 3 s and refetches only when `headMessageId` changes. |
+| Composer | assignee, admin | Text input. Disabled with a "window expired" note when `windowOpen` is false. Shows `failed` messages in red. |
+| Assign panel | admin | An agent dropdown plus an "Auto-assign" button, in the conversation header and on unassigned rows. |
+| Users | admin | List; create an admin or agent (email, name, role, initial password). |
+| Change password | all | Current password plus a new password. |
+
+## Notes
+- Pause polling when the browser tab is hidden (`visibilitychange`).
+- Optimistic send: show the message as `pending` right away, then replace it with the server response.
+- No component library is required; plain CSS modules are fine.
+
+## Done when
+- [ ] Every screen works end to end against the mocks, and then against the real M7 API without code changes.
+- [ ] An agent never sees admin-only controls.
+- [ ] A new inbound message appears within about 3 s while the conversation is open.
