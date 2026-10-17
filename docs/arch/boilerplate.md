@@ -183,7 +183,7 @@ Environment variables (listed in `.env.example`; real values never committed):
 | `WA_GRAPH_VERSION` | Lambdas (plain value in `serverless.yml`, e.g. `v26.0`) |
 | `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | seed script |
 
-In AWS, the Lambda secrets come from SSM Parameter Store (`${ssm:/vartalap/<stage>/...}` in `serverless.yml`), not plain text.
+In AWS, the WhatsApp settings are SSM `String` parameters that the stack itself creates, with a placeholder value. The real values are set once after the first deploy. Lambdas get only the parameter names and read the values at runtime (`services/whatsapp/src/lib/params.js`); see `services/whatsapp/README.md`.
 
 ## 7. Root scripts
 | Script | Does |

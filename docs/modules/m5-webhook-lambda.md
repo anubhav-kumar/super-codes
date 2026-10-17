@@ -8,6 +8,9 @@ Receive WhatsApp Cloud API callbacks: verify them, store inbound client messages
 ## Files
 `services/whatsapp/src/handlers/webhook.js`, `src/whatsapp/signature.js`, `src/whatsapp/parse.js`
 
+## Settings
+Read the WhatsApp values with `getParams(['WA_PHONE_NUMBER_ID', 'WA_APP_SECRET', 'WA_VERIFY_TOKEN'])` from `src/lib/params.js`. They are SSM parameters created by the stack; the env vars only hold their names (`WA_*_PARAM`). Values are cached for 5 minutes, and an unset (`CHANGE_ME`) value throws a clear error.
+
 ## Behavior
 - **`GET /webhook`:** if `hub.mode === 'subscribe'` and `hub.verify_token === WA_VERIFY_TOKEN`, return `hub.challenge` as text with `200`. Otherwise return `403`.
 - **`POST /webhook`:**

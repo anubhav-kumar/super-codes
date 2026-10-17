@@ -9,6 +9,7 @@
     "package": "serverless package"
   },
   "dependencies": {
+    "@aws-sdk/client-ssm": "^3.1152.0",
     "@vartalap/core": "*"
   },
   "devDependencies": {

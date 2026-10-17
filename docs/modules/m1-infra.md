@@ -27,7 +27,11 @@ Define every AWS resource in `services/whatsapp/serverless.yml`, so that one `se
 - **IAM:** least privilege, one role per function (v4 built-in `provider.iam.role.mode: perFunction`, no plugin):
   - webhook: read/write on messages + chats, query `byWaMessageId`.
   - sender: read/update on messages; SQS consume.
-- **Secrets:** `WA_PHONE_NUMBER_ID`, `WA_ACCESS_TOKEN`, `WA_APP_SECRET` and `WA_VERIFY_TOKEN`, read from SSM `/vartalap/<stage>/<VAR_NAME>` (e.g. `/vartalap/dev/WA_ACCESS_TOKEN`).
+- **WhatsApp settings (decided 2026-10-17):** the stack itself creates `/vartalap/<stage>/WA_PHONE_NUMBER_ID`, `WA_ACCESS_TOKEN`, `WA_APP_SECRET` and `WA_VERIFY_TOKEN` as `AWS::SSM::Parameter` resources.
+  - They are type `String`, because CloudFormation can't create `SecureString`; they are protected by IAM only.
+  - They start as the placeholder `CHANGE_ME`. Real values are set once after the first deploy with `aws ssm put-parameter --overwrite`.
+  - Functions get only the parameter **names** they need (`WA_*_PARAM` env vars), plus `ssm:GetParameters` on just those parameters. They read the values at runtime through `services/whatsapp/src/lib/params.js` (cached 5 min), so nothing is resolved at deploy time.
+  - webhook reads `WA_PHONE_NUMBER_ID`, `WA_APP_SECRET` and `WA_VERIFY_TOKEN`; sender reads `WA_PHONE_NUMBER_ID` and `WA_ACCESS_TOKEN`.
 - **Other env:** `STAGE`, `MESSAGES_TABLE`, `CHATS_TABLE`, `USERS_TABLE`, `OUTBOUND_QUEUE_URL` and `WA_GRAPH_VERSION` (plain value, `v26.0`). `AWS_REGION` is not set in `serverless.yml`: it is a reserved variable that the Lambda runtime provides.
 - **Outputs:** table names, queue URL, DLQ URL, webhook URL, so they can be copied into `apps/web/.env.local`.
 - A separate IAM note in the README on what the local Next.js app needs: read/write on all three tables + indexes, and `sqs:SendMessage`. It runs with `assume` credentials.
@@ -39,5 +43,5 @@ Define every AWS resource in `services/whatsapp/serverless.yml`, so that one `se
 ## Done when
 - [ ] `serverless deploy --stage dev` succeeds from a clean account, and `serverless remove` cleans up.
 - [ ] All three tables, the indexes, the FIFO queue and the DLQ exist with the settings above.
-- [ ] The SSM parameters are documented; no secret values are in the repo.
+- [ ] The four SSM parameters are created by the stack with the placeholder value; no secret values are in the repo.
 - [ ] The local app can reach the tables and queue using `assume` credentials.

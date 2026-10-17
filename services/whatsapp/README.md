@@ -12,20 +12,30 @@ Handler code lives in `src/handlers/` (M5, M6). Bundling uses v4's built-in esbu
 
 1. **Serverless login.** v4 needs an account: run `npx serverless login` once, or set `SERVERLESS_ACCESS_KEY` in CI. A paid license is required if the deploying business's annual revenue is above USD 2M.
 2. **AWS credentials** for the target account (for example via `assume`).
-3. **SSM parameters** for the stage. Create them as `SecureString` before the first deploy; the deploy fails if any are missing:
+3. Nothing else. The stack creates its own SSM parameters (see below). Do **not** create `/vartalap/<stage>/WA_*` parameters by hand before the first deploy, or CloudFormation fails with "already exists".
 
-   | Parameter                              | Value                                                     |
-   | -------------------------------------- | --------------------------------------------------------- |
-   | `/vartalap/<stage>/WA_PHONE_NUMBER_ID` | WhatsApp Cloud API phone number ID                        |
-   | `/vartalap/<stage>/WA_ACCESS_TOKEN`    | Cloud API access token                                    |
-   | `/vartalap/<stage>/WA_APP_SECRET`      | Meta app secret (webhook signature check)                 |
-   | `/vartalap/<stage>/WA_VERIFY_TOKEN`    | Any random string; also entered in the Meta webhook setup |
+## WhatsApp settings (SSM)
 
-   ```sh
-   aws ssm put-parameter --type SecureString --name /vartalap/dev/WA_ACCESS_TOKEN --value '<value>'
-   ```
+The stack creates these SSM parameters as type `String`, with the placeholder value `CHANGE_ME`:
 
-   Never commit the values. The Framework resolves them at deploy time and stores them as Lambda environment variables (encrypted at rest), so redeploy after rotating one.
+| Parameter                              | Value                                                     | Read by         |
+| -------------------------------------- | --------------------------------------------------------- | --------------- |
+| `/vartalap/<stage>/WA_PHONE_NUMBER_ID` | WhatsApp Cloud API phone number ID                        | webhook, sender |
+| `/vartalap/<stage>/WA_ACCESS_TOKEN`    | Cloud API access token                                    | sender          |
+| `/vartalap/<stage>/WA_APP_SECRET`      | Meta app secret (webhook signature check)                 | webhook         |
+| `/vartalap/<stage>/WA_VERIFY_TOKEN`    | Any random string; also entered in the Meta webhook setup | webhook         |
+
+After the first deploy, set the real values once:
+
+```sh
+aws ssm put-parameter --overwrite --type String --name /vartalap/dev/WA_ACCESS_TOKEN --value '<value>'
+```
+
+- **Why `String`:** CloudFormation cannot create `SecureString` parameters. These values are protected by IAM only, not KMS. Each Lambda's role can read only the parameters it uses.
+- **Runtime reads:** the Lambdas get the parameter _names_ as environment variables (`WA_*_PARAM`) and read the values at runtime through `src/lib/params.js`, cached for 5 minutes. A rotated value takes effect within 5 minutes, with no redeploy. A value still at `CHANGE_ME` makes the function fail with a clear error.
+- **Later deploys** leave your values alone, as long as the parameter definitions in `serverless.yml` don't change. Editing a parameter's `Value` or `Description` there resets it to the placeholder, so re-set it after such a change.
+- **`serverless remove`** deletes the parameters along with the rest of the stack.
+- Never commit the values.
 
 ## Deploy and remove
 
@@ -39,7 +49,7 @@ npx serverless remove --stage dev              # deletes the stack, including th
 
 Stage defaults to `dev` and region to `ap-southeast-1`. The Graph API version (`WA_GRAPH_VERSION`) and sender timeout are set under `params` in `serverless.yml`.
 
-Deploy outputs (`npx serverless info --stage dev --verbose`): `MessagesTableName`, `ChatsTableName`, `UsersTableName`, `OutboundQueueUrl`, `OutboundDlqUrl`, `WebhookUrl` (register in the Meta app) and the Framework's `HttpApiUrl`. Copy the table names and queue URL into `apps/web/.env.local`.
+Deploy outputs (`npx serverless info --stage dev --verbose`): `MessagesTableName`, `ChatsTableName`, `UsersTableName`, `OutboundQueueUrl`, `OutboundDlqUrl`, `WaParameterNames`, `WebhookUrl` (register in the Meta app) and the Framework's `HttpApiUrl`. Copy the table names and queue URL into `apps/web/.env.local`.
 
 ## IAM for the local Next.js app
 

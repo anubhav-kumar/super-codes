@@ -14,6 +14,9 @@ Read the outbound SQS FIFO queue and deliver each message through the WhatsApp C
 ```
 `MessageGroupId = chatId`, `MessageDeduplicationId = messageId`.
 
+## Settings
+Read the WhatsApp values with `getParams(['WA_PHONE_NUMBER_ID', 'WA_ACCESS_TOKEN'])` from `src/lib/params.js`. They are SSM parameters created by the stack; the env vars only hold their names (`WA_*_PARAM`). Values are cached for 5 minutes, and an unset (`CHANGE_ME`) value throws a clear error.
+
 ## Behavior
 1. `getMessage(messageId)`. If it is missing, or its status is already beyond `pending`, log it and return successfully. This makes retries safe.
 2. `client.js` sends `POST https://graph.facebook.com/<version>/<WA_PHONE_NUMBER_ID>/messages` with `{ messaging_product: 'whatsapp', to: chatId, type: 'text', text: { body } }` and the bearer `WA_ACCESS_TOKEN`. The Graph API version is a config value.

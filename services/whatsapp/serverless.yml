@@ -40,7 +40,9 @@ provider:
     CHATS_TABLE: !Ref ChatsTable
     USERS_TABLE: !Ref UsersTable
     OUTBOUND_QUEUE_URL: !Ref OutboundQueue
-    # WhatsApp secrets are set per function below, so each one only gets what it uses.
+    # WhatsApp settings live in SSM parameters created by this stack (resources below).
+    # Functions get only the parameter *names* they need and read the values at runtime
+    # (src/lib/params.js), so values are never baked into the deployment.
   iam:
     role:
       # Each function gets its own role with only the statements below.
@@ -50,9 +52,9 @@ functions:
   webhook:
     handler: src/handlers/webhook.handler
     environment:
-      WA_PHONE_NUMBER_ID: ${ssm:/vartalap/${sls:stage}/WA_PHONE_NUMBER_ID}
-      WA_APP_SECRET: ${ssm:/vartalap/${sls:stage}/WA_APP_SECRET}
-      WA_VERIFY_TOKEN: ${ssm:/vartalap/${sls:stage}/WA_VERIFY_TOKEN}
+      WA_PHONE_NUMBER_ID_PARAM: !Ref WaPhoneNumberIdParam
+      WA_APP_SECRET_PARAM: !Ref WaAppSecretParam
+      WA_VERIFY_TOKEN_PARAM: !Ref WaVerifyTokenParam
     timeout: 10
     events:
       - httpApi:
@@ -84,13 +86,47 @@ functions:
               - dynamodb:ConditionCheckItem
             Resource:
               - !GetAtt ChatsTable.Arn
+          - Effect: Allow
+            Action:
+              - ssm:GetParameters
+            Resource:
+              - !Join
+                - ''
+                - - 'arn:'
+                  - !Ref AWS::Partition
+                  - ':ssm:'
+                  - !Ref AWS::Region
+                  - ':'
+                  - !Ref AWS::AccountId
+                  - ':parameter'
+                  - !Ref WaPhoneNumberIdParam
+              - !Join
+                - ''
+                - - 'arn:'
+                  - !Ref AWS::Partition
+                  - ':ssm:'
+                  - !Ref AWS::Region
+                  - ':'
+                  - !Ref AWS::AccountId
+                  - ':parameter'
+                  - !Ref WaAppSecretParam
+              - !Join
+                - ''
+                - - 'arn:'
+                  - !Ref AWS::Partition
+                  - ':ssm:'
+                  - !Ref AWS::Region
+                  - ':'
+                  - !Ref AWS::AccountId
+                  - ':parameter'
+                  - !Ref WaVerifyTokenParam
 
   sender:
     handler: src/handlers/sender.handler
     environment:
       WA_GRAPH_VERSION: ${param:waGraphVersion}
-      WA_PHONE_NUMBER_ID: ${ssm:/vartalap/${sls:stage}/WA_PHONE_NUMBER_ID}
-      WA_ACCESS_TOKEN: ${ssm:/vartalap/${sls:stage}/WA_ACCESS_TOKEN}
+      WA_PHONE_NUMBER_ID_PARAM: !Ref WaPhoneNumberIdParam
+      WA_ACCESS_TOKEN_PARAM: !Ref WaAccessTokenParam
     timeout: ${param:senderTimeout}
     events:
       - sqs:
@@ -107,9 +143,68 @@ functions:
               - dynamodb:UpdateItem
             Resource:
               - !GetAtt MessagesTable.Arn
+          - Effect: Allow
+            Action:
+              - ssm:GetParameters
+            Resource:
+              - !Join
+                - ''
+                - - 'arn:'
+                  - !Ref AWS::Partition
+                  - ':ssm:'
+                  - !Ref AWS::Region
+                  - ':'
+                  - !Ref AWS::AccountId
+                  - ':parameter'
+                  - !Ref WaPhoneNumberIdParam
+              - !Join
+                - ''
+                - - 'arn:'
+                  - !Ref AWS::Partition
+                  - ':ssm:'
+                  - !Ref AWS::Region
+                  - ':'
+                  - !Ref AWS::AccountId
+                  - ':parameter'
+                  - !Ref WaAccessTokenParam
 
 resources:
   Resources:
+    # WhatsApp settings. CloudFormation can only create String (not SecureString) parameters.
+    # Created with a placeholder; set real values once with `aws ssm put-parameter --overwrite`
+    # (see README). Later deploys leave them alone unless these definitions change.
+    WaPhoneNumberIdParam:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /vartalap/${sls:stage}/WA_PHONE_NUMBER_ID
+        Type: String
+        Value: CHANGE_ME
+        Description: WhatsApp Cloud API phone number ID
+
+    WaAccessTokenParam:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /vartalap/${sls:stage}/WA_ACCESS_TOKEN
+        Type: String
+        Value: CHANGE_ME
+        Description: WhatsApp Cloud API access token
+
+    WaAppSecretParam:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /vartalap/${sls:stage}/WA_APP_SECRET
+        Type: String
+        Value: CHANGE_ME
+        Description: Meta app secret, used to check webhook signatures
+
+    WaVerifyTokenParam:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /vartalap/${sls:stage}/WA_VERIFY_TOKEN
+        Type: String
+        Value: CHANGE_ME
+        Description: Webhook verify token, also entered in the Meta webhook setup
+
     MessagesTable:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -208,6 +303,14 @@ resources:
       Value: !Ref OutboundQueue
     OutboundDlqUrl:
       Value: !Ref OutboundDlq
+    WaParameterNames:
+      Description: SSM parameters to set with real values after the first deploy.
+      Value: !Join
+        - ', '
+        - - !Ref WaPhoneNumberIdParam
+          - !Ref WaAccessTokenParam
+          - !Ref WaAppSecretParam
+          - !Ref WaVerifyTokenParam
     WebhookUrl:
       Description: Register this as the callback URL in the Meta app.
       Value: !Join
