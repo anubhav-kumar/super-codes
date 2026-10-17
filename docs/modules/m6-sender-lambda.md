@@ -26,6 +26,20 @@ Read the WhatsApp values with `getParams(['WA_PHONE_NUMBER_ID', 'WA_ACCESS_TOKEN
    - **Not retryable** (4xx, e.g. an invalid number or the 24-hour window expired, code 131047): `updateStatus(failed)` and return successfully. Store the error code on the message as `errorCode`.
    - On the **final** retryable attempt (`ApproximateReceiveCount >= 3`): mark the message `failed` before throwing, so the UI shows it while the payload goes to the DLQ.
 
+## Implementation notes
+- `to` is sent as digits only (the leading `+` of the E.164 `chatId` is stripped), matching the `wa_id` format Meta uses.
+- The request times out after 10 s (`AbortSignal.timeout`), well inside the 30 s Lambda timeout.
+- `client.js` throws `WhatsAppSendError { retryable, status, code }`. `code` is Meta's `error.code` as a string, or `TIMEOUT` / `NETWORK` / `HTTP_<status>` when Meta gave none.
+- Retryable: network errors, timeouts, 5xx, 429, and these Meta codes whatever the HTTP status (Meta often returns them as 400): `2`, `4`, `80007`, `130429`, `131000`, `131016`, `131056`, `133004` ([error codes](https://developers.facebook.com/docs/whatsapp/cloud-api/support/error-codes)). Every other 4xx is final.
+- A 2xx response with no `messages[0].id` is treated as final (`BAD_RESPONSE`), because a retry could send the message twice.
+- A malformed queue body (bad JSON or failed `OutboundQueueMessageSchema` check) is logged and dropped.
+- Unexpected errors during the send (for example, SSM settings still `CHANGE_ME`) are retried like retryable errors. On the final attempt they are marked `failed` with `errorCode: 'INTERNAL'`.
+- If `setWaMessageId` throws after WhatsApp accepted the message, the error is logged (`sender.record_failed`, including the `waMessageId`) and the record resolves **without** a retry. Retrying would send the message twice. The message stays `pending` until someone reconciles it.
+- Logs are one JSON line per event: `messageId`, the last 4 digits of the phone, the receive count, the HTTP status and the error code. They never include the message text, the full number or the token.
+
+## Open issues
+- **Duplicate send after a crash.** If the Lambda dies or times out between a successful Cloud API call and `setWaMessageId`, the message is still `pending` on redelivery and is sent again. Fixing this needs a "sending" claim before the call, which in turn needs a status-model change in M2. It is not done in v1.
+
 ## Done when
 - [ ] A queued message reaches the test phone, and its status becomes `sent` with a `waMessageId`.
 - [ ] Simulated 5xx responses produce 3 attempts, then `failed`, and the payload ends up in the DLQ.
