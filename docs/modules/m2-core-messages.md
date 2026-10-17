@@ -23,8 +23,8 @@ readMessages({ chatId, before, limit = 30 })
 
 getMessage(messageId)
 getMessageByWaId(waMessageId)          // byWaMessageId index
-setWaMessageId(messageId, waMessageId) // also moves status to 'sent'
-updateStatus({ messageId, status })    // forward-only; returns { applied: boolean }
+setWaMessageId(messageId, waMessageId) // also moves status to 'sent' if forward; → { applied }
+updateStatus({ messageId, status, errorCode? }) // forward-only; returns { applied: boolean }
 ```
 
 ## Append algorithm
@@ -52,6 +52,15 @@ The chat update in step 2 writes to the `Chats` table. That is intentional: the 
 - Forward-only, using a conditional update on a stored `statusRank`: `pending` 0, `sent` 1, `delivered` 2, `read` 3.
 - `failed` is allowed only when the current status is `pending` or `sent`.
 - A late or out-of-order callback is a no-op (`applied: false`), not an error.
+
+## Implementation notes
+- `waMessageId` is the `byWaMessageId` GSI key, so it is **omitted** from the item until known (a stored `NULL` would be rejected by the index). Reads map a missing value to `null`, so the contract still shows `waMessageId: null`.
+- `statusRank` is stored only for outbound messages with a ranked status. Setting `failed` removes `statusRank`, which makes `failed` terminal: every later rank comparison fails.
+- A chat that exists without a head (created before its first message) is conditioned on `attribute_exists(chatId) AND (attribute_not_exists(headMessageId) OR attribute_type(headMessageId, 'NULL'))`.
+- `assignedTo = if_not_exists(assignedTo, 'UNASSIGNED')` is set on every append; it is a no-op for existing chats.
+- The message is validated with `MessageSchema` before any write (`VALIDATION` on failure). A `TransactionConflict` cancellation is retried like a moved head. "Up to 5 times" means 5 retries after the first attempt.
+- `setWaMessageId` on a message already at or past `sent` (or `failed`) still records `waMessageId` but leaves the status; it returns `{ applied: false }`. An unknown `messageId` throws `NOT_FOUND`.
+- `readMessages` throws `NOT_FOUND` if `before` is not a message of `chatId`, and stops walking on a missing, foreign or repeated item instead of looping. Base-table reads are strongly consistent so a just-appended head is always visible.
 
 ## Done when
 - [ ] Two appends to the same chat fired at the same time both land, and walking from the head returns both, in order, with no message dropped.
