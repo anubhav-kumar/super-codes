@@ -34,7 +34,8 @@ Define every AWS resource in `services/whatsapp/serverless.yml`, so that one `se
   - Functions get only the parameter **names** they need (`WA_*_PARAM` env vars), plus `ssm:GetParameters` on just those parameters. They read the values at runtime through `services/whatsapp/src/lib/params.js` (cached 5 min), so nothing is resolved at deploy time.
   - webhook reads `WA_PHONE_NUMBER_ID`, `WA_APP_SECRET` and `WA_VERIFY_TOKEN`; sender reads `WA_PHONE_NUMBER_ID` and `WA_ACCESS_TOKEN`.
 - **Other env:** `STAGE`, `MESSAGES_TABLE`, `CHATS_TABLE`, `USERS_TABLE`, `OUTBOUND_QUEUE_URL` and `WA_GRAPH_VERSION` (plain value, `v26.0`). `AWS_REGION` is not set in `serverless.yml`: it is a reserved variable that the Lambda runtime provides.
-- **Outputs:** table names, queue URL, DLQ URL, webhook URL, so they can be copied into `apps/web/.env.local`.
+- **Outputs:** table names, queue URL, DLQ URL, webhook URL.
+- **Config parameters (2026-10-17):** the stack also writes `/vartalap/<stage>/config/{MESSAGES_TABLE,CHATS_TABLE,USERS_TABLE,OUTBOUND_QUEUE_URL}` (String, real values via `!Ref`). The local web app and seed script load them at startup, so `apps/web/.env.local` needs only `AWS_REGION` and `STAGE`.
 - A separate IAM note in the README on what the local Next.js app needs: read/write on all three tables + indexes, and `sqs:SendMessage`. It runs with `assume` credentials.
 
 ## Exposes

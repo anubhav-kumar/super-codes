@@ -60,8 +60,7 @@ Note these values; later steps use them:
 
 | Output | Used for |
 |---|---|
-| `MessagesTableName`, `ChatsTableName`, `UsersTableName` | `apps/web/.env.local` |
-| `OutboundQueueUrl` | `apps/web/.env.local` |
+| `MessagesTableName`, `ChatsTableName`, `UsersTableName`, `OutboundQueueUrl` | For reference only: the stack also publishes them to SSM `/vartalap/<stage>/config/*`, and the web app loads them from there |
 | `OutboundDlqUrl` | Inspecting failed sends |
 | `WaParameterNames` | The SSM parameters to fill in (step 3) |
 | `WebhookUrl` | Registering the webhook in the Meta app (step 6) |
@@ -108,23 +107,21 @@ put JWT_SECRET         "$(openssl rand -hex 32)"
 ---
 
 ## 4. Run the web app
-Create `apps/web/.env.local`, using `.env.example` as the template. It holds **no secrets**, only names and settings. The session key comes from SSM (`JWT_SECRET`, step 3), and AWS credentials come from your shell:
+Create `apps/web/.env.local` from `.env.example`. It needs just two lines:
 ```dotenv
 AWS_REGION=ap-south-1           # must be the stack's region
-STAGE=dev                       # also selects the /vartalap/<stage>/JWT_SECRET parameter
-MESSAGES_TABLE=vartalap-dev-messages
-CHATS_TABLE=vartalap-dev-chats
-USERS_TABLE=vartalap-dev-users
-OUTBOUND_QUEUE_URL=<OutboundQueueUrl>
-SEED_ADMIN_EMAIL=<admin email>
-SEED_ADMIN_NAME=Admin
+STAGE=dev                       # selects /vartalap/<stage>/... in SSM
 ```
-The file is gitignored, but keep it free of secrets anyway.
+Everything else comes from SSM:
+- The table names and queue URL come from `/vartalap/<stage>/config/*`. The stack publishes them on every deploy, and the web app and seed script load them at startup.
+- The session key comes from `/vartalap/<stage>/JWT_SECRET` (step 3).
+
+AWS credentials come from your shell. A variable set in `.env.local` still overrides the SSM value, if you ever need that locally.
 
 With AWS credentials active in the same shell:
 ```bash
 cd <repo>/whatsapp
-npm run seed      # creates the first admin and prints a one-time password; running it again prints "already exists"
+npm run seed -- admin@yourcompany.com "Admin Name"   # prints a one-time password; re-running prints "already exists"
 npm run dev       # http://localhost:3000
 ```
 `npm run seed` generates the first admin's password and **prints it once**; it is never stored in a file. Open `http://localhost:3000`, sign in with it, and **change it immediately** under **Password**. Then add agents under **Users**.
@@ -214,7 +211,8 @@ This deletes **everything in the stage**: tables and their data, queues, Lambdas
 | Inbound messages ignored | `WA_PHONE_NUMBER_ID` doesn't match the number Meta is sending for |
 | Replies fail with code `190` | The access token has expired or is invalid. Use a System User token |
 | Replies fail with code `131047` | More than 24 h since the client's last message |
-| `npm run seed` or the web app fails with "Missing required env vars" | `apps/web/.env.local` is incomplete (step 4) |
+| Web app or seed fails with "Missing config … under SSM /vartalap/<stage>/config/" | The stack for that stage/region hasn't been deployed with the config parameters yet; run `serverless deploy` (step 2). Check `STAGE`/`AWS_REGION` in `.env.local` |
+| `npm run seed` or the web app fails with "Missing required env vars" | `AWS_REGION` or `STAGE` is missing from `apps/web/.env.local` (step 4) |
 | Web app fails with "SSM parameter /vartalap/<stage>/JWT_SECRET must be a random string…" | Set `JWT_SECRET` in SSM (step 3), and check `STAGE` and `AWS_REGION` in `.env.local` |
 | Lost the seeded admin's one-time password | Delete that user's item and its `EMAIL#<email>` guard item from the users table, then re-run `npm run seed` (or have another admin create a new admin) |
 | Web app API calls return 500 / AccessDenied | AWS credentials expired (re-run `assume`), or the role lacks the web-app permissions (step 1.2) |

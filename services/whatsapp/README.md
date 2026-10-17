@@ -50,11 +50,11 @@ npx serverless remove --stage dev              # deletes the stack, including th
 
 Stage defaults to `dev` and region to `ap-south-1`. The Graph API version (`WA_GRAPH_VERSION`) and sender timeout are set under `params` in `serverless.yml`.
 
-Deploy outputs (`npx serverless info --stage dev --verbose`): `MessagesTableName`, `ChatsTableName`, `UsersTableName`, `OutboundQueueUrl`, `OutboundDlqUrl`, `WaParameterNames`, `WebhookUrl` (register in the Meta app) and the Framework's `HttpApiUrl`. Copy the table names and queue URL into `apps/web/.env.local`.
+Deploy outputs (`npx serverless info --stage dev --verbose`): `MessagesTableName`, `ChatsTableName`, `UsersTableName`, `OutboundQueueUrl`, `OutboundDlqUrl`, `WaParameterNames`, `WebhookUrl` (register in the Meta app) and the Framework's `HttpApiUrl`. The stack also publishes the table names and queue URL to SSM `/vartalap/<stage>/config/*` (`MESSAGES_TABLE`, `CHATS_TABLE`, `USERS_TABLE`, `OUTBOUND_QUEUE_URL`). The local web app and seed script load them from there, so `apps/web/.env.local` needs only `AWS_REGION` and `STAGE`.
 
 ## IAM for the local Next.js app
 
-The web app runs on localhost with `assume` credentials. That role needs read/write on the three tables and their indexes, `sqs:SendMessage` on the outbound queue, and `ssm:GetParameter` on the `JWT_SECRET` parameter. Sample policy for `dev` in `ap-south-1` (replace `<account-id>`, and the region if you deploy elsewhere):
+The web app runs on localhost with `assume` credentials. That role needs read/write on the three tables and their indexes, `sqs:SendMessage` on the outbound queue, `ssm:GetParametersByPath` on `/vartalap/<stage>/config`, and `ssm:GetParameter` on the `JWT_SECRET` parameter. Sample policy for `dev` in `ap-south-1` (replace `<account-id>`, and the region if you deploy elsewhere):
 
 ```json
 {
@@ -80,6 +80,12 @@ The web app runs on localhost with `assume` credentials. That role needs read/wr
         "arn:aws:dynamodb:ap-south-1:<account-id>:table/vartalap-dev-users",
         "arn:aws:dynamodb:ap-south-1:<account-id>:table/vartalap-dev-users/index/*"
       ]
+    },
+    {
+      "Sid": "VartalapConfig",
+      "Effect": "Allow",
+      "Action": "ssm:GetParametersByPath",
+      "Resource": "arn:aws:ssm:ap-south-1:<account-id>:parameter/vartalap/dev/config"
     },
     {
       "Sid": "VartalapSessionKey",

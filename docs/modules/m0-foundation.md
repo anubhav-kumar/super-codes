@@ -9,7 +9,7 @@ Set up the repository skeleton, plus the shared contracts (data schemas, API sha
 - Root `package.json` with npm workspaces: `apps/*`, `services/*`, `packages/*`.
 - `.nvmrc` (22), `engines` field, ESLint + Prettier config, `.gitignore`, `.env.example`.
 - `packages/core` skeleton:
-  - `src/config.js`: reads `AWS_REGION`, `STAGE`, `MESSAGES_TABLE`, `CHATS_TABLE`, `USERS_TABLE` and `OUTBOUND_QUEUE_URL`, and fails fast if any are missing.
+  - `src/config.js`: reads `AWS_REGION`, `STAGE`, `MESSAGES_TABLE`, `CHATS_TABLE`, `USERS_TABLE` and `OUTBOUND_QUEUE_URL`, and fails fast if any are missing. Local processes fill the table and queue values from SSM first with `loadConfigFromSsm()` (`src/config-loader.js`, added 2026-10-17).
   - `src/db/client.js`: `DynamoDBDocumentClient` singleton (`removeUndefinedValues: true`).
   - `src/errors.js`: `AppError(code, message)` and the error codes below.
   - `src/schemas/`: Zod schemas for `Message`, `Chat` and `User`, plus API request bodies.

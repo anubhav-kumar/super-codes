@@ -166,7 +166,7 @@ If the transaction is cancelled because the head changed, re-read the head and r
 ### 5.5 Auth
 - `POST /api/auth/login` checks the bcrypt hash and sets an `httpOnly`, `SameSite=Lax` cookie holding a JWT (`sub`, `role`) that expires after 8 h.
 - `middleware.js` protects pages; route handlers re-check the role.
-- `scripts/seed-admin.js` creates the first admin from `SEED_ADMIN_EMAIL`. It generates the password and prints it once; change it after the first sign-in.
+- `scripts/seed-admin.js` creates the first admin: `npm run seed -- <email> [name]`. It generates the password and prints it once; change it after the first sign-in.
 - The JWT signing key is the SSM parameter `/vartalap/<stage>/JWT_SECRET` (created by the stack), read at runtime by `apps/web/lib/session.js` and cached 5 min.
 
 ## 6. Environment and local development
@@ -178,11 +178,11 @@ Environment variables (listed in `.env.example`; real values never committed):
 | Var | Used by |
 |---|---|
 | `AWS_REGION`, `STAGE` | all |
-| `MESSAGES_TABLE`, `CHATS_TABLE`, `USERS_TABLE`, `OUTBOUND_QUEUE_URL` | web, Lambdas |
+| `MESSAGES_TABLE`, `CHATS_TABLE`, `USERS_TABLE`, `OUTBOUND_QUEUE_URL` | Lambdas get them from `serverless.yml`. The web app and seed script load them at startup from SSM `/vartalap/<STAGE>/config/*` (`loadConfigFromSsm` in core, called from `apps/web/instrumentation.js`) |
 | `JWT_SECRET_PARAM` (optional; defaults to `/vartalap/<STAGE>/JWT_SECRET` in SSM) | web |
 | `WA_PHONE_NUMBER_ID`, `WA_ACCESS_TOKEN`, `WA_APP_SECRET`, `WA_VERIFY_TOKEN` | Lambdas |
 | `WA_GRAPH_VERSION` | Lambdas (plain value in `serverless.yml`, e.g. `v26.0`) |
-| `SEED_ADMIN_EMAIL`, `SEED_ADMIN_NAME` | seed script |
+| (none) | seed script: email and name are command-line arguments |
 
 In AWS, the WhatsApp settings are SSM `String` parameters that the stack itself creates, with a placeholder value. The real values are set once after the first deploy. Lambdas get only the parameter names and read the values at runtime (`services/whatsapp/src/lib/params.js`); see `services/whatsapp/README.md`.
 

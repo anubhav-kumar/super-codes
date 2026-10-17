@@ -1,4 +1,5 @@
 export { getConfig } from './config.js';
+export { SSM_CONFIG_KEYS, configPath, loadConfigFromSsm } from './config-loader.js';
 export { getDocClient } from './db/client.js';
 export { AppError, ERROR_CODES, ERROR_HTTP_STATUS } from './errors.js';
 

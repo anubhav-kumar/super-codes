@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "seed": "node --env-file-if-exists=../.env --env-file-if-exists=../apps/web/.env.local seed-admin.js"
+    "seed": "node --env-file-if-exists=../apps/web/.env.local seed-admin.js"
   },
   "dependencies": {
     "@vartalap/core": "*"

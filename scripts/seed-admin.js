@@ -1,21 +1,25 @@
-// Creates the first admin from SEED_ADMIN_EMAIL (optional SEED_ADMIN_NAME). The password is
-// generated here and printed once, so it never has to sit in an env file; sign in and change
-// it under Password. Idempotent: if a user with that email exists, it changes nothing.
+// Creates the first admin: npm run seed -- <email> [name]
+// The password is generated here and printed once, so it never has to sit in a file; sign in
+// and change it under Password. Table names come from SSM (needs AWS_REGION and STAGE).
+// Idempotent: if a user with that email exists, it changes nothing.
 import { randomBytes } from 'node:crypto';
-import { createUser, getUserByEmail } from '@vartalap/core';
+import { createUser, getUserByEmail, loadConfigFromSsm } from '@vartalap/core';
 
 function generatePassword() {
   return randomBytes(18).toString('base64url'); // 24 characters, well inside bcrypt's 72 bytes
 }
 
 async function main() {
-  const email = process.env.SEED_ADMIN_EMAIL?.trim();
-  const name = process.env.SEED_ADMIN_NAME?.trim() || 'Admin';
+  const [rawEmail, ...nameParts] = process.argv.slice(2);
+  const email = rawEmail?.trim();
+  const name = nameParts.join(' ').trim() || 'Admin';
 
   if (!email) {
-    console.error('SEED_ADMIN_EMAIL must be set');
+    console.error('Usage: npm run seed -- <email> [name]');
     process.exit(1);
   }
+
+  await loadConfigFromSsm();
 
   if (await getUserByEmail(email)) {
     console.log(`Admin ${email.toLowerCase()} already exists; nothing to do`);

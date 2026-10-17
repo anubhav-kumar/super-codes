@@ -217,6 +217,36 @@ resources:
         Value: CHANGE_ME
         Description: Web app session signing key (HS256), at least 32 characters
 
+    # Non-secret settings published for local processes (web app, seed script), which then
+    # need only AWS_REGION and STAGE. Values are filled in by CloudFormation on every deploy.
+    ConfigMessagesTableParam:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /vartalap/${sls:stage}/config/MESSAGES_TABLE
+        Type: String
+        Value: !Ref MessagesTable
+
+    ConfigChatsTableParam:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /vartalap/${sls:stage}/config/CHATS_TABLE
+        Type: String
+        Value: !Ref ChatsTable
+
+    ConfigUsersTableParam:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /vartalap/${sls:stage}/config/USERS_TABLE
+        Type: String
+        Value: !Ref UsersTable
+
+    ConfigOutboundQueueUrlParam:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /vartalap/${sls:stage}/config/OUTBOUND_QUEUE_URL
+        Type: String
+        Value: !Ref OutboundQueue
+
     MessagesTable:
       Type: AWS::DynamoDB::Table
       Properties:

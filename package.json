@@ -14,7 +14,7 @@
   "scripts": {
     "dev": "npm run dev -w @vartalap/web",
     "deploy": "npm run deploy -w @vartalap/whatsapp",
-    "seed": "npm run seed -w @vartalap/scripts",
+    "seed": "npm run seed -w @vartalap/scripts --",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
