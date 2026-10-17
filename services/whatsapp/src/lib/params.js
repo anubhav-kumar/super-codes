@@ -27,7 +27,7 @@ export async function getParams(keys) {
   const stale = names.filter((name) => !(cache.get(name)?.expiresAt > now));
   if (stale.length) {
     const { Parameters = [], InvalidParameters = [] } = await getClient().send(
-      new GetParametersCommand({ Names: stale }),
+      new GetParametersCommand({ Names: stale, WithDecryption: true }),
     );
     if (InvalidParameters.length) {
       throw new Error(`SSM parameters not found: ${InvalidParameters.join(', ')}`);
