@@ -29,9 +29,18 @@ async function getSecret() {
 
   const name = secretParamName();
   ssm ??= new SSMClient({});
-  const { Parameter } = await ssm.send(
-    new GetParameterCommand({ Name: name, WithDecryption: true }),
-  );
+  let Parameter;
+  try {
+    ({ Parameter } = await ssm.send(new GetParameterCommand({ Name: name, WithDecryption: true })));
+  } catch (err) {
+    if (err?.name === 'ParameterNotFound') {
+      throw new Error(
+        `SSM parameter ${name} not found in ${process.env.AWS_REGION ?? 'the default region'}; deploy the stack and set it (docs/deployment.md step 3)`,
+        { cause: err },
+      );
+    }
+    throw err;
+  }
   const value = Parameter?.Value;
   if (!value || value === PLACEHOLDER || value.length < JWT_SECRET_MIN_LENGTH) {
     throw new Error(
