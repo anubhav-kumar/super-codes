@@ -78,11 +78,19 @@ export const api = {
   autoAssign: (chatId) => request(`${chatPath(chatId)}/auto-assign`, { method: 'POST' }),
 };
 
-// Only same-site relative paths, so ?next= cannot be used as an open redirect.
+// Only same-origin paths, so ?next= cannot be used as an open redirect. Resolved with the
+// browser's own URL parser, which also strips the tabs/newlines that could turn "/\t/x" into
+// "//x". Browser only (uses window).
 export function safeNext(next) {
-  if (typeof next !== 'string' || !next.startsWith('/')) return '/chats';
-  if (next.startsWith('//') || next.startsWith('/\\')) return '/chats';
-  return next;
+  const fallback = '/chats';
+  if (typeof next !== 'string' || !next.startsWith('/')) return fallback;
+  try {
+    const url = new URL(next, window.location.origin);
+    if (url.origin !== window.location.origin) return fallback;
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return fallback;
+  }
 }
 
 // Validation errors carry per-field issues; show them in one line.

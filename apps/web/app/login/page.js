@@ -5,7 +5,7 @@ import { Suspense, useState } from 'react';
 import { api, errorText, safeNext } from '../../lib/client-api.js';
 
 function LoginForm() {
-  const next = safeNext(useSearchParams().get('next'));
+  const nextParam = useSearchParams().get('next');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
@@ -17,7 +17,7 @@ function LoginForm() {
     setError(null);
     try {
       await api.login(email, password);
-      window.location.assign(next);
+      window.location.assign(safeNext(nextParam));
     } catch (err) {
       setError(errorText(err));
       setBusy(false);
