@@ -1,0 +1,217 @@
+# Vartalap AWS side: DynamoDB tables, outbound SQS FIFO + DLQ, webhook and sender Lambdas.
+# Deploy: npx serverless deploy --stage <stage>   (see README.md)
+frameworkVersion: '4'
+
+service: vartalap
+
+params:
+  default:
+    # Graph API version used by the WhatsApp Cloud API client (M6).
+    waGraphVersion: v26.0
+    # Sender timeout drives the queue visibility timeout (>= 6x, per AWS guidance).
+    senderTimeout: 30
+    outboundVisibilityTimeout: 180
+
+build:
+  esbuild:
+    bundle: true
+    minify: false
+    format: esm
+    outExtension:
+      '.js': '.mjs'
+    sourcemap:
+      type: linked
+      setNodeOptions: true
+    # AWS SDK v3 is provided by the nodejs22.x runtime and excluded by default;
+    # @vartalap/core and everything else is bundled into each function.
+
+provider:
+  name: aws
+  runtime: nodejs22.x
+  architecture: arm64
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'ap-southeast-1'}
+  memorySize: 256
+  logRetentionInDays: 14
+  environment:
+    STAGE: ${sls:stage}
+    # AWS_REGION is set by the Lambda runtime itself (reserved variable).
+    MESSAGES_TABLE: !Ref MessagesTable
+    CHATS_TABLE: !Ref ChatsTable
+    USERS_TABLE: !Ref UsersTable
+    OUTBOUND_QUEUE_URL: !Ref OutboundQueue
+    WA_GRAPH_VERSION: ${param:waGraphVersion}
+    WA_PHONE_NUMBER_ID: ${ssm:/vartalap/${sls:stage}/WA_PHONE_NUMBER_ID}
+    WA_ACCESS_TOKEN: ${ssm:/vartalap/${sls:stage}/WA_ACCESS_TOKEN}
+    WA_APP_SECRET: ${ssm:/vartalap/${sls:stage}/WA_APP_SECRET}
+    WA_VERIFY_TOKEN: ${ssm:/vartalap/${sls:stage}/WA_VERIFY_TOKEN}
+  iam:
+    role:
+      # Each function gets its own role with only the statements below.
+      mode: perFunction
+
+functions:
+  webhook:
+    handler: src/handlers/webhook.handler
+    timeout: 10
+    events:
+      - httpApi:
+          method: GET
+          path: /webhook
+      - httpApi:
+          method: POST
+          path: /webhook
+    iam:
+      inheritStatements: false
+      role:
+        statements:
+          - Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:ConditionCheckItem
+              - dynamodb:Query
+            Resource:
+              - !GetAtt MessagesTable.Arn
+              # Fn::Join, not !Sub: Serverless would try to resolve ${...} itself.
+              - !Join ['', [!GetAtt MessagesTable.Arn, '/index/byWaMessageId']]
+          - Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:ConditionCheckItem
+            Resource:
+              - !GetAtt ChatsTable.Arn
+
+  sender:
+    handler: src/handlers/sender.handler
+    timeout: ${param:senderTimeout}
+    events:
+      - sqs:
+          arn: !GetAtt OutboundQueue.Arn
+          batchSize: 1
+    iam:
+      inheritStatements: false
+      role:
+        # SQS receive/delete permissions for the event source are added automatically.
+        statements:
+          - Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:UpdateItem
+            Resource:
+              - !GetAtt MessagesTable.Arn
+
+resources:
+  Resources:
+    MessagesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: vartalap-${sls:stage}-messages
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: messageId
+            AttributeType: S
+          - AttributeName: waMessageId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: messageId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: byWaMessageId
+            KeySchema:
+              - AttributeName: waMessageId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+
+    ChatsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: vartalap-${sls:stage}-chats
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: chatId
+            AttributeType: S
+          - AttributeName: assignedTo
+            AttributeType: S
+          - AttributeName: lastMessageAt
+            AttributeType: S
+        KeySchema:
+          - AttributeName: chatId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: byAssignee
+            KeySchema:
+              - AttributeName: assignedTo
+                KeyType: HASH
+              - AttributeName: lastMessageAt
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+
+    UsersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: vartalap-${sls:stage}-users
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: email
+            AttributeType: S
+        KeySchema:
+          - AttributeName: userId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: byEmail
+            KeySchema:
+              - AttributeName: email
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+
+    OutboundDlq:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: vartalap-${sls:stage}-outbound-dlq.fifo
+        FifoQueue: true
+        ContentBasedDeduplication: false
+        MessageRetentionPeriod: 1209600
+
+    OutboundQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: vartalap-${sls:stage}-outbound.fifo
+        FifoQueue: true
+        # The producer always sets MessageDeduplicationId = messageId.
+        ContentBasedDeduplication: false
+        VisibilityTimeout: ${param:outboundVisibilityTimeout}
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt OutboundDlq.Arn
+          maxReceiveCount: 3
+
+  Outputs:
+    MessagesTableName:
+      Value: !Ref MessagesTable
+    ChatsTableName:
+      Value: !Ref ChatsTable
+    UsersTableName:
+      Value: !Ref UsersTable
+    OutboundQueueUrl:
+      Value: !Ref OutboundQueue
+    OutboundDlqUrl:
+      Value: !Ref OutboundDlq
+    WebhookUrl:
+      Description: Register this as the callback URL in the Meta app.
+      Value: !Join
+        - ''
+        - - 'https://'
+          - !Ref HttpApi
+          - '.execute-api.'
+          - !Ref AWS::Region
+          - '.'
+          - !Ref AWS::URLSuffix
+          - '/webhook'

@@ -20,14 +20,16 @@ Define every AWS resource in `services/whatsapp/serverless.yml`, so that one `se
 - **SQS:**
   - `vartalap-<stage>-outbound.fifo`: content-based deduplication off (the sender passes `MessageDeduplicationId`). Visibility timeout of at least 6× the sender Lambda's timeout.
   - `vartalap-<stage>-outbound-dlq.fifo`; redrive `maxReceiveCount: 3`.
+  - As built: sender timeout 30 s, queue visibility timeout 180 s (both under `params` in `serverless.yml`).
 - **Functions** (code written in M5 and M6; M1 wires them up):
   - `webhook`: HTTP API `GET /webhook` and `POST /webhook`.
   - `sender`: SQS event source on the outbound queue, `batchSize: 1`.
-- **IAM:** least privilege, granted per function where possible:
+- **IAM:** least privilege, one role per function (v4 built-in `provider.iam.role.mode: perFunction`, no plugin):
   - webhook: read/write on messages + chats, query `byWaMessageId`.
   - sender: read/update on messages; SQS consume.
-- **Secrets:** `WA_PHONE_NUMBER_ID`, `WA_ACCESS_TOKEN`, `WA_APP_SECRET` and `WA_VERIFY_TOKEN`, read from SSM `/vartalap/<stage>/...`.
-- **Outputs:** table names, queue URL, webhook URL, so they can be copied into `apps/web/.env.local`.
+- **Secrets:** `WA_PHONE_NUMBER_ID`, `WA_ACCESS_TOKEN`, `WA_APP_SECRET` and `WA_VERIFY_TOKEN`, read from SSM `/vartalap/<stage>/<VAR_NAME>` (e.g. `/vartalap/dev/WA_ACCESS_TOKEN`).
+- **Other env:** `STAGE`, `MESSAGES_TABLE`, `CHATS_TABLE`, `USERS_TABLE`, `OUTBOUND_QUEUE_URL` and `WA_GRAPH_VERSION` (plain value, `v26.0`). `AWS_REGION` is not set in `serverless.yml`: it is a reserved variable that the Lambda runtime provides.
+- **Outputs:** table names, queue URL, DLQ URL, webhook URL, so they can be copied into `apps/web/.env.local`.
 - A separate IAM note in the README on what the local Next.js app needs: read/write on all three tables + indexes, and `sqs:SendMessage`. It runs with `assume` credentials.
 
 ## Exposes
