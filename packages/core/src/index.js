@@ -7,3 +7,6 @@ export * from './schemas/message.js';
 export * from './schemas/chat.js';
 export * from './schemas/user.js';
 export * from './schemas/api.js';
+
+export * from './chats/index.js';
+export * from './access.js';
