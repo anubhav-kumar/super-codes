@@ -216,7 +216,7 @@ export async function listActiveAgents() {
 // auto-assigns that read the same previousAt conflict instead of picking the same agent.
 export function buildMarkAutoAssignedItem(userId, at, previousAt) {
   const isFirst = previousAt === null || previousAt === undefined;
-  const ExpressionAttributeValues = { ':at': at };
+  const ExpressionAttributeValues = { ':at': at, ':active': true };
   if (!isFirst) ExpressionAttributeValues[':previousAt'] = previousAt;
 
   return {
@@ -224,9 +224,10 @@ export function buildMarkAutoAssignedItem(userId, at, previousAt) {
       TableName: getConfig().usersTable,
       Key: { userId },
       UpdateExpression: 'SET lastAutoAssignedAt = :at',
+      // Also re-checks active, so an agent deactivated mid-selection is not picked.
       ConditionExpression: isFirst
-        ? 'attribute_exists(userId) AND attribute_not_exists(lastAutoAssignedAt)'
-        : 'lastAutoAssignedAt = :previousAt',
+        ? 'attribute_exists(userId) AND active = :active AND attribute_not_exists(lastAutoAssignedAt)'
+        : 'active = :active AND lastAutoAssignedAt = :previousAt',
       ExpressionAttributeValues,
     },
   };
