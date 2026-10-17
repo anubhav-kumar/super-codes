@@ -22,8 +22,10 @@ build:
     sourcemap:
       type: linked
       setNodeOptions: true
-    # AWS SDK v3 is provided by the nodejs22.x runtime and excluded by default;
-    # @vartalap/core and everything else is bundled into each function.
+    # Adds a createRequire banner so CommonJS deps (the AWS SDK) work inside the ESM bundle.
+    configFile: ./esbuild.config.cjs
+    # @vartalap/core and its dependencies, including the AWS SDK it imports from the workspace,
+    # are bundled into each function.
 
 provider:
   name: aws
