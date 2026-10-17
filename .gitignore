@@ -8,3 +8,6 @@ npm-debug.log*
 src/data/*
 .eslintrc.json
 package-lock.json
+.next/
+.serverless/
+.esbuild/

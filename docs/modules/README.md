@@ -7,7 +7,7 @@ Requirements: [`docs/PRD.md`](../PRD.md) · Architecture: [`docs/arch/boilerplat
 ## Index
 | ID | Module | Depends on | Status |
 |---|---|---|---|
-| [M0](m0-foundation.md) | Foundation and contracts | — | Not started |
+| [M0](m0-foundation.md) | Foundation and contracts | — | Done |
 | [M1](m1-infra.md) | AWS infrastructure | M0 | Not started |
 | [M2](m2-core-messages.md) | Core: messages (linked list) | M0 | Not started |
 | [M3](m3-core-users-auth.md) | Core: users and auth | M0 | Not started |

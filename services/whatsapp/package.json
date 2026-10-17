@@ -1,0 +1,12 @@
+{
+  "name": "@vartalap/whatsapp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "echo \"serverless.yml arrives in M1\" && exit 1"
+  },
+  "dependencies": {
+    "@vartalap/core": "*"
+  }
+}

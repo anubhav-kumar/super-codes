@@ -1,0 +1,12 @@
+{
+  "name": "@vartalap/scripts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "seed": "echo \"seed-admin.js arrives in M3\" && exit 1"
+  },
+  "dependencies": {
+    "@vartalap/core": "*"
+  }
+}

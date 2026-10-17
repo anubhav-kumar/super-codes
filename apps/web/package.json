@@ -1,0 +1,12 @@
+{
+  "name": "@vartalap/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "echo \"Next.js app arrives in M7/M8\" && exit 1"
+  },
+  "dependencies": {
+    "@vartalap/core": "*"
+  }
+}
