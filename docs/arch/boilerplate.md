@@ -180,6 +180,7 @@ Environment variables (listed in `.env.example`; real values never committed):
 | `MESSAGES_TABLE`, `CHATS_TABLE`, `USERS_TABLE`, `OUTBOUND_QUEUE_URL` | web, Lambdas |
 | `JWT_SECRET` | web |
 | `WA_PHONE_NUMBER_ID`, `WA_ACCESS_TOKEN`, `WA_APP_SECRET`, `WA_VERIFY_TOKEN` | Lambdas |
+| `WA_GRAPH_VERSION` | Lambdas (plain value in `serverless.yml`, e.g. `v26.0`) |
 | `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | seed script |
 
 In AWS, the Lambda secrets come from SSM Parameter Store (`${ssm:/vartalap/<stage>/...}` in `serverless.yml`), not plain text.

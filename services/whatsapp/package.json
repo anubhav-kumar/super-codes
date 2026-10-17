@@ -4,9 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "deploy": "echo \"serverless.yml arrives in M1\" && exit 1"
+    "deploy": "serverless deploy",
+    "remove": "serverless remove",
+    "package": "serverless package"
   },
   "dependencies": {
     "@vartalap/core": "*"
+  },
+  "devDependencies": {
+    "serverless": "^4.44.0"
   }
 }
