@@ -201,7 +201,7 @@ Theme: keep the system-following theme. Optionally add a manual toggle (light / 
   - D4: light / dark / system toggle in the user menu, applied before first paint by a fixed boot script;
   - D5: "Awaiting reply" dot only, no unread counts;
   - D6: client-side search;
-  - D7: green accent and the "Vartalap" wordmark;
+  - D7: the "Vartalap" wordmark, with an **aqua / sky-blue accent** (changed from green on 2026-10-17, at the product owner's request). Light accent `#0b6fa3`, dark `#38bdf8`, with a shallow-to-deep water gradient behind the chat. Every token pair was re-verified at AA;
   - D8: details panel open at 1280px and wider, remembered per browser;
   - D9: `/`, `J`/`K`, `Esc` and `?`.
 - **Contrast:** every text pair in both themes, plus the control borders and the 8 avatar colours, was re-checked with the WCAG formula and passes AA. The light control border became `#7a8580` so it passes 3:1 on all light surfaces.

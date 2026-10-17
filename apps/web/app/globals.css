@@ -1,5 +1,5 @@
 /*
- * Vartalap UI. Plain CSS with design tokens (F1). Layers: reset → tokens → base → components
+ * Vartalap UI. Plain CSS with design tokens (F1). Aqua/sky-blue theme. Layers: reset → tokens → base → components
  * → utilities. Every text pair below meets WCAG 2.2 AA (4.5:1 text, 3:1 controls and icons)
  * in both themes; re-check with a contrast tool when changing a colour.
  */
@@ -44,25 +44,25 @@
 /* ───────────────────────── tokens ───────────────────────── */
 @layer tokens {
   :root {
-    --bg: #f3f5f4;
+    --bg: #f1f7fa;
     --surface: #ffffff;
-    --surface-2: #f1f4f2;
-    --surface-3: #e7ece9;
-    --border: #e1e6e3;
-    --border-strong: #7a8580;
-    --text: #121a16;
-    --text-2: #3d4943;
-    --muted: #5b6762;
-    --accent: #0e7a52;
-    --accent-strong: #0b6b47;
-    --accent-soft: #e3f4ec;
+    --surface-2: #eef5f9;
+    --surface-3: #e1edf3;
+    --border: #d9e6ed;
+    --border-strong: #738893;
+    --text: #0f1e26;
+    --text-2: #344b57;
+    --muted: #526a76;
+    --accent: #0b6fa3;
+    --accent-strong: #085c88;
+    --accent-soft: #e0f2fb;
     --on-accent: #ffffff;
-    --on-accent-soft: #0b6b47;
+    --on-accent-soft: #075a85;
     --bubble-in: #ffffff;
-    --bubble-out: #dcf4e7;
+    --bubble-out: #d9f0fb;
     --bubble-admin: #fbefd2;
-    --bubble-meta: #4f5b56;
-    --read: #1663c7;
+    --bubble-meta: #44606d;
+    --read: #1b46c7;
     --danger: #b42318;
     --danger-bg: #fdecea;
     --success: #1a7047;
@@ -71,9 +71,10 @@
     --warn-bg: #fff3d1;
     --info: #1d5fb8;
     --info-bg: #e8f0fc;
-    --overlay: rgb(10 16 13 / 0.38);
-    --chat-bg: #eef2ef;
-    --chat-dot: rgb(14 122 82 / 0.06);
+    --overlay: rgb(6 24 34 / 0.38);
+    --chat-bg: #eaf4f8;
+    --chat-bg-2: #d8ecf5;
+    --chat-dot: rgb(11 111 163 / 0.07);
 
     --avatar-1: #2f6b8a;
     --avatar-2: #6a4c9c;
@@ -131,25 +132,25 @@
   /* Dark theme: follows the system unless the user picked a theme (data-theme on <html>). */
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme='light']) {
-      --bg: #0b100e;
-      --surface: #121916;
-      --surface-2: #18211d;
-      --surface-3: #212c27;
-      --border: #26312c;
-      --border-strong: #728379;
-      --text: #e7ede9;
-      --text-2: #c2ccc7;
-      --muted: #98a69f;
-      --accent: #25b37d;
-      --accent-strong: #3cc993;
-      --accent-soft: #12382a;
-      --on-accent: #06120c;
-      --on-accent-soft: #7fe0b5;
-      --bubble-in: #1b2520;
-      --bubble-out: #12442f;
+      --bg: #081118;
+      --surface: #0e1a22;
+      --surface-2: #13232d;
+      --surface-3: #1b2f3b;
+      --border: #21374a;
+      --border-strong: #6b8896;
+      --text: #e4f0f6;
+      --text-2: #bdd2dc;
+      --muted: #8fa8b4;
+      --accent: #38bdf8;
+      --accent-strong: #7dd3fc;
+      --accent-soft: #0c3247;
+      --on-accent: #03131b;
+      --on-accent-soft: #8fd8ff;
+      --bubble-in: #152630;
+      --bubble-out: #0d3a52;
       --bubble-admin: #4a3a12;
-      --bubble-meta: #b0bdb6;
-      --read: #6fb2ff;
+      --bubble-meta: #a7c4d1;
+      --read: #a5b8ff;
       --danger: #ff8a7a;
       --danger-bg: #3a1915;
       --success: #5fd49b;
@@ -158,9 +159,10 @@
       --warn-bg: #3d3110;
       --info: #8ab8ff;
       --info-bg: #142640;
-      --overlay: rgb(0 0 0 / 0.55);
-      --chat-bg: #0e1411;
-      --chat-dot: rgb(37 179 125 / 0.05);
+      --overlay: rgb(0 6 12 / 0.6);
+      --chat-bg: #0a151c;
+      --chat-bg-2: #061016;
+      --chat-dot: rgb(56 189 248 / 0.06);
       --shadow-1: none;
       --shadow-2: 0 10px 30px rgb(0 0 0 / 0.5);
       color-scheme: dark;
@@ -168,25 +170,25 @@
   }
 
   :root[data-theme='dark'] {
-    --bg: #0b100e;
-    --surface: #121916;
-    --surface-2: #18211d;
-    --surface-3: #212c27;
-    --border: #26312c;
-    --border-strong: #728379;
-    --text: #e7ede9;
-    --text-2: #c2ccc7;
-    --muted: #98a69f;
-    --accent: #25b37d;
-    --accent-strong: #3cc993;
-    --accent-soft: #12382a;
-    --on-accent: #06120c;
-    --on-accent-soft: #7fe0b5;
-    --bubble-in: #1b2520;
-    --bubble-out: #12442f;
+    --bg: #081118;
+    --surface: #0e1a22;
+    --surface-2: #13232d;
+    --surface-3: #1b2f3b;
+    --border: #21374a;
+    --border-strong: #6b8896;
+    --text: #e4f0f6;
+    --text-2: #bdd2dc;
+    --muted: #8fa8b4;
+    --accent: #38bdf8;
+    --accent-strong: #7dd3fc;
+    --accent-soft: #0c3247;
+    --on-accent: #03131b;
+    --on-accent-soft: #8fd8ff;
+    --bubble-in: #152630;
+    --bubble-out: #0d3a52;
     --bubble-admin: #4a3a12;
-    --bubble-meta: #b0bdb6;
-    --read: #6fb2ff;
+    --bubble-meta: #a7c4d1;
+    --read: #a5b8ff;
     --danger: #ff8a7a;
     --danger-bg: #3a1915;
     --success: #5fd49b;
@@ -195,9 +197,10 @@
     --warn-bg: #3d3110;
     --info: #8ab8ff;
     --info-bg: #142640;
-    --overlay: rgb(0 0 0 / 0.55);
-    --chat-bg: #0e1411;
-    --chat-dot: rgb(37 179 125 / 0.05);
+    --overlay: rgb(0 6 12 / 0.6);
+    --chat-bg: #0a151c;
+    --chat-bg-2: #061016;
+    --chat-dot: rgb(56 189 248 / 0.06);
     --shadow-1: none;
     --shadow-2: 0 10px 30px rgb(0 0 0 / 0.5);
     color-scheme: dark;
@@ -1269,8 +1272,13 @@
     min-width: 0;
     height: 100%;
     background-color: var(--chat-bg);
-    background-image: radial-gradient(var(--chat-dot) 1px, transparent 1px);
-    background-size: 18px 18px;
+    /* Bubble dots over a gentle shallow-to-deep water gradient. */
+    background-image:
+      radial-gradient(var(--chat-dot) 1px, transparent 1px),
+      linear-gradient(180deg, var(--chat-bg), var(--chat-bg-2));
+    background-size:
+      18px 18px,
+      100% 100%;
   }
 
   .conversation.empty {
