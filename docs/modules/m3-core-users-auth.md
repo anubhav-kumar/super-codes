@@ -24,15 +24,16 @@ listActiveAgents()                            // → [{ userId, name, lastAutoAs
 buildMarkAutoAssignedItem(userId, at, previousAt)
   // → TransactWriteItems entry { Update: { TableName, Key, UpdateExpression, ConditionExpression, ExpressionAttributeValues } }
   //   for a lib-dynamodb TransactWriteCommand. Sets lastAutoAssignedAt = at.
-  //   Condition: previousAt === null → attribute_exists(userId) AND attribute_not_exists(lastAutoAssignedAt);
-  //              otherwise         → lastAutoAssignedAt = :previousAt.
+  //   Condition: previousAt === null → attribute_exists(userId) AND active = true AND attribute_not_exists(lastAutoAssignedAt);
+  //              otherwise         → active = true AND lastAutoAssignedAt = :previousAt.
+  //   (The active check means an agent deactivated mid-selection is never picked.)
   //   M4 puts this in its auto-assign transaction next to the chat update.
 
 // apps/web/lib/session.js
 SESSION_COOKIE                        // cookie name: 'vartalap_session'
 SESSION_TTL_SECONDS                   // 8 h
 signSession(user)                     // → Promise<JWT string> { sub: userId, role }, 8 h expiry, HS256 (jose), JWT_SECRET
-verifySession(token)                  // → Promise<{ userId, role } | null>; never throws on a bad, expired or foreign token
+verifySession(token)                  // → Promise<{ userId, role, issuedAt /* ms */ } | null>; never throws on a bad, expired or foreign token
 sessionCookieOptions()                // → { httpOnly: true, secure: NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: 8 h }
 buildSetCookie(token)                 // → Set-Cookie header string for the session
 buildClearCookie()                    // → Set-Cookie header string that clears it (Max-Age=0)
