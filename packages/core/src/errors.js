@@ -5,6 +5,11 @@ export const ERROR_HTTP_STATUS = Object.freeze({
   NOT_FOUND: 404,
   CONFLICT: 409,
   WINDOW_EXPIRED: 409,
+  // F2: media not downloadable yet (fetching or being scanned) / no longer available.
+  MEDIA_PENDING: 409,
+  MEDIA_UNAVAILABLE: 410,
+  // I3 demo: a Meta Graph API call failed during WhatsApp onboarding (message is Meta's).
+  META_ERROR: 424,
   INTERNAL: 500,
 });
 

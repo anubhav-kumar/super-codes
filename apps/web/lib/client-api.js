@@ -46,7 +46,8 @@ async function request(path, { method = 'GET', body, redirectOn401 = true } = {}
   return data;
 }
 
-const chatPath = (chatId) => `/chats/${encodeURIComponent(chatId)}`;
+// F3: `id` is the chat's opaque publicId (chat.id), never the phone number.
+export const chatPath = (id) => `/chats/${encodeURIComponent(id)}`;
 
 export const api = {
   login: (email, password) =>
@@ -63,19 +64,72 @@ export const api = {
   listUsers: () => request('/users'),
   createUser: (user) => request('/users', { method: 'POST', body: user }),
 
-  listChats: (filter) => request(`/chats?filter=${encodeURIComponent(filter)}`),
-  getMessages: (chatId, { before, limit } = {}) => {
+  // F4: optional tag filter.
+  listChats: (filter, { tag } = {}) =>
+    request(
+      `/chats?filter=${encodeURIComponent(filter)}${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`,
+    ),
+  getMessages: (id, { before, limit } = {}) => {
     const query = new URLSearchParams();
     if (before) query.set('before', before);
     if (limit) query.set('limit', String(limit));
     const qs = query.toString();
-    return request(`${chatPath(chatId)}/messages${qs ? `?${qs}` : ''}`);
+    return request(`${chatPath(id)}/messages${qs ? `?${qs}` : ''}`);
   },
-  sendMessage: (chatId, text) =>
-    request(`${chatPath(chatId)}/messages`, { method: 'POST', body: { text } }),
-  assign: (chatId, userId) =>
-    request(`${chatPath(chatId)}/assign`, { method: 'PUT', body: { userId } }),
-  autoAssign: (chatId) => request(`${chatPath(chatId)}/auto-assign`, { method: 'POST' }),
+  sendMessage: (id, text) =>
+    request(`${chatPath(id)}/messages`, { method: 'POST', body: { text } }),
+
+  // F2: media. createUpload → uploadFile (straight to S3) → sendMedia.
+  createUpload: (id, { mimeType, size, filename }) =>
+    request(`${chatPath(id)}/uploads`, { method: 'POST', body: { mimeType, size, filename } }),
+  sendMedia: (id, { type, uploadId, caption, filename }) =>
+    request(`${chatPath(id)}/messages`, {
+      method: 'POST',
+      body: { type, uploadId, caption: caption || undefined, filename },
+    }),
+  // Same-origin URL that redirects to a short-lived S3 link after an access check.
+  mediaUrl: (id, messageId) =>
+    `/api${chatPath(id)}/messages/${encodeURIComponent(messageId)}/media`,
+  assign: (id, userId) => request(`${chatPath(id)}/assign`, { method: 'PUT', body: { userId } }),
+  autoAssign: (id) => request(`${chatPath(id)}/auto-assign`, { method: 'POST' }),
+
+  // F4: client attributes. `id` is chat.id. Nothing here is ever sent to WhatsApp.
+  updateDescription: (id, description, version) =>
+    request(`${chatPath(id)}/description`, { method: 'PUT', body: { description, version } }),
+  addTag: (id, tag) => request(`${chatPath(id)}/tags`, { method: 'POST', body: { tag } }),
+  removeTag: (id, tag) =>
+    request(`${chatPath(id)}/tags/${encodeURIComponent(tag)}`, { method: 'DELETE' }),
+  listNotes: (id, { before, limit } = {}) => {
+    const query = new URLSearchParams();
+    if (before) query.set('before', before);
+    if (limit) query.set('limit', String(limit));
+    const qs = query.toString();
+    return request(`${chatPath(id)}/notes${qs ? `?${qs}` : ''}`);
+  },
+  createNote: (id, body) => request(`${chatPath(id)}/notes`, { method: 'POST', body: { body } }),
+  editNote: (id, noteId, body) =>
+    request(`${chatPath(id)}/notes/${encodeURIComponent(noteId)}`, {
+      method: 'PATCH',
+      body: { body },
+    }),
+  deleteNote: (id, noteId) =>
+    request(`${chatPath(id)}/notes/${encodeURIComponent(noteId)}`, { method: 'DELETE' }),
+  // F4 phase 3: tag catalog (GET for everyone; the rest admin only).
+  listTagCatalog: () => request('/tags'),
+  addCatalogTag: (name) => request('/tags', { method: 'POST', body: { name } }),
+  removeCatalogTag: (name) => request(`/tags/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+  setTagSettings: (catalogOnly) => request('/tags', { method: 'PATCH', body: { catalogOnly } }),
+
+  // I3 demo: WhatsApp onboarding through Embedded Signup (admin only).
+  waOnboardingStatus: () => request('/wa/onboarding'),
+  waOnboardingStart: () => request('/wa/onboarding/start', { method: 'POST' }),
+  waOnboardingComplete: ({ code, state, wabaId, phoneNumberId }) =>
+    request('/wa/onboarding/complete', {
+      method: 'POST',
+      body: { code, state, wabaId, phoneNumberId },
+    }),
+  waOnboardingRetry: (pin) => request('/wa/onboarding/retry', { method: 'POST', body: { pin } }),
+  waOnboardingDisconnect: () => request('/wa/onboarding/disconnect', { method: 'POST' }),
 };
 
 // Only same-origin targets, so ?next= cannot be used as an open redirect. Resolved with the
@@ -100,4 +154,27 @@ export function errorText(err) {
     return issues.map((i) => i.message).join('; ');
   }
   return err?.message ?? 'Something went wrong';
+}
+
+// F2: uploads a file to the presigned S3 POST form. XHR rather than fetch for upload progress.
+// onProgress(0..1); `signal` aborts. Resolves when S3 accepts the file.
+export function uploadFile({ url, fields }, file, { onProgress, signal } = {}) {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    for (const [key, value] of Object.entries(fields)) form.append(key, value);
+    form.append('file', file); // must be the last field
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress?.(event.loaded / event.total);
+    };
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new ApiError(xhr.status, 'UPLOAD_FAILED', 'The file could not be uploaded'));
+    xhr.onerror = () => reject(new ApiError(0, 'UPLOAD_FAILED', 'The file could not be uploaded'));
+    xhr.onabort = () => reject(new ApiError(0, 'ABORTED', 'Upload cancelled'));
+    signal?.addEventListener('abort', () => xhr.abort(), { once: true });
+    xhr.send(form);
+  });
 }

@@ -1,6 +1,6 @@
 # F3: Hide the Client's Phone Number from Agents
 
-Status: Research · 2026-10-17 · Builds on: M0, M2, M4, M5, M6, M7, M8
+Status: Built (Phases 1–3; Phase 4 deferred) · 2026-10-17 · Builds on: M0, M2, M4, M5, M6, M7, M8
 
 ## 1. Goal
 Agents must never be able to see a client's phone number: not in the UI, the URL, browser history, devtools (network tab, JSON responses, React state), or error messages. Today the number is the chat's identity everywhere, so any agent can read it from the address bar. This is a data-minimisation measure: agents need the conversation, not the contact detail, and a number taken off-platform lets an agent contact the client outside Vartalap.
@@ -159,3 +159,87 @@ Route resolution: `resolveChat(context, user, assert)` replaces `getChatId` + `l
 - [ ] Assignment, auto-assign, send, status ticks and paging work end to end on `dev` (M9 script) via `publicId` URLs.
 - [ ] Every existing `dev` chat has a `publicId` after the backfill, and new inbound chats get one on creation.
 - [ ] Server logs contain at most the last 4 digits of a number, never the full number.
+
+## 10. Implementation notes (2026-10-17)
+Built: Phases 1, 2 and 3. Phase 4 (masking numbers inside message text) is not built, per D4. Nothing has been deployed or run against AWS yet. The acceptance criteria in §9 are still unchecked because they need the `dev` stack.
+
+### Decisions taken (all recommended defaults)
+| # | Taken |
+|---|---|
+| D1 | Admins get `phone` in `ChatView` and see it in the conversation header and the details panel. Agents never receive it. It never appears in URLs |
+| D2 | Admin URLs use `publicId` too. There is one route shape |
+| D3 | The fallback name is `Client #XXXX`, from the last 4 characters of `publicId` (`fallbackDisplayName`) |
+| D4 | Numbers in message text and previews are **not** redacted. Phase 4 is deferred |
+| D5 | For agents, a `clientName` with 5 or more digits (counted anywhere, so `+65 9123 4567` counts) is returned as `null`, and `displayName` uses the fallback |
+| D6 | Server logs keep the last 4 digits. `publicId` is added to the web enqueue-failure log and to the sender's logs, and the webhook logs the stored `messageId` |
+| D7 | `publicId` backfill script for chats, plus a reset of the `dev` Messages/Chats tables before Phase 2 goes live (steps below) |
+| D8 | Old `/chats/+…` URLs aren't redirected. The page checks the `c_` format in the browser and shows "That is not a valid chat address." without calling the API. The API answers any unknown or malformed `:id` like a missing chat: agents get `403`, admins get `404` |
+| D9 | The SQS payload is phone-free: `{ messageId, publicId }`, with `MessageGroupId = publicId` |
+
+### What changed
+- **Core:**
+  - New: `chats/public-id.js` (`newPublicId`, `isPublicId`, `PUBLIC_ID_REGEX`), `chats/view.js` (`toChatView`, `fallbackDisplayName`, `looksLikePhone`), `chats/backfill.js` and `messages/view.js` (`toMessageView`).
+  - `chats/repo.js`: `getChatIdByPublicId`, `getChatByPublicId`.
+  - `assign.js`: no `chatId` in error details.
+  - `append.js`:
+    - `publicId = if_not_exists(…)` on every append.
+    - `WAMID#<wamid>` guard item as the first transaction item, and cancellation reasons are indexed to match.
+  - Schemas: `Chat.publicId` (optional), `ChatViewSchema`, `MessageViewSchema`. In `OutboundQueueMessageSchema`, `publicId` and the legacy `chatId` are both optional.
+- **Lambdas:**
+  - Webhook: no `messageId: wamid`, so core assigns a ULID.
+  - Sender: logs `publicId`, and takes the last 4 digits from the stored message instead of the job.
+- **Infra:**
+  - `serverless.yml`: `publicId` attribute and GSI `byPublicId` (`KEYS_ONLY`) on Chats.
+  - The webhook needs no new IAM (`PutItem` and `UpdateItem` already cover the guard item and `publicId`).
+- **Web API:**
+  - `app/api/chats/[phone]` → `[id]`.
+  - `lib/api.js`:
+    - `getChatId(context)` now reads `params.id` and returns the internal `chatId`, or `null` for an unknown id.
+    - `loadChatFor` accepts `null`.
+    - New `resolveChat`, `chatResponse`, and re-exports of `toChatView` / `toMessageView`.
+  - Every chat route returns views only.
+  - `lib/queue.js` `sendOutbound({ messageId, publicId })`.
+  - `Referrer-Policy: same-origin` in `next.config.mjs`.
+- **UI:**
+  - `app/(staff)/chats/[phone]` → `[id]`, and `Conversation` takes an `id` prop.
+  - `ChatList`, `AssignControl` and `DetailsPanel` use `chat.id`, and `chatTitle` uses `displayName`.
+  - The header and the details panel show `chat.phone` only when it is present.
+  - `client-api.js` exports `chatPath(id)`.
+- **Script:** `scripts/backfill-chat-public-ids.js` (`npm run backfill:public-ids -w @vartalap/scripts [-- --apply]`). It is a dry run by default, idempotent, and conditioned on `attribute_not_exists(publicId)`.
+
+### Assumptions
+- The web app runs with credentials that can `Query` the new GSI. Local dev uses the developer's credentials, and the stack defines no web role. A hosted web role needs `dynamodb:Query` on `…-chats/index/byPublicId`.
+- Agents have no AWS access, so server logs, SQS, the DLQ and DynamoDB stay operator-only.
+- The `dev` data is trial data and can be reset (D7). **Confirm this before running the reset.**
+
+### Deploy order and migration steps (not run)
+1. **Stack, core and Lambdas first:** `npm run deploy -- --stage dev`. This creates GSI `byPublicId`, and the webhook starts writing `publicId`, ULID inbound IDs and `WAMID#` guards. DynamoDB creates one new GSI per table per update. If F2/F4 add a GSI to an **existing** table in the same deploy, split the deploys.
+2. **Reset `dev` Messages and Chats (D7):** existing inbound messages have `messageId = wamid`, and those IDs (also `headMessageId`/`prevMessageId`) would still reach the browser. Delete every item from `vartalap-dev-messages` and `vartalap-dev-chats`. Users stay. One way, with AWS CLI v2 and `jq`:
+   ```sh
+   for t in messages:messageId chats:chatId; do
+     table="vartalap-dev-${t%%:*}"; key="${t##*:}"
+     aws dynamodb scan --table-name "$table" --projection-expression "$key" --output json \
+       | jq -c --arg k "$key" '.Items[] | {($k): .[$k]}' \
+       | while read -r k; do aws dynamodb delete-item --table-name "$table" --key "$k"; done
+   done
+   ```
+   For a stage whose data must be kept, skip the reset and instead re-key the old inbound messages in a separate migration. That migration isn't written, because no such stage exists yet.
+3. **Backfill `publicId`:**
+   - `npm run backfill:public-ids -w @vartalap/scripts` (dry run).
+   - Then the same command with `-- --apply`.
+   - After a reset it reports 0. It is still worth running, and it is required on any stage that kept data.
+4. **Then the web app:** restart or redeploy Next.js. Old SQS jobs in flight (`{ messageId, chatId }`) are still accepted by the sender.
+5. Ask staff to clear Vartalap entries from their browser history (§7). Note this in the compliance file.
+6. Run the §9 checks, M2's "Done when" (dedup, concurrent appends) and M9 on `dev`.
+
+### Deferred or not done
+- **Phase 4:** masking the client's own number in message text and previews (D4).
+- **wamids in server logs:** the webhook and sender still log `waMessageId`. A wamid base64-embeds the full number, so strictly the §9 criterion "logs contain at most the last 4 digits" is not met for CloudWatch. Logs are operator-only. Fix with the deferred log-masking review: hash or drop wamids in log lines.
+- **Old `messageId = wamid` items on stages that are not reset:** see step 2. No migration script was written.
+- **Chats without a `publicId`** (only possible before the backfill or the chat's next message) list with `id: null` and can't be opened. That is why the backfill runs before the web deploy.
+- **Live checks:** nothing was run against AWS, and there were no `next build` or `next dev` runs. Verification was `node --check` and ESLint only.
+
+### Contract notes for F2/F4
+- `getChatId(context)` returns the internal `chatId`, or `null`. Always pass its result to `loadChatFor`, which turns `null` into `403` for agents and `404` for admins. Admin-only routes that skip `loadChatFor` must throw `NOT_FOUND` on `null` (as assign does).
+- `chatResponse(chat, user)` is the one-liner for a single-chat response. For a list, use `toChatView(item, user)`. For messages, use `toMessageView(message, user)`. All three are exported from `lib/api.js`.
+- `sendOutbound` now takes `{ messageId, publicId }`, not `chatId`.

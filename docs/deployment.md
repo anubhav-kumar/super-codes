@@ -235,7 +235,8 @@ For a stage deployed **before** the session key and config moved to SSM (`fc2c1a
 | Replies fail with code `190` | The access token has expired or is invalid. Use a System User token |
 | Replies fail with code `131047` | More than 24 h since the client's last message |
 | Web app or seed fails with "Missing config … under SSM /vartalap/<stage>/config/" | The stack for that stage/region hasn't been deployed with the config parameters yet; run `serverless deploy` (step 2). Check `STAGE`/`AWS_REGION` in `.env.local` |
-| `npm run seed` or the web app fails with "Missing required env vars" | `AWS_REGION` or `STAGE` is missing from `apps/web/.env.local` (step 4) |
+| The web app fails with "Missing required env vars" | `AWS_REGION` or `STAGE` is missing from `apps/web/.env.local` (step 4) |
+| A script (`seed`, `backfill:public-ids`, `reset-data`) says "No AWS region in the shell" | Run `assume` first. Scripts take the region from the shell and `STAGE` from the shell (default `dev`), not from `.env.local` |
 | Login fails; log says "SSM parameter /vartalap/<stage>/JWT_SECRET not found in <region>" (older versions: `ParameterNotFound` / `UnknownError`) | The stack hasn't been redeployed since `JWT_SECRET` was added, or `.env.local` points to another stage or region. Run `serverless deploy` (step 2), then set it (step 3) |
 | Web app fails with "SSM parameter /vartalap/<stage>/JWT_SECRET must be a random string…" | It's still `CHANGE_ME` or too short. Set it (step 3); check `STAGE` and `AWS_REGION` in `.env.local` |
 | Lost the seeded admin's one-time password | Delete that user's item and its `EMAIL#<email>` guard item from the users table, then re-run `npm run seed -- <email> [name]` (or have another admin create a new admin) |

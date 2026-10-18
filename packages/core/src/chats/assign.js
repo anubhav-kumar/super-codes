@@ -4,6 +4,7 @@ import { getDocClient } from '../db/client.js';
 import { AppError } from '../errors.js';
 import { buildMarkAutoAssignedItem, getUserById, listActiveAgents } from '../users/repo.js';
 import { getChat } from './repo.js';
+import { withClientAttributes } from '../clients/normalize-tag.js'; // F4
 
 function assertAdmin(by) {
   if (by?.role !== 'admin') throw new AppError('FORBIDDEN', 'Only admins can assign chats');
@@ -29,10 +30,10 @@ export async function assignChat({ chatId, userId, by }) {
         ReturnValues: 'ALL_NEW',
       }),
     );
-    return Attributes;
+    return withClientAttributes(Attributes); // F4: tags Set → array
   } catch (err) {
     if (err.name === 'ConditionalCheckFailedException') {
-      throw new AppError('NOT_FOUND', 'Chat not found', { chatId });
+      throw new AppError('NOT_FOUND', 'Chat not found'); // F3: no chatId in details
     }
     throw err;
   }
@@ -81,7 +82,7 @@ export async function autoAssign({ chatId, by }) {
       if (err.name !== 'TransactionCanceledException') throw err;
       const [chatReason, userReason] = err.CancellationReasons ?? [];
       if (chatReason?.Code === 'ConditionalCheckFailed') {
-        throw new AppError('NOT_FOUND', 'Chat not found', { chatId });
+        throw new AppError('NOT_FOUND', 'Chat not found'); // F3: no chatId in details
       }
       if (userReason?.Code === 'ConditionalCheckFailed') continue; // lost the race; re-select
       throw err;

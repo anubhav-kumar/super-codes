@@ -2,7 +2,7 @@
 
 AWS side of Vartalap, defined in `serverless.yml` (Serverless Framework v4):
 
-- DynamoDB tables `vartalap-<stage>-messages`, `-chats` and `-users` (on-demand), with GSIs `byWaMessageId`, `byAssignee` and `byEmail`.
+- DynamoDB tables `vartalap-<stage>-messages`, `-chats` and `-users` (on-demand), with GSIs `byWaMessageId`, `byAssignee`, `byPublicId` (F3) and `byEmail`.
 - SQS FIFO queue `vartalap-<stage>-outbound.fifo` and DLQ `vartalap-<stage>-outbound-dlq.fifo` (`maxReceiveCount: 3`).
 - Lambdas `webhook` (HTTP API `GET`/`POST /webhook`) and `sender` (SQS, `batchSize: 1`). Each has its own least-privilege IAM role.
 
@@ -50,7 +50,7 @@ npx serverless remove --stage dev              # deletes the stack, including th
 
 Stage defaults to `dev` and region to `ap-south-1`. The Graph API version (`WA_GRAPH_VERSION`) and sender timeout are set under `params` in `serverless.yml`.
 
-Deploy outputs (`npx serverless info --stage dev --verbose`): `MessagesTableName`, `ChatsTableName`, `UsersTableName`, `OutboundQueueUrl`, `OutboundDlqUrl`, `WaParameterNames`, `WebhookUrl` (register in the Meta app) and the Framework's `HttpApiUrl`. The stack also publishes the table names and queue URL to SSM `/vartalap/<stage>/config/*` (`MESSAGES_TABLE`, `CHATS_TABLE`, `USERS_TABLE`, `OUTBOUND_QUEUE_URL`). The local web app and seed script load them from there, so `apps/web/.env.local` needs only `AWS_REGION` and `STAGE`.
+Deploy outputs (`npx serverless info --stage dev --verbose`): `MessagesTableName`, `ChatsTableName`, `UsersTableName`, `OutboundQueueUrl`, `OutboundDlqUrl`, `WaParameterNames`, `WebhookUrl` (register in the Meta app) and the Framework's `HttpApiUrl`. The stack also publishes the table names and queue URL to SSM `/vartalap/<stage>/config/*` (`MESSAGES_TABLE`, `CHATS_TABLE`, `USERS_TABLE`, `OUTBOUND_QUEUE_URL`). The local web app and scripts load them from there, so `apps/web/.env.local` needs only `AWS_REGION` and `STAGE`; the scripts take those two from the shell instead (`assume`, `STAGE` defaulting to `dev`).
 
 ## IAM for the local Next.js app
 
@@ -98,9 +98,17 @@ The web app runs on localhost with `assume` credentials. That role needs read/wr
       "Effect": "Allow",
       "Action": "sqs:SendMessage",
       "Resource": "arn:aws:sqs:ap-south-1:<account-id>:vartalap-dev-outbound.fifo"
+    },
+    {
+      "Sid": "VartalapMediaF2",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject", "s3:GetObjectTagging"],
+      "Resource": "arn:aws:s3:::vartalap-dev-media-<account-id>/*"
     }
   ]
 }
 ```
+
+F2 (media): `s3:PutObject` is needed to sign the browser's upload form (the upload itself goes straight from the browser to S3), `s3:GetObject` to check uploads (HeadObject) and sign download links, and `s3:GetObjectTagging` to read the GuardDuty scan status. Presigned links stop working when the signing `assume` session expires, even if their own expiry is later.
 
 `TransactWriteItems` (used by the linked-list append) is authorized through the `PutItem`, `UpdateItem` and `ConditionCheckItem` actions above. `Scan` is needed for the admin "all chats" view.

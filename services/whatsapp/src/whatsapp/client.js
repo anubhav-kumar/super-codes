@@ -1,4 +1,4 @@
-// Minimal WhatsApp Cloud API client: text messages only.
+// Minimal WhatsApp Cloud API client: text messages, plus media messages (F2).
 import { getParams } from '../lib/params.js';
 
 const GRAPH_BASE_URL = 'https://graph.facebook.com';
@@ -18,6 +18,8 @@ const RETRYABLE_META_CODES = new Set([
   '131056', // too many messages to the same recipient (pair rate limit)
   '133004', // server temporarily unavailable
 ]);
+// Not retryable, on purpose: '131053' (media upload error, e.g. MIME/extension mismatch or an
+// unsupported video profile) is final; the code is stored on the message and shown in the UI.
 
 // retryable: SQS should try again. status: HTTP status (null for network errors).
 // code: Meta's error.code as a string, or 'NETWORK' / 'TIMEOUT' / 'BAD_RESPONSE'.
@@ -39,27 +41,49 @@ export function isRetryable(status, code) {
 // to: E.164 ('+65...'). Cloud API takes the number as digits only, like the wa_id it reports.
 // → { waMessageId }. Throws WhatsAppSendError.
 export async function sendText({ to, body }) {
+  return postMessage(to, { type: 'text', text: { preview_url: false, body } });
+}
+
+// F2: kind is image | video | audio | document; waMediaId comes from uploadMedia().
+// Audio takes no caption; documents carry their filename. → { waMessageId }.
+export async function sendMedia({ to, kind, waMediaId, caption, filename }) {
+  const object = { id: waMediaId };
+  if (caption && kind !== 'audio') object.caption = caption;
+  if (filename && kind === 'document') object.filename = filename;
+  return postMessage(to, { type: kind, [kind]: object });
+}
+
+// Graph settings shared by every Cloud API call (also used by whatsapp/media.js).
+export async function graphSettings() {
   const { WA_PHONE_NUMBER_ID, WA_ACCESS_TOKEN } = await getParams([
     'WA_PHONE_NUMBER_ID',
     'WA_ACCESS_TOKEN',
   ]);
   const version = process.env.WA_GRAPH_VERSION;
   if (!version) throw new Error('Missing env var WA_GRAPH_VERSION');
+  return {
+    phoneNumberId: WA_PHONE_NUMBER_ID,
+    token: WA_ACCESS_TOKEN,
+    baseUrl: `${GRAPH_BASE_URL}/${version}`,
+  };
+}
+
+async function postMessage(to, message) {
+  const { phoneNumberId, token, baseUrl } = await graphSettings();
 
   let res;
   try {
-    res = await fetch(`${GRAPH_BASE_URL}/${version}/${WA_PHONE_NUMBER_ID}/messages`, {
+    res = await fetch(`${baseUrl}/${phoneNumberId}/messages`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${WA_ACCESS_TOKEN}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
         to: to.replace(/^\+/, ''),
-        type: 'text',
-        text: { preview_url: false, body },
+        ...message,
       }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
@@ -76,16 +100,7 @@ export async function sendText({ to, body }) {
 
   const payload = await res.json().catch(() => null);
 
-  if (!res.ok) {
-    const error = payload?.error ?? {};
-    const code = error.code != null ? String(error.code) : `HTTP_${res.status}`;
-    // Meta's message describes the error, not the request; it holds no message text or token.
-    throw new WhatsAppSendError(error.message ?? `Cloud API returned ${res.status}`, {
-      retryable: isRetryable(res.status, error.code),
-      status: res.status,
-      code,
-    });
-  }
+  if (!res.ok) throw graphError(res, payload);
 
   const waMessageId = payload?.messages?.[0]?.id;
   if (!waMessageId) {
@@ -97,4 +112,16 @@ export async function sendText({ to, body }) {
     });
   }
   return { waMessageId };
+}
+
+// Non-2xx Graph response → WhatsAppSendError (retryable per isRetryable).
+export function graphError(res, payload) {
+  const error = payload?.error ?? {};
+  const code = error.code != null ? String(error.code) : `HTTP_${res.status}`;
+  // Meta's message describes the error, not the request; it holds no message text or token.
+  return new WhatsAppSendError(error.message ?? `Cloud API returned ${res.status}`, {
+    retryable: isRetryable(res.status, error.code),
+    status: res.status,
+    code,
+  });
 }

@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
-import { appendMessage, getMessageByWaId, updateStatus } from '@vartalap/core';
+import { appendMessage, getMessageByWaId, setClientReaction, updateStatus } from '@vartalap/core';
+import { enqueueMediaFetch } from '../lib/media-queue.js';
 import { getParams } from '../lib/params.js';
 import { parseWebhook, phoneTail } from '../whatsapp/parse.js';
 import { verifySignature } from '../whatsapp/signature.js';
@@ -47,29 +48,48 @@ async function receive(event, { WA_PHONE_NUMBER_ID, WA_APP_SECRET }) {
     return text(400, 'Bad request');
   }
 
-  const { messages, statuses, skipped } = parseWebhook(payload, WA_PHONE_NUMBER_ID);
+  const { messages, statuses, reactions, skipped } = await parseForCurrentNumber(
+    payload,
+    WA_PHONE_NUMBER_ID,
+  );
   log('info', 'webhook_received', {
     messages: messages.length,
     statuses: statuses.length,
+    reactions: reactions.length,
     skipped: skipped.length,
   });
   for (const item of skipped) log('warn', 'item_skipped', item);
 
-  const counts = { stored: 0, duplicate: 0, applied: 0, notApplied: 0, unknown: 0, failed: 0 };
+  const counts = {
+    stored: 0,
+    duplicate: 0,
+    applied: 0,
+    notApplied: 0,
+    unknown: 0,
+    failed: 0,
+    mediaQueued: 0,
+    mediaQueueFailed: 0,
+    reactions: 0,
+  };
 
   // Sequential, in payload order, so messages for the same chat keep their order.
   for (const msg of messages) {
     try {
-      const { duplicate } = await appendMessage({
+      const { message: stored, duplicate } = await appendMessage({
         chatId: msg.chatId,
+        // F3 Phase 2: no messageId here, so core assigns a ULID (a wamid embeds the client's
+        // number). Dedup is by the WAMID# guard item that appendMessage writes for waMessageId.
         message: {
-          messageId: msg.waMessageId,
           waMessageId: msg.waMessageId,
           direction: 'in',
           senderType: 'client',
           senderId: null,
-          type: 'text',
+          // F2: type plus media / location / contacts from parse.js (text is the summary).
+          type: msg.type,
           text: msg.text,
+          media: msg.media,
+          location: msg.location,
+          contacts: msg.contacts,
           status: INBOUND_STATUS,
         },
         chat: { isClientMessage: true, clientName: msg.clientName },
@@ -77,8 +97,13 @@ async function receive(event, { WA_PHONE_NUMBER_ID, WA_APP_SECRET }) {
       counts[duplicate ? 'duplicate' : 'stored']++;
       log('info', duplicate ? 'message_duplicate' : 'message_stored', {
         waMessageId: msg.waMessageId,
+        messageId: stored?.messageId ?? null,
         phoneTail: phoneTail(msg.chatId),
+        type: msg.type,
       });
+      if (msg.media?.state === 'pending') {
+        await queueMediaFetch(duplicate ? null : stored, msg.waMessageId, counts);
+      }
     } catch (err) {
       counts.failed++;
       log('error', 'message_failed', {
@@ -116,8 +141,65 @@ async function receive(event, { WA_PHONE_NUMBER_ID, WA_APP_SECRET }) {
     }
   }
 
+  // F2: reactions update the target message only (no append, no head move; decision D5).
+  for (const reaction of reactions) {
+    try {
+      const target = await getMessageByWaId(reaction.targetWaMessageId);
+      if (!target || target.chatId !== reaction.chatId) {
+        counts.unknown++;
+        log('warn', 'reaction_unknown_target', { waMessageId: reaction.waMessageId });
+        continue;
+      }
+      await setClientReaction(target.messageId, reaction.emoji);
+      counts.reactions++;
+      log('info', 'reaction_applied', {
+        messageId: target.messageId,
+        removed: !reaction.emoji,
+        phoneTail: phoneTail(reaction.chatId),
+      });
+    } catch (err) {
+      counts.failed++;
+      log('error', 'reaction_failed', { waMessageId: reaction.waMessageId, error: errorInfo(err) });
+    }
+  }
+
   log('info', 'webhook_processed', counts);
+  // F2: a media message stored without its fetch job would stay "loading" forever. Ask Meta to
+  // redeliver: the replay is a duplicate, and the duplicate path below re-queues the fetch.
+  if (counts.mediaQueueFailed) return text(500, 'Retry');
   return text(200, 'OK');
+}
+
+// I3 demo: connecting a number from the web app overwrites WA_PHONE_NUMBER_ID in SSM. A warm
+// container may still hold the old value, so when a payload is for another number, re-read
+// the parameter once (uncached) before dropping it.
+async function parseForCurrentNumber(payload, cachedPhoneNumberId) {
+  const parsed = parseWebhook(payload, cachedPhoneNumberId);
+  if (!parsed.skipped.some((item) => item.reason === 'other_phone_number_id')) return parsed;
+
+  const { WA_PHONE_NUMBER_ID } = await getParams(['WA_PHONE_NUMBER_ID'], { fresh: true });
+  if (WA_PHONE_NUMBER_ID === cachedPhoneNumberId) return parsed;
+  log('info', 'phone_number_id_refreshed');
+  return parseWebhook(payload, WA_PHONE_NUMBER_ID);
+}
+
+// stored: the appended message, or null for a duplicate delivery. A duplicate re-queues the
+// fetch only while the stored message is still pending (a previous enqueue may have failed);
+// mediaFetch ignores jobs for media that is no longer pending, so an extra job is harmless.
+async function queueMediaFetch(stored, waMessageId, counts) {
+  let messageId = stored?.messageId ?? null;
+  try {
+    if (!stored) {
+      const existing = await getMessageByWaId(waMessageId);
+      if (existing?.media?.state !== 'pending') return;
+      messageId = existing.messageId;
+    }
+    await enqueueMediaFetch(messageId);
+    counts.mediaQueued++;
+  } catch (err) {
+    counts.mediaQueueFailed++;
+    log('error', 'media_queue_failed', { messageId, error: errorInfo(err) });
+  }
 }
 
 function safeEqual(a, b) {

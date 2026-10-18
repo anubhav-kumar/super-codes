@@ -11,6 +11,10 @@ Read and list chats, decide who can see or send in a chat, assign chats manually
 ## Exposes
 ```js
 getChat(chatId, { consistent = false } = {})  // → Chat | null
+getChatIdByPublicId(publicId)                 // F3: byPublicId GSI → chatId | null (malformed → null)
+getChatByPublicId(publicId)                   // F3: → Chat | null (consistent read after the GSI)
+toChatView(chat, viewer)                      // F3: API shape (see M0); phone for admins only
+newPublicId() / isPublicId(value)             // F3: 'c_' + 26 Crockford base32 chars (16 random bytes)
 listChatsForUser(user, filter)                // filter: 'mine' | 'unassigned' | 'all'
                                               //   agent: only 'mine' allowed (else FORBIDDEN)
                                               //   'mine' / 'unassigned' → query byAssignee; 'all' → Scan (admin only)
@@ -43,3 +47,14 @@ isWindowOpen(chat, now = Date.now())          // now - lastClientMessageAt < 24 
 - [ ] After reassignment from agent A to agent B, `canView(A)` is false and `canView(B)` is true.
 - [ ] Three auto-assigns with agents A, B and C give A, B, C (then A again).
 - [ ] `isWindowOpen` is false 24 h + 1 s after the last client message, and true again after a new client message.
+
+## F3 changes (hide the client's phone, 2026-10-17)
+- `chats/public-id.js`, `chats/view.js` and `chats/backfill.js` are new. `toChatView` is a denylist: it drops `chatId` and `publicId`, adds `id` (= `publicId`), `displayName` and, for admins only, `phone`. For agents a `clientName` with 5 or more digits is returned as `null` (D5), and `displayName` falls back to `Client #XXXX` (last 4 characters of `publicId`, D3). Other chat fields pass through.
+- `listChatsForUser` still returns internal items; routes map them through `toChatView`.
+- `assignChat` / `autoAssign` no longer put `chatId` in `NOT_FOUND` error details (they reached the browser via `toBody()`).
+- GSI `byPublicId` (PK `publicId`, `KEYS_ONLY`) on the Chats table; it is sparse until `scripts/backfill-chat-public-ids.js` has run.
+
+## F4 changes (client attributes, 2026-10-17)
+- `getChat`, `listChatsForUser` and `assignChat` return `tags` as a sorted array (never the DynamoDB Set) and `profileVersion` as a number (`withClientAttributes`).
+- `listChatsForUser(user, filter, { tag })`: optional tag filter, a `FilterExpression contains(tags, :tag)` on the same `byAssignee` Query / Scan, so it cannot widen what an agent sees. List rows carry `descriptionUpdatedBy` as `{ userId, name } | null`.
+- New `packages/core/src/clients/`: `profile.js` (`updateDescription`, `addTag`, `removeTag`), `notes.js` (`listNotes`, `createNote`, `editNote`, `deleteNote`, `toNoteView`), `catalog.js` (phase 3), `privacy.js` (erasure/export hooks), `normalize-tag.js`, schemas in `schemas/client.js`. Writes are conditioned on the chat existing and, for agents, on `assignedTo = caller`.

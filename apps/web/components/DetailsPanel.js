@@ -1,8 +1,9 @@
 'use client';
 
-import { Clock, Hourglass, StickyNote, Tag, UserRound, X } from 'lucide-react';
+import { Clock, Hourglass, UserRound, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { chatTitle, formatDuration, formatFull } from '../lib/format.js';
+import { ClientPanel } from './ClientPanel.js'; // F4
 import { Avatar, IconButton } from './ui.js';
 
 const WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -50,8 +51,9 @@ function ReplyWindow({ chat }) {
   );
 }
 
-// Right-hand panel (F1). Description, notes and tags arrive with F4.
-export function DetailsPanel({ chat, open, onClose }) {
+// Right-hand panel (F1). F4 adds description, tags and internal notes (ClientPanel).
+// onChanged: re-read the chat after a description or tag change.
+export function DetailsPanel({ chat, open, onClose, onChanged }) {
   const title = chatTitle(chat);
   return (
     <>
@@ -75,9 +77,10 @@ export function DetailsPanel({ chat, open, onClose }) {
         </div>
 
         <div className="details-profile">
-          <Avatar name={chat.clientName} id={chat.chatId} size="lg" />
+          <Avatar name={chat.clientName} id={chat.id} size="lg" />
           <p className="details-name">{title}</p>
-          <span className="muted small">{chat.chatId}</span>
+          {/* F3: admins only; agents never receive the number. */}
+          {chat.phone && <span className="muted small">{chat.phone}</span>}
         </div>
 
         <section className="details-section" aria-labelledby="details-conversation">
@@ -99,16 +102,8 @@ export function DetailsPanel({ chat, open, onClose }) {
           <ReplyWindow chat={chat} />
         </section>
 
-        <section className="details-section" aria-labelledby="details-profile">
-          <h3 id="details-profile">Client profile</h3>
-          <div className="details-placeholder">
-            <span className="details-placeholder-icons" aria-hidden="true">
-              <StickyNote size={18} />
-              <Tag size={18} />
-            </span>
-            Description, notes and tags for this client are coming soon.
-          </div>
-        </section>
+        {/* F4: description, tags, internal notes. Never sent to WhatsApp. */}
+        <ClientPanel chat={chat} open={open} onChanged={onChanged} />
       </aside>
     </>
   );

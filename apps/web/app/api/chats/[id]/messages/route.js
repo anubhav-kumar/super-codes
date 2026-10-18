@@ -10,15 +10,17 @@ import {
   updateStatus,
 } from '@vartalap/core';
 import {
+  chatResponse,
   getChatId,
   loadChatFor,
   maskDigits,
   parseBody,
   parseQuery,
   requireUser,
-  toChatSummary,
+  toMessageView,
   withHandler,
 } from '../../../../../lib/api.js';
+import { prepareOutboundMedia } from '../../../../../lib/media.js'; // F2
 import { sendOutbound } from '../../../../../lib/queue.js';
 
 export const runtime = 'nodejs';
@@ -31,13 +33,20 @@ export const GET = withHandler(async (request, context) => {
   const chat = await loadChatFor(user, chatId, assertCanView);
   const { headMessageId, messages, nextBefore } = await readMessages({ chatId, before, limit });
 
-  return Response.json({ chat: await toChatSummary(chat), headMessageId, messages, nextBefore });
+  // F3: views only; no chatId, phone (agents) or wamid leaves the API.
+  return Response.json({
+    chat: await chatResponse(chat, user),
+    headMessageId,
+    messages: messages.map((m) => toMessageView(m, user)),
+    nextBefore,
+  });
 });
 
 export const POST = withHandler(async (request, context) => {
   const user = await requireUser(request);
   const chatId = await getChatId(context);
-  const { text } = await parseBody(request, SendMessageBodySchema);
+  // F2: `{ text }` or `{ type, uploadId, caption?, filename? }`.
+  const body = await parseBody(request, SendMessageBodySchema);
 
   const chat = await loadChatFor(user, chatId, assertCanSend);
   if (!isWindowOpen(chat)) {
@@ -47,25 +56,33 @@ export const POST = withHandler(async (request, context) => {
     );
   }
 
-  const { message } = await appendMessage({
+  // F2: a media send checks the upload (after the access and window checks) and uses the
+  // uploadId as the message ID, so the file's key is out/<messageId>.
+  const content =
+    'uploadId' in body
+      ? await prepareOutboundMedia(body, user)
+      : { type: 'text', text: body.text };
+
+  const { message, duplicate } = await appendMessage({
     chatId,
     message: {
+      ...content,
       direction: 'out',
       senderType: user.role,
       senderId: user.userId,
-      type: 'text',
-      text,
       status: 'pending',
     },
     chat: { isClientMessage: false },
   });
+  if (duplicate) throw new AppError('CONFLICT', 'This file has already been sent');
 
   try {
-    await sendOutbound({ messageId: message.messageId, chatId });
+    await sendOutbound({ messageId: message.messageId, publicId: chat.publicId });
   } catch (err) {
     console.error('Outbound enqueue failed', {
       messageId: message.messageId,
       chatId: maskDigits(chatId),
+      publicId: chat.publicId,
       name: err?.name,
     });
     try {
@@ -83,5 +100,5 @@ export const POST = withHandler(async (request, context) => {
     throw new AppError('INTERNAL', 'Message could not be queued for sending');
   }
 
-  return Response.json({ message }, { status: 201 });
+  return Response.json({ message: toMessageView(message, user) }, { status: 201 });
 });

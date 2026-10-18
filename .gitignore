@@ -11,3 +11,5 @@ package-lock.json
 .next/
 .serverless/
 .esbuild/
+# next dev --experimental-https (I3 demo) writes a local certificate here
+certificates/

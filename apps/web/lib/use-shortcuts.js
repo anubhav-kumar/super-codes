@@ -19,6 +19,8 @@ export function useShortcuts(handlers) {
   useEffect(() => {
     const onKey = (event) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
+      // Chrome fires keydown without a key when a datalist or autofill suggestion is picked.
+      if (typeof event.key !== 'string') return;
       const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
       const handler = saved.current[key] ?? saved.current[event.key];
       if (!handler) return;

@@ -4,9 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "seed": "node --env-file-if-exists=../apps/web/.env.local seed-admin.js"
+    "seed": "node seed-admin.js",
+    "backfill:public-ids": "node backfill-chat-public-ids.js",
+    "delete-client-media": "node --env-file-if-exists=../apps/web/.env.local delete-client-media.js",
+    "reset-data": "node reset-stage-data.js"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1152.0",
+    "@aws-sdk/client-s3": "^3.1152.0",
+    "@aws-sdk/client-sqs": "^3.1152.0",
     "@vartalap/core": "*"
   }
 }

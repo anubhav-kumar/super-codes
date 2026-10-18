@@ -1,9 +1,10 @@
 'use client';
 
-import { LoaderCircle, Shuffle } from 'lucide-react';
+import { LoaderCircle, Shuffle, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import { UNASSIGNED } from '../lib/constants.js';
 import { api, errorText } from '../lib/client-api.js';
+import { Select } from './Dropdown.js';
 import { useToast } from './Toast.js';
 
 // Admin only. users: active users from GET /api/users (may still be loading).
@@ -26,37 +27,35 @@ export function AssignControl({ chat, users, onAssigned }) {
     }
   };
 
-  const onSelect = (event) => {
-    const userId = event.target.value;
-    if (userId && userId !== chat.assignedTo) run(() => api.assign(chat.chatId, userId));
+  const onSelect = (userId) => {
+    if (userId && userId !== chat.assignedTo) run(() => api.assign(chat.id, userId));
   };
+
+  const options = (users ?? []).map((u) => ({
+    value: u.userId,
+    label: u.name,
+    hint: u.role === 'admin' ? 'Admin' : 'Agent',
+  }));
 
   return (
     <div className="assign">
-      <label className="sr-only" htmlFor="assignee">
-        Assigned to
-      </label>
-      <select
+      <Select
         id="assignee"
-        className="input select"
-        value={chat.assignedTo === UNASSIGNED ? '' : chat.assignedTo}
+        label="Assigned to"
+        size="sm"
+        className="assign-select"
+        icon={UserRound}
+        value={chat.assignedTo === UNASSIGNED ? null : chat.assignedTo}
+        options={options}
+        placeholder={users ? 'Unassigned' : 'Loading…'}
         onChange={onSelect}
         disabled={busy || !users}
-      >
-        <option value="" disabled>
-          {users ? 'Unassigned' : 'Loading…'}
-        </option>
-        {users?.map((u) => (
-          <option key={u.userId} value={u.userId}>
-            {u.name} ({u.role})
-          </option>
-        ))}
-      </select>
+      />
       <button
         type="button"
         className="button"
         disabled={busy}
-        onClick={() => run(() => api.autoAssign(chat.chatId))}
+        onClick={() => run(() => api.autoAssign(chat.id))}
         title="Assign to the next agent in rotation"
       >
         {busy ? (

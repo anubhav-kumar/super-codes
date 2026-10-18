@@ -1,6 +1,6 @@
 # F4: Client Attributes (Description, Notes, Tags)
 
-**Status:** Research · **Depends on:** M0–M8. Works alongside F1 (the client details panel) and F3 (the opaque chat ID) · **Classification:** Confidential, internal design note
+**Status:** Built (Phases 1–3; needs deploy, see §10) · **Depends on:** M0–M8. Works alongside F1 (the client details panel) and F3 (the opaque chat ID) · **Classification:** Confidential, internal design note
 
 ## 1. Goal
 Agents and admins need shared context about a client that the message history doesn't give them: a short description ("Corporate traveller, prefers aisle seats"), a running log of internal notes ("Promised a callback on 2026-10-20"), and tags (`vip`, `refund-pending`) to sort and filter the chat list. This matters most after a reassignment, when the new agent has to pick up a chat cold.
@@ -237,3 +237,43 @@ export const ListNotesQuerySchema = z.object({ before: z.string().min(1).optiona
 - [ ] No note body, description or tag value appears in API or Lambda logs. Nothing from F4 is put on the SQS queue or sent to WhatsApp.
 - [ ] No F4 response contains a client phone number beyond what F3 allows.
 - [ ] Lambdas have no IAM access to `ClientNotes`. `sls deploy` creates the table and the `CLIENT_NOTES_TABLE` SSM config, and the web app picks it up with only `AWS_REGION` and `STAGE` set.
+
+## 10. Implementation notes (2026-10-17)
+
+### Decisions taken (recommended defaults from §6)
+1. Free-form tags, normalized, with autocomplete; admin catalog plus a "catalog only" switch built (phase 3), off by default.
+2. Agents delete only their own notes; admins any. Every delete is soft: tombstone kept, `body` REMOVEd.
+3. Author-only edit within 15 min, shown as "edited".
+4. No description history: last editor and time only.
+5. Agents can't touch unassigned chats; admins can.
+6. 10 tags × 32 chars; description 1,000; note 2,000.
+7. Retention: same as the chat (still the PRD's deferred item). Erasure deletes every note.
+8. PITR off for `ClientNotes` during the trial; `DeletionProtectionEnabled: true`.
+9. No structured custom fields.
+
+### Deviations and assumptions
+- **Config:** `CLIENT_NOTES_TABLE` is **not** in `getConfig()` REQUIRED and not set in the Lambdas' provider `environment` (§4.7 recommended the opposite). Reason: only the web app uses it, and the Lambdas must not fail on a missing key. It is an optional SSM key (`SSM_OPTIONAL_CONFIG_KEYS` in `config-loader.js`, which F2 also uses) checked on first use by `getClientNotesTable()`. Until the stack is deployed, F4 routes that touch notes or the catalog return `500 INTERNAL`; description and tags (which live on Chats) and everything else keep working.
+- **Route param:** routes use F3's `[id]` (opaque `publicId`) via `resolveChat`. `ClientNotes` is keyed by the internal `chatId`, which is stripped from every response.
+- **Version field name:** `profileVersion`, as in this note (the parallel-work contract mentioned `descriptionVersion` as an example; nothing depends on that name).
+- **`GET /api/tags` is readable by every signed-in user** (the table in §4.5 said admin). The catalog is admin-defined vocabulary with no client data, and agents need it for autocomplete when "catalog only" is on. Non-admins get names only. Writes stay admin-only; the switch is `PATCH /api/tags { catalogOnly }` (not a sub-path, so no tag name can collide with it).
+- **Tag regex** also allows combining marks (`\p{M}`) after the first character so vowelled Arabic and accented Latin survive NFKC. Removing a catalog tag, or turning "catalog only" on, does not strip tags already on chats.
+- **`CONFLICT` details include the current description** (needed for the conflict UI). These are 4xx responses to an authorized caller and are never logged (`withHandler` logs only 5xx, without bodies).
+- **Access race:** description and tag writes are conditioned on `attribute_exists(chatId)` plus `assignedTo = :caller` for agents; note writes run in a transaction with a `ConditionCheck` on the Chats item. A failed condition re-reads the chat to return `FORBIDDEN`/`NOT_FOUND`, or `CONFLICT` when access still holds.
+- **Tags in responses** are always a sorted array (`withClientAttributes` in `getChat`, the chat list and `assignChat`), because the document client returns a String Set as a JS `Set`, which serializes to `{}`.
+- **Notes poll** re-reads the first page every 15 s only while the details panel is open (the component is not mounted otherwise) and the tab is visible.
+
+### Phase 3 (governance) as built
+- Admin catalog at `/admin/tags` (nav link "Tags"), items in `ClientNotes` under `chatId = CATALOG` (`TAG#<name>`, `SETTINGS`). Max 200 catalog tags.
+- Sensitive-number warning in the note and description editors (Luhn-checked card numbers, passport-like `A1234567`, SG NRIC/FIN, 10-digit Saudi IDs). Client-side and advisory only.
+- Erasure and export hooks: `eraseClientAttributes(chatId)` (hard-deletes all notes and tombstones, REMOVEs description and tags, bumps `profileVersion`) and `exportClientAttributes(chatId)` in `packages/core/src/clients/privacy.js`. Not exposed through any route; the PRD's deferred compliance work adds the request workflow.
+
+### Deferred
+- Tests from §4.8 / §9 (queue payload assertion, acceptance criteria): not written, per the "no tests" rule; verify by hand after deploy.
+- Tag adjacency index for filtering at scale (§4.1), description history items, markdown in notes.
+- Erasure/export API routes and backup (PITR / on-demand) handling: with the PRD's deferred compliance item. Flag notes-as-personal-data to InfoSec before go-live.
+
+### Deploy steps
+1. `cd services/whatsapp && npx serverless deploy --stage <stage>`. This creates `vartalap-<stage>-client-notes` and SSM `/vartalap/<stage>/config/CLIENT_NOTES_TABLE` (non-secret, filled by CloudFormation). No GSI is added, so it can ship in the same deploy as other changes, but F3's `byPublicId` GSI must be in its own deploy if both are new (one GSI per table update).
+2. Restart the web app (`npm run dev -w apps/web`); it picks up `CLIENT_NOTES_TABLE` from SSM with only `AWS_REGION` and `STAGE` set. The developer's role needs `GetItem/PutItem/UpdateItem/DeleteItem/Query/BatchWriteItem` on the new table and `ConditionCheckItem` on `Chats`.
+3. No data migration: existing chats have no F4 attributes and read as empty (`tags: []`, `profileVersion: 0`).
+4. The table has deletion protection; turn it off first if a stage must be torn down.

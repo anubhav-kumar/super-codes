@@ -10,6 +10,16 @@ export const SSM_CONFIG_KEYS = [
   'OUTBOUND_QUEUE_URL',
 ];
 
+// Keys loaded when present but never required at startup: a feature's config may be missing
+// until its stack change is deployed, and only the code that uses it checks it (on use).
+export const SSM_OPTIONAL_CONFIG_KEYS = [
+  // F4: ClientNotes table (web app only; see getClientNotesTable in config.js).
+  'CLIENT_NOTES_TABLE',
+  // F2: media bucket and the GuardDuty clean-tag switch (web app; see media/config.js).
+  'MEDIA_BUCKET',
+  'MEDIA_SCAN_REQUIRED',
+];
+
 export function configPath(stage = process.env.STAGE) {
   return `/vartalap/${stage}/config/`;
 }
@@ -18,9 +28,13 @@ export function configPath(stage = process.env.STAGE) {
 // set wins, so a local override still works. Throws when a key is neither set nor in SSM.
 export async function loadConfigFromSsm() {
   const missing = () => SSM_CONFIG_KEYS.filter((key) => !process.env[key]);
-  if (!missing().length) return;
+  const optionalMissing = SSM_OPTIONAL_CONFIG_KEYS.filter((key) => !process.env[key]);
+  if (!missing().length && !optionalMissing.length) return;
 
-  if (!process.env.STAGE) throw new Error('STAGE must be set to load config from SSM');
+  if (!process.env.STAGE) {
+    if (!missing().length) return; // only optional keys wanted
+    throw new Error('STAGE must be set to load config from SSM');
+  }
   const path = configPath();
 
   const found = {};
@@ -35,10 +49,12 @@ export async function loadConfigFromSsm() {
       NextToken = page.NextToken;
     } while (NextToken);
   } catch (err) {
+    // Only optional keys were wanted: leave them unset, their getters report it on use.
+    if (!missing().length) return;
     throw new Error(`Could not read config from SSM ${path}: ${err.name}`, { cause: err });
   }
 
-  for (const key of SSM_CONFIG_KEYS) {
+  for (const key of [...SSM_CONFIG_KEYS, ...SSM_OPTIONAL_CONFIG_KEYS]) {
     if (!process.env[key] && found[key]) process.env[key] = found[key];
   }
 

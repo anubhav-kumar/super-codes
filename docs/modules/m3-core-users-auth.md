@@ -50,7 +50,7 @@ The cookie helpers are framework-light (header strings plus an options object us
 - **Signing key (updated 2026-10-17):** read from the SSM parameter `/vartalap/<STAGE>/JWT_SECRET` (override the name with `JWT_SECRET_PARAM`), never from env files. It's cached for 5 minutes. It must be at least 32 characters. `signSession` / `verifySession` throw if it is missing, too short or still `CHANGE_ME`, because that's a deployment error, not a bad token.
 - Admins can create admins and agents. Any user can change their own password.
 - `seed-admin.js` is run as `npm run seed -- <email> [name]` (name defaults to `Admin`). If no user with that email exists, it creates the admin with a **generated password and prints it once**, and the admin changes it after first sign-in. Otherwise it exits 0 without changes. No password is read from env files.
-- `npm run seed` runs `node --env-file-if-exists=../apps/web/.env.local seed-admin.js`. It needs AWS credentials plus `AWS_REGION` and `STAGE` (from the shell or `.env.local`). It loads the table names from SSM with `loadConfigFromSsm()`.
+- `npm run seed` runs `node seed-admin.js`. It needs AWS credentials and a region from the shell (`assume` sets `AWS_REGION`); `STAGE` comes from the shell and defaults to `dev` (`scripts/lib/shell-env.js`). It does not read `.env.local`. It loads the table names from SSM with `loadConfigFromSsm()`.
 
 ## Done when
 - [ ] The seed script creates the first admin, and running it again changes nothing.

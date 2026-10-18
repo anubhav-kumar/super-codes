@@ -2,6 +2,7 @@
 
 import { CircleAlert, LoaderCircle, ShieldCheck, UserPlus, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { Select } from '../../../../components/Dropdown.js';
 import { PasswordInput } from '../../../../components/PasswordInput.js';
 import { useToast } from '../../../../components/Toast.js';
 import { Avatar, EmptyState, Skeleton } from '../../../../components/ui.js';
@@ -10,6 +11,10 @@ import { api, errorText } from '../../../../lib/client-api.js';
 import { PASSWORD_MIN_LENGTH } from '../../../../lib/constants.js';
 
 const EMPTY_FORM = { name: '', email: '', role: 'agent', password: '' };
+const ROLE_OPTIONS = [
+  { value: 'agent', label: 'Agent', hint: 'Sees only chats assigned to them' },
+  { value: 'admin', label: 'Admin', hint: 'Sees every chat and manages users' },
+];
 
 function UsersTableSkeleton() {
   return (
@@ -126,10 +131,12 @@ export default function UsersPage() {
             <label className="field-label" htmlFor="new-role">
               Role
             </label>
-            <select id="new-role" className="input select" value={form.role} onChange={set('role')}>
-              <option value="agent">Agent</option>
-              <option value="admin">Admin</option>
-            </select>
+            <Select
+              id="new-role"
+              value={form.role}
+              options={ROLE_OPTIONS}
+              onChange={(role) => setForm((f) => ({ ...f, role }))}
+            />
           </div>
           <div className="field">
             <label className="field-label" htmlFor="new-password">

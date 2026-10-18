@@ -22,7 +22,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { api, errorText } from '../lib/client-api.js';
+import { api, errorText, uploadFile } from '../lib/client-api.js';
 import { chatTitle, formatDay, formatDayLabel, formatFull, formatTime } from '../lib/format.js';
 import { readPref, writePref } from '../lib/prefs.js';
 import { usePolling } from '../lib/use-polling.js';
@@ -30,6 +30,7 @@ import { useShortcuts } from '../lib/use-shortcuts.js';
 import { AssignControl } from './AssignControl.js';
 import { Composer } from './Composer.js';
 import { DetailsPanel } from './DetailsPanel.js';
+import { LocalMediaPreview, MessageBody } from './MessageBody.js'; // F2
 import { useToast } from './Toast.js';
 import { Avatar, EmptyState, IconButton, MessagesSkeleton } from './ui.js';
 import { useUser } from './UserContext.js';
@@ -122,7 +123,8 @@ function useDetailsPanel() {
   return { open, wide, set };
 }
 
-export function Conversation({ chatId }) {
+// F3: `id` is the chat's opaque publicId (from the [id] route); never the phone number.
+export function Conversation({ id }) {
   const user = useUser();
   const toast = useToast();
   const isAdmin = user.role === 'admin';
@@ -147,7 +149,7 @@ export function Conversation({ chatId }) {
 
   const refresh = useCallback(async () => {
     try {
-      const data = await api.getMessages(chatId, { limit: PAGE_SIZE });
+      const data = await api.getMessages(id, { limit: PAGE_SIZE });
       setChat(data.chat);
       setLatest(data.messages);
       setLatestNextBefore(data.nextBefore);
@@ -158,9 +160,9 @@ export function Conversation({ chatId }) {
       if (ACCESS_ERRORS[err.code]) setAccessError(ACCESS_ERRORS[err.code]);
       else setPollError(err.message);
     }
-  }, [chatId]);
+  }, [id]);
 
-  usePolling(refresh, POLL_MS, [chatId]);
+  usePolling(refresh, POLL_MS, [id]);
 
   useEffect(() => {
     if (pollError) toast.error('Connection problem. Retrying…');
@@ -221,7 +223,7 @@ export function Conversation({ chatId }) {
     if (!oldest || loadingOlder) return;
     setLoadingOlder(true);
     try {
-      const data = await api.getMessages(chatId, { before: oldest.messageId, limit: PAGE_SIZE });
+      const data = await api.getMessages(id, { before: oldest.messageId, limit: PAGE_SIZE });
       const el = listRef.current;
       preserveScroll.current = { height: el.scrollHeight, top: el.scrollTop };
       setOlder((prev) => [...prev, ...data.messages]);
@@ -241,7 +243,7 @@ export function Conversation({ chatId }) {
       { tempId, text, state: 'sending' },
     ]);
     try {
-      const { message } = await api.sendMessage(chatId, text);
+      const { message } = await api.sendMessage(id, text);
       setLocal((prev) => prev.filter((m) => m.tempId !== tempId));
       setLatest((prev) =>
         prev.some((m) => m.messageId === message.messageId) ? prev : [message, ...prev],
@@ -253,6 +255,42 @@ export function Conversation({ chatId }) {
           m.tempId === tempId ? { ...m, state: 'error', error: errorText(err) } : m,
         ),
       );
+    }
+  };
+
+  // F2: upload the file straight to S3 (with progress), then send the media message.
+  const sendMedia = async (file, { mimeType }, caption, retryOf) => {
+    const tempId = retryOf ?? `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const patch = (fields) =>
+      setLocal((prev) => prev.map((m) => (m.tempId === tempId ? { ...m, ...fields } : m)));
+    stickToBottom.current = true;
+    setLocal((prev) => [
+      ...prev.filter((m) => m.tempId !== tempId),
+      {
+        tempId,
+        text: caption,
+        media: { file, mimeType, caption },
+        state: 'uploading',
+        progress: 0,
+      },
+    ]);
+    try {
+      const upload = await api.createUpload(id, { mimeType, size: file.size, filename: file.name });
+      await uploadFile(upload, file, { onProgress: (progress) => patch({ progress }) });
+      patch({ state: 'sending' });
+      const { message } = await api.sendMedia(id, {
+        type: upload.kind,
+        uploadId: upload.uploadId,
+        caption,
+        filename: file.name,
+      });
+      setLocal((prev) => prev.filter((m) => m.tempId !== tempId));
+      setLatest((prev) =>
+        prev.some((m) => m.messageId === message.messageId) ? prev : [message, ...prev],
+      );
+    } catch (err) {
+      if (err.code === 'WINDOW_EXPIRED' || err.code === 'FORBIDDEN') refresh();
+      patch({ state: 'error', error: errorText(err) });
     }
   };
 
@@ -285,13 +323,18 @@ export function Conversation({ chatId }) {
           <Link href="/chats" className="icon-button back-link" aria-label="Back to chats">
             <ArrowLeft size={20} aria-hidden="true" />
           </Link>
-          {chat && <Avatar name={chat.clientName} id={chat.chatId} />}
+          {chat && <Avatar name={chat.clientName} id={chat.id} />}
           <div className="conversation-title">
             <h2>{title || ' '}</h2>
             {chat && (
               <span className="conversation-subtitle">
-                <span>{chat.chatId}</span>
-                <span aria-hidden="true">·</span>
+                {/* F3: the number reaches the browser for admins only (chat.phone). */}
+                {chat.phone && (
+                  <>
+                    <span>{chat.phone}</span>
+                    <span aria-hidden="true">·</span>
+                  </>
+                )}
                 <span>{chat.assignee ? `Assigned to ${chat.assignee.name}` : 'Unassigned'}</span>
                 {pollError && (
                   <span className="connection-dot" title={pollError}>
@@ -362,7 +405,7 @@ export function Conversation({ chatId }) {
                                 )}
                               </div>
                             )}
-                            <div className="msg-text">{m.text}</div>
+                            <MessageBody message={m} chatKey={id} />
                             <div className="msg-meta">
                               <time dateTime={m.createdAt} title={formatFull(m.createdAt)}>
                                 {formatTime(m.createdAt)}
@@ -379,12 +422,18 @@ export function Conversation({ chatId }) {
                     <div key={m.tempId} className="msg-row out">
                       <div className={`msg out ${m.state === 'error' ? 'local-error' : ''}`}>
                         <div className="msg-sender">You</div>
-                        <div className="msg-text">{m.text}</div>
+                        {m.media ? (
+                          <LocalMediaPreview item={m} />
+                        ) : (
+                          <div className="msg-text">{m.text}</div>
+                        )}
                         <div className="msg-meta">
-                          {m.state === 'sending' ? (
-                            <span className="msg-status pending">
+                          {m.state !== 'error' ? (
+                            <span className="msg-status pending" aria-live="polite">
                               <Clock size={13} aria-hidden="true" />
-                              Sending…
+                              {m.state === 'uploading'
+                                ? `Uploading… ${Math.round((m.progress ?? 0) * 100)}%`
+                                : 'Sending…'}
                             </span>
                           ) : (
                             <>
@@ -395,7 +444,11 @@ export function Conversation({ chatId }) {
                               <button
                                 type="button"
                                 className="link-button"
-                                onClick={() => send(m.text, m.tempId)}
+                                onClick={() =>
+                                  m.media
+                                    ? sendMedia(m.media.file, m.media, m.media.caption, m.tempId)
+                                    : send(m.text, m.tempId)
+                                }
                               >
                                 Retry
                               </button>
@@ -431,10 +484,23 @@ export function Conversation({ chatId }) {
           )}
         </div>
 
-        {chat && <Composer windowOpen={chat.windowOpen} onSend={(text) => send(text)} />}
+        {chat && (
+          <Composer
+            windowOpen={chat.windowOpen}
+            onSend={(text) => send(text)}
+            onSendMedia={(file, info, caption) => sendMedia(file, info, caption)} // F2
+          />
+        )}
       </section>
 
-      {chat && <DetailsPanel chat={chat} open={details.open} onClose={() => details.set(false)} />}
+      {chat && (
+        <DetailsPanel
+          chat={chat}
+          open={details.open}
+          onClose={() => details.set(false)}
+          onChanged={refresh} // F4: re-read description/tags after an edit
+        />
+      )}
     </div>
   );
 }

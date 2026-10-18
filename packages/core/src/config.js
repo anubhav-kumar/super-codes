@@ -23,3 +23,15 @@ export function getConfig() {
   );
   return cached;
 }
+
+// F4: the ClientNotes table is used only by the web app, so it is not REQUIRED above (the
+// Lambdas never set it and must not fail on its absence). Checked here, on first use.
+export function getClientNotesTable() {
+  const name = process.env.CLIENT_NOTES_TABLE;
+  if (!name) {
+    throw new Error(
+      'Missing CLIENT_NOTES_TABLE; deploy the stack so /vartalap/<stage>/config/CLIENT_NOTES_TABLE exists',
+    );
+  }
+  return name;
+}

@@ -9,6 +9,10 @@ const nextConfig = {
   transpilePackages: ['@vartalap/core'],
   outputFileTracingRoot: repoRoot,
   turbopack: { root: repoRoot },
+  // F3: defence in depth; no URL (chat ids included) is ever sent as Referer to other sites.
+  async headers() {
+    return [{ source: '/:path*', headers: [{ key: 'Referrer-Policy', value: 'same-origin' }] }];
+  },
 };
 
 export default nextConfig;

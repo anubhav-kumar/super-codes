@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { MESSAGE_TEXT_MAX } from './message.js';
+import { TagSchema } from './client.js'; // F4
+import { SendMediaMessageBodySchema } from './media.js'; // F2
 import { PASSWORD_MAX_BYTES, PASSWORD_MIN_LENGTH, ROLES } from './user.js';
 
 const EmailSchema = z.string().trim().toLowerCase().pipe(z.email());
@@ -30,6 +32,8 @@ export const CreateUserBodySchema = z.object({
 
 export const ListChatsQuerySchema = z.object({
   filter: z.enum(['mine', 'unassigned', 'all']).default('mine'),
+  // F4: optional tag filter, normalized like stored tags.
+  tag: TagSchema.optional(),
 });
 
 export const ListMessagesQuerySchema = z.object({
@@ -37,16 +41,22 @@ export const ListMessagesQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(30),
 });
 
-export const SendMessageBodySchema = z.object({
+export const SendTextMessageBodySchema = z.object({
   text: z.string().trim().min(1).max(MESSAGE_TEXT_MAX),
 });
+
+// F2: `{ text }` or `{ type, uploadId, caption?, filename? }` (schemas/media.js).
+export const SendMessageBodySchema = z.union([SendTextMessageBodySchema, SendMediaMessageBodySchema]);
 
 export const AssignBodySchema = z.object({
   userId: z.string().min(1),
 });
 
 // Payload the web API puts on the outbound SQS FIFO queue (consumed by the sender Lambda).
+// F3 Phase 3: phone-free. The sender reads the recipient from the stored message; publicId is
+// for logs only (and is the FIFO group). chatId is accepted from legacy in-flight jobs only.
 export const OutboundQueueMessageSchema = z.object({
   messageId: z.string().min(1),
-  chatId: z.string().min(1),
+  publicId: z.string().min(1).optional(),
+  chatId: z.string().min(1).optional(),
 });

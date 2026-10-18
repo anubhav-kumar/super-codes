@@ -7,8 +7,10 @@ import {
   LogOut,
   MessageSquare,
   Monitor,
+  Smartphone,
   Moon,
   Sun,
+  Tags,
   Users,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -161,9 +163,23 @@ export function AppShell({ children }) {
             <span className="nav-link-label">Chats</span>
           </Link>
           {user.role === 'admin' && (
-            <Link href="/admin/users" className={navClass('/admin')}>
+            <Link href="/admin/users" className={navClass('/admin/users')}>
               <Users size={18} aria-hidden="true" />
               <span className="nav-link-label">Users</span>
+            </Link>
+          )}
+          {/* F4 phase 3: admin tag catalog. */}
+          {user.role === 'admin' && (
+            <Link href="/admin/tags" className={navClass('/admin/tags')}>
+              <Tags size={18} aria-hidden="true" />
+              <span className="nav-link-label">Tags</span>
+            </Link>
+          )}
+          {/* I3 demo: connect a WhatsApp number (Embedded Signup). */}
+          {user.role === 'admin' && (
+            <Link href="/admin/whatsapp" className={navClass('/admin/whatsapp')}>
+              <Smartphone size={18} aria-hidden="true" />
+              <span className="nav-link-label">WhatsApp</span>
             </Link>
           )}
         </nav>

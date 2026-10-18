@@ -27,7 +27,7 @@ There are two types of employees: agents and admins.
 - A seed script creates the first admin with a default password.
 
 ## Chats
-- A chat is one continuous conversation with one client, identified by the client's phone number. There are no sessions or tickets.
+- A chat is one continuous conversation with one client, identified internally by the client's phone number. There are no sessions or tickets. Staff see a chat only by an opaque chat ID (in URLs and the API); agents never see the client's number, admins see it in the conversation header only (F3, `docs/features/f3-hide-client-phone.md`).
 - Only the client can start a chat. The business does not start conversations.
 - There is one WhatsApp number for the business.
 
@@ -56,7 +56,7 @@ WhatsApp only accepts free-form replies within 24 hours of the client's last mes
 | Web app (frontend + backend API) | Next.js (JavaScript), with API routes as the backend | localhost for now, connecting to DynamoDB on AWS through the already configured `assume` CLI |
 | Inbound webhook | AWS Lambda | AWS, deployed with Serverless Framework |
 | Outbound sender | AWS Lambda triggered by SQS | AWS, deployed with Serverless Framework |
-| Outbound queue | SQS FIFO, `MessageGroupId = conversationId` (client phone number) | AWS |
+| Outbound queue | SQS FIFO, `MessageGroupId` = the chat's opaque `publicId` (F3; was the client phone number) | AWS |
 | WhatsApp provider | Meta WhatsApp Cloud API | Meta |
 | Database | DynamoDB | AWS |
 
@@ -68,7 +68,7 @@ Messages are stored as a linked list: every message points to the previous messa
 | Table | Contents |
 |---|---|
 | `Messages` | One item per message, including `prevMessageId`, direction (inbound/outbound), sender (client, agent or admin), text, WhatsApp message ID, status and timestamp. |
-| `Chats` | One item per chat, keyed by client phone number. Holds the **head**: the ID of the latest message, updated every time a new message arrives. Also holds the assigned user and the time of the client's last message. |
+| `Chats` | One item per chat, keyed by client phone number (internal only; exposed as an opaque `publicId`, F3). Holds the **head**: the ID of the latest message, updated every time a new message arrives. Also holds the assigned user and the time of the client's last message. |
 | `Users` | Agents and admins: role, credentials (bcrypt hash) and profile. |
 
 To read a chat, start at the head in `Chats` and follow `prevMessageId` backwards through `Messages`, paging as you go.

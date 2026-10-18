@@ -8,7 +8,7 @@ Prove the full round trip on the `dev` stage with a real WhatsApp test number, a
 ## Steps
 1. `serverless deploy --stage dev`, then overwrite the four placeholder SSM parameters `/vartalap/dev/WA_*` with the Meta credentials (`aws ssm put-parameter --overwrite`).
 2. Register the webhook URL and verify token in the Meta app, and subscribe to `messages`.
-3. Put `AWS_REGION` and `STAGE` in `apps/web/.env.local`, run `npm run seed -- <email> [name]`, then `npm run dev`.
+3. Put `AWS_REGION` and `STAGE` in `apps/web/.env.local` (for the web app), run `assume`, then `npm run seed -- <email> [name]` (region from the shell, stage defaults to `dev`), then `npm run dev`.
 4. Walk through the scenarios below.
 5. Write `docs/runbook.md`: setup, environment variables, deploy/remove, how to inspect and redrive the DLQ, and how to rotate the WhatsApp token.
 

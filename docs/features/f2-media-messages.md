@@ -1,6 +1,6 @@
 # F2: Media Messages
 
-Status: Research · 2026-10-17 · Depends on: M2, M5, M6, M7, M8
+Status: Built (P1–P3; P4 partly: lazy expiry + client-media deletion script; voice recording and larger documents deferred). Not yet deployed or tested on `dev`. · 2026-10-17 · Depends on: M2, M5, M6, M7, M8, F3
 
 > **Cross-feature dependency on F3 (added in review):** WhatsApp message IDs (`wamid`) embed the client's phone number (confirmed in [F3](f3-hide-client-phone.md) §3). Today an inbound `messageId` is the wamid, so F2 must not ship before **F3 Phase 2** (inbound ULID message IDs), or follow these rules:
 > - S3 keys (`in/<messageId>`) and the media route (`/messages/<messageId>/media`) must use the ULID message ID, never a wamid. Presigned URLs carry the S3 key to the browser.
@@ -231,3 +231,64 @@ Because of the redirect, `<img src>`, `<audio src>` and `<video src>` work with 
 - [ ] Attach is disabled when the 24-hour window has expired, and the API rejects a media send with `WINDOW_EXPIRED`.
 - [ ] A file GuardDuty flags as malicious can't be downloaded from the UI.
 - [ ] (P3) The test result for a video note is recorded in this note, and the UI handles that case.
+
+## 10. Implementation notes (2026-10-17)
+
+Built against F3's opaque IDs: inbound `messageId` is a ULID, routes live under `/api/chats/[id]/…`, and every message leaves the API through `toMessageView`, which now also calls F2's `stripMediaInternals` (drops `media.waMediaId`, `media.s3Key`, `media.sha256`). S3 keys are `in/<messageId>` and `out/<messageId>`. No phone number, wamid or Meta media ID is in any key, URL, queue body or response. Nothing has been deployed, run against AWS or tested live.
+
+### Decisions taken (recommended defaults)
+| # | Taken |
+|---|---|
+| D1 | Async fetch: webhook → `MediaFetchQueue` (standard, 5 receives, DLQ) → `mediaFetch` Lambda (1024 MB, 120 s). |
+| D2 | GuardDuty Malware Protection for S3 on `in/` and `out/`, tagging on. Downloads and outbound sends wait for `NO_THREATS_FOUND`. `MEDIA_SCAN_REQUIRED=false` (serverless param `mediaScanRequired`) turns the check off if the feature is unavailable. |
+| D3 | Outbound documents capped at 16 MB. Sender raised to 512 MB / 90 s (visibility 540 s) for the scan wait + upload. |
+| D4 | 90-day retention by S3 lifecycle (`expire-media`). A missing object is marked `media.state = 'expired'` lazily by the media route. |
+| D5 | Reactions update only the target message (`reactions.client`). No chat head, window or list-order change. |
+| D6 | Contact cards store `formattedName` + `phoneCount` only. |
+| D7 | SSE-S3. |
+| D8 | `played` status ignored quietly in `parse.js`. |
+| D9 | Magic-byte sniff (`packages/core/src/media/sniff.js`) on inbound files (mediaFetch) and outbound files (sender). Executables, HTML/SVG/XML content are always rejected. |
+| D10 | No thumbnails. Originals load lazily. |
+
+### Other design choices and assumptions
+- **`text` stays the summary** (`[Photo] caption`, `[Voice note]`, `[Document] name.pdf`). The caption is also stored as `media.caption` so the UI can show it under the media. `lastMessagePreview` needs no change.
+- **uploadId = messageId.** The uploads route issues a ULID. The send route uses it as the message ID, so the file's key is `out/<messageId>` and a repeated send of one upload is rejected (`409 CONFLICT`). The presigned POST binds the exact size, Content-Type and `x-amz-meta-uploader` (user ID). The send route checks all three with HeadObject.
+- **Scan gating is in the app, not the bucket policy.** The bucket policy denies `GetObject` only for `THREATS_FOUND` objects, because the web app must HeadObject an upload before its scan finishes. The media route and sender treat a missing tag as "scanning" and `UNSUPPORTED`/`FAILED`/`ACCESS_DENIED` as blocked.
+- **Failed media enqueue:** the webhook returns 500 so Meta redelivers. The duplicate delivery looks the message up by wamid and re-queues the fetch while it's still `pending`.
+- **Inbound Content-Type:** stored as the base MIME when it is on the kind's allowlist (or inline-safe audio/video/image), otherwise `application/octet-stream`. Documents are always served as attachments.
+- **Meta `sha256`:** its encoding (hex or base64) isn't documented. A mismatch is logged (`media.sha256_mismatch`), not rejected. Tighten after checking on `dev`.
+- **New error codes:** `MEDIA_PENDING` (409), `MEDIA_UNAVAILABLE` (410).
+- **Video (P3):** the inbound and outbound paths are the same as other media (MP4/3GPP, 16 MB). A failed send with 131053 shows "WhatsApp rejected the file format. For video use MP4 (H.264 + AAC)".
+- **Video notes:** default handling only. If one arrives as `video`, it renders as a normal video. If it arrives as `unsupported` with a type containing `video_note`/`round_video`/`ptv`, the bubble reads "Video note: not supported by the WhatsApp Cloud API. Ask the client to send it as a video." Any other unsupported type reads `[Unsupported message: <type>]`.
+- **Scan wait in the UI:** a media element that fails to load (409 while scanning) is retried every 5 s, up to 6 times, then shows "Media unavailable" with a Retry button.
+
+### Files
+- Core: `packages/core/src/media/{constants,sniff,summary,config,index}.js`, `schemas/media.js`, `messages/media.js` (new). Changed: `schemas/message.js`, `schemas/api.js`, `messages/append.js`, `messages/view.js`, `messages/index.js`, `index.js`, `errors.js`, `config-loader.js`.
+- Service: `src/handlers/media-fetch.js`, `src/whatsapp/media.js`, `src/whatsapp/send-media.js`, `src/lib/s3.js`, `src/lib/media-queue.js` (new). Changed: `src/whatsapp/parse.js`, `src/whatsapp/client.js`, `src/handlers/webhook.js`, `src/handlers/sender.js`, `serverless.yml`, `README.md`, `package.json`.
+- Web: `app/api/chats/[id]/uploads/route.js`, `app/api/chats/[id]/messages/[messageId]/media/route.js`, `lib/media.js`, `components/MessageBody.js` (new). Changed: `app/api/chats/[id]/messages/route.js`, `lib/client-api.js`, `lib/constants.js`, `components/Conversation.js`, `components/Composer.js`, `app/globals.css`, `package.json`.
+- Scripts: `scripts/delete-client-media.js` (new; never run), `scripts/package.json`.
+- New dependencies: `@aws-sdk/client-s3`, `@aws-sdk/s3-presigned-post`, `@aws-sdk/s3-request-presigner`, `ulid` (web), `@aws-sdk/client-s3`, `@aws-sdk/client-sqs`, `@aws-sdk/lib-storage` (service), `@aws-sdk/client-s3` (scripts).
+
+### Deferred
+- **Voice-note recording** in the browser (needs ogg/opus transcoding, e.g. an ffmpeg layer). Agents can send audio files.
+- **Outbound documents over 16 MB** (needs a bigger sender or a streaming upload to Meta).
+- **`played` status** for voice notes.
+- **Orphan uploads** (uploaded, never sent) are not tagged for 1-day expiry. Tagging would race GuardDuty's own tag write (PutObjectTagging replaces the whole tag set). They expire under the 90-day rule. A cleanup job can be added later.
+- **Automatic client-data deletion:** `scripts/delete-client-media.js` is a manual hook. It deletes a chat's files and marks them `expired`. A full client-deletion flow (messages, chat, notes) is still the PRD's deferred retention work.
+- **Saudi PDPL data residency** for the bucket (`ap-south-1`) is not assessed. Route it to InfoSec/Legal before going beyond the trial.
+- **Seeking in long videos** after the 300 s presigned link expires needs a reload of the bubble.
+
+### Deploy steps
+1. **Review the GuardDuty role** (`MediaMalwareProtectionRole` in `serverless.yml`) against the current AWS docs for Malware Protection for S3. It was written from memory and is **unverified**. The deploying role also needs `iam:PassRole` on it and `guardduty:CreateMalwareProtectionPlan`, plus S3 bucket and policy permissions.
+2. Set the serverless params if the defaults don't fit: `mediaWebOrigin` (the web app's origin for S3 CORS, default `http://localhost:3000`) and `mediaScanRequired` (`'true'`).
+3. Deploy the stack (it bundles core into every Lambda, so the webhook, sender and mediaFetch all update). F2 adds no DynamoDB GSI. If F3's `byPublicId` GSI is being created in the same deploy, that is fine, because F2 adds none.
+4. New SSM parameters (created by CloudFormation, no manual value needed): `/vartalap/<stage>/config/MEDIA_BUCKET` and `/vartalap/<stage>/config/MEDIA_SCAN_REQUIRED`. Both are optional for the web app. Without them, media routes return 500 "Media storage is not configured" and everything else works.
+5. Add the `VartalapMediaF2` statement to the web app's role (see `services/whatsapp/README.md`). Restart the web app so it loads the new config keys.
+6. Run `npm install` at the repo root (lockfile already updated).
+7. **Verify on `dev`:**
+   - Send a photo, a PDF, a voice note, an audio file, a sticker, a location, a contact and a reaction from a test phone. Check the acceptance criteria in §9.
+   - **Video note:** send a round video note and record the observed webhook `type` here (`video` or `unsupported` + its `unsupported.type`). If it's `unsupported` with a different type name, add that name to `unsupportedSummary` in `packages/core/src/media/summary.js`.
+   - Check how Meta encodes `sha256` in `GET /{media-id}` (hex or base64). If it reliably matches, make a mismatch fail the fetch in `media-fetch.js`.
+   - Check that GuardDuty tags objects within a few seconds (sender waits ≤ 15 s, then retries through SQS).
+   - Send a JPEG, a PDF, an MP3 and an MP4 from the UI. Try a 6 MB JPEG (rejected before upload) and a non-H.264 video (expect 131053 and the hint).
+

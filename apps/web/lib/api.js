@@ -3,9 +3,11 @@ import {
   ERROR_HTTP_STATUS,
   UNASSIGNED,
   getChat,
+  getChatIdByPublicId,
   getUserById,
   isWindowOpen,
-  normalizePhone,
+  toChatView,
+  toMessageView,
 } from '@vartalap/core';
 import { SESSION_COOKIE, verifySession } from './session.js';
 
@@ -108,30 +110,19 @@ export function parseQuery(request, schema) {
   return result.data;
 }
 
-function safeDecode(value) {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
-
-// [phone] route param → E.164 chatId. Accepts '+65…', '%2B65…' or bare digits.
+// F3: [id] route param (the chat's opaque publicId) → internal chatId (E.164), or null when
+// the id is malformed or unknown. Never validates or echoes the param, so an old phone URL
+// gets exactly the same answer as a missing chat once loadChatFor runs (D8): agents 403,
+// admins 404.
 export async function getChatId(context) {
-  const { phone } = await context.params;
-  const chatId = normalizePhone(safeDecode(String(phone ?? '')));
-  if (!chatId) {
-    throw new AppError('VALIDATION', 'Invalid phone number', {
-      issues: [{ path: ['phone'], message: 'Must be an E.164 phone number' }],
-    });
-  }
-  return chatId;
+  const { id } = await context.params;
+  return getChatIdByPublicId(String(id ?? ''));
 }
 
 // Loads a chat the user may act on. Non-admins get FORBIDDEN for a missing chat too, so
-// guessing phone numbers in the URL doesn't reveal which chats exist.
+// guessing ids in the URL doesn't reveal which chats exist. chatId may be null (unknown id).
 export async function loadChatFor(user, chatId, assertAllowed) {
-  const chat = await getChat(chatId, { consistent: true });
+  const chat = chatId ? await getChat(chatId, { consistent: true }) : null;
   if (!chat) {
     if (user.role === 'admin') throw new AppError('NOT_FOUND', 'Chat not found');
     throw new AppError('FORBIDDEN', 'You cannot access this chat');
@@ -147,5 +138,30 @@ export async function toChatSummary(chat) {
     const user = await getUserById(chat.assignedTo);
     assignee = { userId: chat.assignedTo, name: user?.name ?? chat.assignedTo };
   }
-  return { ...chat, assignee, windowOpen: isWindowOpen(chat) };
+  // F4: last description editor as { userId, name } (null when never edited).
+  let descriptionUpdatedBy = null;
+  if (chat.descriptionUpdatedBy) {
+    const editor =
+      chat.descriptionUpdatedBy === chat.assignedTo && assignee
+        ? assignee
+        : await getUserById(chat.descriptionUpdatedBy);
+    descriptionUpdatedBy = {
+      userId: chat.descriptionUpdatedBy,
+      name: editor?.name ?? chat.descriptionUpdatedBy,
+    };
+  }
+  return { ...chat, assignee, windowOpen: isWindowOpen(chat), descriptionUpdatedBy };
 }
+
+// F3: route-side shorthand for `getChatId` + `loadChatFor`.
+export async function resolveChat(context, user, assertAllowed) {
+  return loadChatFor(user, await getChatId(context), assertAllowed);
+}
+
+// F3: single-chat response body (ChatView with assignee and windowOpen) for `user`'s role.
+export async function chatResponse(chat, user) {
+  return toChatView(await toChatSummary(chat), user);
+}
+
+// F3: every chat/message leaving the API goes through these views (no chatId, phone or wamid).
+export { toChatView, toMessageView };

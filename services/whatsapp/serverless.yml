@@ -9,8 +9,24 @@ params:
     # Graph API version used by the WhatsApp Cloud API client (M6).
     waGraphVersion: v26.0
     # Sender timeout drives the queue visibility timeout (>= 6x, per AWS guidance).
-    senderTimeout: 30
-    outboundVisibilityTimeout: 180
+    # F2: raised from 30 / 180 for media sends (scan wait up to 15 s + upload of up to 16 MB).
+    senderTimeout: 90
+    outboundVisibilityTimeout: 540
+    # ---- F2: media messages ----
+    # mediaFetch copies inbound media (up to 100 MB) from Meta to S3; visibility >= 6x timeout.
+    mediaFetchTimeout: 120
+    mediaFetchVisibilityTimeout: 720
+    # 'false' skips the GuardDuty clean-tag check (only if Malware Protection is unavailable).
+    mediaScanRequired: 'true'
+    # Browser origin allowed to POST uploads straight to the media bucket (CORS).
+    mediaWebOrigin: http://localhost:3000
+    # I3 demo: Embedded Signup needs HTTPS, so the demo runs `npm run dev:https`.
+    mediaWebOriginHttps: https://localhost:3000
+    # How long Lambdas cache WA_* SSM values (src/lib/params.js). Short on dev so a number
+    # connected from the web app (I3 demo) is used within seconds.
+    waParamsCacheSeconds: '300'
+  dev:
+    waParamsCacheSeconds: '30'
 
 build:
   esbuild:
@@ -42,6 +58,7 @@ provider:
     CHATS_TABLE: !Ref ChatsTable
     USERS_TABLE: !Ref UsersTable
     OUTBOUND_QUEUE_URL: !Ref OutboundQueue
+    WA_PARAMS_CACHE_SECONDS: ${param:waParamsCacheSeconds}
     # WhatsApp settings live in SSM parameters created by this stack (resources below).
     # Functions get only the parameter *names* they need and read the values at runtime
     # (src/lib/params.js), so values are never baked into the deployment.
@@ -57,6 +74,8 @@ functions:
       WA_PHONE_NUMBER_ID_PARAM: !Ref WaPhoneNumberIdParam
       WA_APP_SECRET_PARAM: !Ref WaAppSecretParam
       WA_VERIFY_TOKEN_PARAM: !Ref WaVerifyTokenParam
+      # F2: inbound media is fetched asynchronously by mediaFetch.
+      MEDIA_FETCH_QUEUE_URL: !Ref MediaFetchQueue
     timeout: 10
     events:
       - httpApi:
@@ -122,6 +141,12 @@ functions:
                   - !Ref AWS::AccountId
                   - ':parameter'
                   - !Ref WaVerifyTokenParam
+          # F2: hand inbound media to mediaFetch.
+          - Effect: Allow
+            Action:
+              - sqs:SendMessage
+            Resource:
+              - !GetAtt MediaFetchQueue.Arn
 
   sender:
     handler: src/handlers/sender.handler
@@ -129,7 +154,12 @@ functions:
       WA_GRAPH_VERSION: ${param:waGraphVersion}
       WA_PHONE_NUMBER_ID_PARAM: !Ref WaPhoneNumberIdParam
       WA_ACCESS_TOKEN_PARAM: !Ref WaAccessTokenParam
+      # F2: outbound files are read from out/<messageId> after the malware scan.
+      MEDIA_BUCKET: !Ref MediaBucket
+      MEDIA_SCAN_REQUIRED: ${param:mediaScanRequired}
     timeout: ${param:senderTimeout}
+    # F2: holds one outbound file (<= 16 MB) in memory while uploading it to Meta.
+    memorySize: 512
     events:
       - sqs:
           arn: !GetAtt OutboundQueue.Arn
@@ -169,6 +199,72 @@ functions:
                   - !Ref AWS::AccountId
                   - ':parameter'
                   - !Ref WaAccessTokenParam
+          # F2: read agents' uploads (and their GuardDuty scan tag) under out/ only.
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:GetObjectTagging
+            Resource:
+              - !Join ['', [!GetAtt MediaBucket.Arn, '/out/*']]
+
+  # ---- F2: media fetch -------------------------------------------------------------------
+  # Copies inbound media from the Cloud API into S3 (in/<messageId>), streaming, then marks the
+  # message's media ready. Fed by the webhook through MediaFetchQueue (standard + DLQ).
+  mediaFetch:
+    handler: src/handlers/media-fetch.handler
+    environment:
+      WA_GRAPH_VERSION: ${param:waGraphVersion}
+      WA_PHONE_NUMBER_ID_PARAM: !Ref WaPhoneNumberIdParam
+      WA_ACCESS_TOKEN_PARAM: !Ref WaAccessTokenParam
+      MEDIA_BUCKET: !Ref MediaBucket
+    timeout: ${param:mediaFetchTimeout}
+    memorySize: 1024
+    events:
+      - sqs:
+          arn: !GetAtt MediaFetchQueue.Arn
+          batchSize: 1
+    iam:
+      inheritStatements: false
+      role:
+        statements:
+          - Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:UpdateItem
+            Resource:
+              - !GetAtt MessagesTable.Arn
+          - Effect: Allow
+            Action:
+              - s3:PutObject
+              - s3:DeleteObject
+              - s3:AbortMultipartUpload
+            Resource:
+              - !Join ['', [!GetAtt MediaBucket.Arn, '/in/*']]
+          - Effect: Allow
+            Action:
+              - ssm:GetParameters
+            Resource:
+              - !Join
+                - ''
+                - - 'arn:'
+                  - !Ref AWS::Partition
+                  - ':ssm:'
+                  - !Ref AWS::Region
+                  - ':'
+                  - !Ref AWS::AccountId
+                  - ':parameter'
+                  - !Ref WaPhoneNumberIdParam
+              - !Join
+                - ''
+                - - 'arn:'
+                  - !Ref AWS::Partition
+                  - ':ssm:'
+                  - !Ref AWS::Region
+                  - ':'
+                  - !Ref AWS::AccountId
+                  - ':parameter'
+                  - !Ref WaAccessTokenParam
+  # ---- end F2 ----------------------------------------------------------------------------
 
 resources:
   Resources:
@@ -247,6 +343,253 @@ resources:
         Type: String
         Value: !Ref OutboundQueue
 
+    # ---- F2: media messages ---------------------------------------------------------------
+    # Private bucket for inbound (in/<messageId>) and outbound (out/<messageId>) files. Keys hold
+    # only ULID message IDs: no phone numbers, wamids or Meta media IDs. Browsers upload with a
+    # presigned POST from the web app and download through short-lived presigned GETs.
+    # Retained on stack removal so files are never deleted by accident; empty it by hand first.
+    MediaBucket:
+      Type: AWS::S3::Bucket
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        # Account ID keeps the global bucket name unique.
+        BucketName: vartalap-${sls:stage}-media-${aws:accountId}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        OwnershipControls:
+          Rules:
+            - ObjectOwnership: BucketOwnerEnforced
+        # Decision D7: SSE-S3 for the trial; switch to SSE-KMS if ISO 27001 key control needs it
+        # (the GuardDuty role then also needs kms:Decrypt / GenerateDataKey on that key).
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: AES256
+        LifecycleConfiguration:
+          Rules:
+            - Id: abort-incomplete-multipart
+              Status: Enabled
+              Prefix: ''
+              AbortIncompleteMultipartUpload:
+                DaysAfterInitiation: 1
+            # Decision D4: 90-day retention (keep MEDIA_RETENTION_DAYS in core in sync). The
+            # message text stays; the UI shows the media as expired. Unsent uploads also expire
+            # here (see the F2 note, deferred items).
+            - Id: expire-media
+              Status: Enabled
+              Prefix: ''
+              ExpirationInDays: 90
+        CorsConfiguration:
+          CorsRules:
+            - AllowedMethods: [POST]
+              AllowedOrigins: ['${param:mediaWebOrigin}', '${param:mediaWebOriginHttps}']
+              AllowedHeaders: ['*']
+              MaxAge: 3000
+
+    MediaBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: !Ref MediaBucket
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Sid: DenyInsecureTransport
+              Effect: Deny
+              Principal: '*'
+              Action: 's3:*'
+              Resource:
+                - !GetAtt MediaBucket.Arn
+                - !Join ['', [!GetAtt MediaBucket.Arn, '/*']]
+              Condition:
+                Bool:
+                  aws:SecureTransport: 'false'
+            # Defence in depth: nobody can read an object GuardDuty flagged. Unscanned objects
+            # are blocked by the app (media route and sender check for NO_THREATS_FOUND), not
+            # here, because the web app must HeadObject an upload before its scan finishes.
+            - Sid: DenyInfectedObjects
+              Effect: Deny
+              Principal: '*'
+              Action: 's3:GetObject'
+              Resource: !Join ['', [!GetAtt MediaBucket.Arn, '/*']]
+              Condition:
+                StringEquals:
+                  s3:ExistingObjectTag/GuardDutyMalwareScanStatus: THREATS_FOUND
+
+    MediaFetchDlq:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: vartalap-${sls:stage}-media-fetch-dlq
+        MessageRetentionPeriod: 1209600
+
+    # Standard queue: order doesn't matter, the message is already linked into the chat.
+    # Webhook media IDs last 7 days, which leaves room for these retries.
+    MediaFetchQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: vartalap-${sls:stage}-media-fetch
+        VisibilityTimeout: ${param:mediaFetchVisibilityTimeout}
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt MediaFetchDlq.Arn
+          # Keep in sync with MAX_RECEIVE_COUNT in src/handlers/media-fetch.js.
+          maxReceiveCount: 5
+
+    # Decision D2: GuardDuty Malware Protection for S3 scans every new object and tags it
+    # GuardDutyMalwareScanStatus=NO_THREATS_FOUND | THREATS_FOUND | UNSUPPORTED | ACCESS_DENIED |
+    # FAILED. The role below follows the AWS-documented policy for this feature as recalled;
+    # it is UNVERIFIED against the current AWS docs ("IAM PassRole / role permissions for
+    # Malware Protection for S3"): compare it before the first deploy.
+    MediaMalwareProtectionRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: malware-protection-plan.guardduty.amazonaws.com
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: media-malware-protection
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Sid: AllowManagedRuleToSendS3EventsToGuardDuty
+                  Effect: Allow
+                  Action:
+                    - events:PutRule
+                    - events:DeleteRule
+                    - events:PutTargets
+                    - events:RemoveTargets
+                  Resource: !Join
+                    - ''
+                    - - 'arn:'
+                      - !Ref AWS::Partition
+                      - ':events:'
+                      - !Ref AWS::Region
+                      - ':'
+                      - !Ref AWS::AccountId
+                      - ':rule/DO-NOT-DELETE-AmazonGuardDutyMalwareProtectionS3*'
+                  Condition:
+                    StringLike:
+                      events:ManagedBy: malware-protection-plan.guardduty.amazonaws.com
+                - Sid: AllowGuardDutyToMonitorEventBridgeManagedRule
+                  Effect: Allow
+                  Action:
+                    - events:DescribeRule
+                    - events:ListTargetsByRule
+                  Resource: !Join
+                    - ''
+                    - - 'arn:'
+                      - !Ref AWS::Partition
+                      - ':events:'
+                      - !Ref AWS::Region
+                      - ':'
+                      - !Ref AWS::AccountId
+                      - ':rule/DO-NOT-DELETE-AmazonGuardDutyMalwareProtectionS3*'
+                - Sid: AllowPostScanTag
+                  Effect: Allow
+                  Action:
+                    - s3:PutObjectTagging
+                    - s3:GetObjectTagging
+                    - s3:PutObjectVersionTagging
+                    - s3:GetObjectVersionTagging
+                  Resource: !Join ['', [!GetAtt MediaBucket.Arn, '/*']]
+                - Sid: AllowEnableS3EventBridgeEvents
+                  Effect: Allow
+                  Action:
+                    - s3:PutBucketNotification
+                    - s3:GetBucketNotification
+                  Resource: !GetAtt MediaBucket.Arn
+                - Sid: AllowPutValidationObject
+                  Effect: Allow
+                  Action:
+                    - s3:PutObject
+                  Resource: !Join
+                    - ''
+                    - - !GetAtt MediaBucket.Arn
+                      - '/malware-protection-resource-validation-object'
+                - Sid: AllowCheckBucketOwnership
+                  Effect: Allow
+                  Action:
+                    - s3:ListBucket
+                  Resource: !GetAtt MediaBucket.Arn
+                - Sid: AllowMalwareScan
+                  Effect: Allow
+                  Action:
+                    - s3:GetObject
+                    - s3:GetObjectVersion
+                  Resource: !Join ['', [!GetAtt MediaBucket.Arn, '/*']]
+
+    MediaMalwareProtectionPlan:
+      Type: AWS::GuardDuty::MalwareProtectionPlan
+      Properties:
+        Role: !GetAtt MediaMalwareProtectionRole.Arn
+        ProtectedResource:
+          S3Bucket:
+            BucketName: !Ref MediaBucket
+            ObjectPrefixes:
+              - in/
+              - out/
+        Actions:
+          Tagging:
+            Status: ENABLED
+
+    # Published for the web app (optional keys in core config-loader.js).
+    ConfigMediaBucketParam:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /vartalap/${sls:stage}/config/MEDIA_BUCKET
+        Type: String
+        Value: !Ref MediaBucket
+
+    ConfigMediaScanRequiredParam:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /vartalap/${sls:stage}/config/MEDIA_SCAN_REQUIRED
+        Type: String
+        Value: ${param:mediaScanRequired}
+    # ---- end F2 ---------------------------------------------------------------------------
+
+    # ---- F4: client attributes (description, notes, tags) -----------------------------------
+    # Notes live in their own table (PK chatId = the Chats key, SK noteId = ULID), so they never
+    # grow the Chats item. The same table holds the admin tag catalog under chatId 'CATALOG'.
+    # Description and tags are attributes on the Chats item and need no new resources.
+    # Used by the web app only: no Lambda gets CLIENT_NOTES_TABLE or any IAM access to it
+    # (perFunction roles), and getConfig() does not require it. The web app reads the name
+    # from SSM (an optional key in config-loader.js) and runs with the developer's role; a
+    # future deployed web app's role needs GetItem/PutItem/UpdateItem/DeleteItem/Query/
+    # BatchWriteItem on ClientNotesTable plus ConditionCheckItem/UpdateItem on ChatsTable.
+    # PITR is deliberately off for the trial: it would keep erased notes for up to 35 days
+    # (f4 note, open decision 8). Revisit with InfoSec before go-live.
+    ClientNotesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: vartalap-${sls:stage}-client-notes
+        BillingMode: PAY_PER_REQUEST
+        DeletionProtectionEnabled: true
+        AttributeDefinitions:
+          - AttributeName: chatId
+            AttributeType: S
+          - AttributeName: noteId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: chatId
+            KeyType: HASH
+          - AttributeName: noteId
+            KeyType: RANGE
+
+    ConfigClientNotesTableParam:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /vartalap/${sls:stage}/config/CLIENT_NOTES_TABLE
+        Type: String
+        Value: !Ref ClientNotesTable
+    # ---- end F4 -----------------------------------------------------------------------------
+
     MessagesTable:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -280,6 +623,9 @@ resources:
             AttributeType: S
           - AttributeName: lastMessageAt
             AttributeType: S
+          # F3: opaque chat id used in URLs and API responses instead of the phone number.
+          - AttributeName: publicId
+            AttributeType: S
         KeySchema:
           - AttributeName: chatId
             KeyType: HASH
@@ -292,6 +638,14 @@ resources:
                 KeyType: RANGE
             Projection:
               ProjectionType: ALL
+          # F3: publicId → chatId (sparse until the backfill has run). Only one GSI can be
+          # created per stack update, so deploy this on its own if another GSI is also new.
+          - IndexName: byPublicId
+            KeySchema:
+              - AttributeName: publicId
+                KeyType: HASH
+            Projection:
+              ProjectionType: KEYS_ONLY
 
     UsersTable:
       Type: AWS::DynamoDB::Table
@@ -341,10 +695,18 @@ resources:
       Value: !Ref ChatsTable
     UsersTableName:
       Value: !Ref UsersTable
+    # F4
+    ClientNotesTableName:
+      Value: !Ref ClientNotesTable
     OutboundQueueUrl:
       Value: !Ref OutboundQueue
     OutboundDlqUrl:
       Value: !Ref OutboundDlq
+    # F2
+    MediaBucketName:
+      Value: !Ref MediaBucket
+    MediaFetchDlqUrl:
+      Value: !Ref MediaFetchDlq
     WaParameterNames:
       Description: SSM parameters to set with real values after the first deploy.
       Value: !Join

@@ -18,7 +18,7 @@ Read the WhatsApp values with `getParams(['WA_PHONE_NUMBER_ID', 'WA_APP_SECRET',
   2. `parse.js` turns `entry[].changes[].value` into two lists: `messages` and `statuses`. Ignore events for a different `phone_number_id`.
   3. **For each inbound message:**
      - `type === 'text'`: `appendMessage` with:
-       - `messageId = wamid`, `direction: 'in'`, `senderType: 'client'`, `isClientMessage: true`;
+       - `waMessageId = wamid` (no `messageId`: core assigns a ULID and dedups with a `WAMID#` guard item, F3), `direction: 'in'`, `senderType: 'client'`, `isClientMessage: true`;
        - `chatId` = sender `wa_id` normalized to E.164;
        - `clientName` from `contacts[].profile.name`.
      - Other types (image, audio, etc.): store a placeholder text message, `"[unsupported: <type>]"`, so the agent knows something arrived. Supporting them properly is out of scope for v1.
@@ -26,7 +26,7 @@ Read the WhatsApp values with `getParams(['WA_PHONE_NUMBER_ID', 'WA_APP_SECRET',
   5. Return `200` once the batch is processed. A failure on one item is logged and the others still go through. Meta retries non-`200` responses, and duplicates are already safe.
 
 ## Logging
-Log event counts, wamids and the last 4 digits of phone numbers. Never log message text or full numbers.
+Log event counts, wamids, the stored `messageId` and the last 4 digits of phone numbers. Never log message text or full numbers. (A wamid base64-embeds the number; it stays in server logs only, as before. See the F3 note's deferred items.)
 
 ## Implementation notes
 - **Event:** API Gateway HTTP API, payload v2. The signature is computed over the raw body bytes (base64-decoded first when `isBase64Encoded`). A missing, non-`sha256=` or wrong-length header returns `401` without throwing.
@@ -48,8 +48,14 @@ Log event counts, wamids and the last 4 digits of phone numbers. Never log messa
 
 ## Known limitations (v1)
 - Only `changes[].field === "messages"` is processed, and only for the configured `phone_number_id`.
-- Only `type: "text"` is stored as text. Images, audio, video, documents, stickers, locations, contacts, **button/list replies** (`button`, `interactive`) and **reactions** are stored as `[unsupported: <type>]`.
+- ~~Only `type: "text"` is stored as text.~~ **Resolved by F2** ([f2-media-messages.md](../features/f2-media-messages.md)): images, video, audio/voice notes, documents and stickers are stored as media messages (file fetched asynchronously by `mediaFetch`); locations, contacts (name + phone count only), button/list replies and reactions (badge on the target message) are parsed. Polls, edits and other `unsupported` types show `[Unsupported message: <type>]`. Video notes: behaviour unverified (see the F2 note).
+- The voice-note `played` status is ignored quietly (F2 decision D8).
 - **WhatsApp Business app (coexistence):** messages staff send from the phone app arrive as `smb_message_echoes` and are ignored, so Vartalap doesn't show them.
 - Statuses for messages Vartalap didn't send (e.g. templates from another system) are logged as `status_unknown_message` and skipped.
 - Meta's dashboard **Test** webhook uses a fake `phone_number_id`, so it's skipped as `other_phone_number_id` (still 200).
 
+
+## F2 changes (media messages, 2026-10-17)
+- `parse.js` maps every inbound type: `image|video|audio|document|sticker` → a `media` object (`waMediaId`, `mimeType`, `sha256`, `caption`, `filename`, `voice`, `animated`, `state: 'pending'`), `location`, `contacts` (`formattedName`, `phoneCount` only), `interactive`/`button` (reply title as text), `unsupported` (clearer placeholder). `errors[]` 131052 → `media.state: 'too_large'`, text `[File too large to receive]`. Reactions are returned separately. `text` is always a summary such as `[Photo] caption`.
+- `webhook.js` appends media messages like text, then sends `{ messageId }` to `MediaFetchQueue` (`MEDIA_FETCH_QUEUE_URL`). If that enqueue fails it returns **500** so Meta redelivers; the duplicate delivery re-queues the fetch while the stored media is still pending. Reactions call `setClientReaction` on the target message (found by `byWaMessageId`, same chat only) and never move the chat head.
+- New `src/handlers/media-fetch.js` (+ `src/whatsapp/media.js`, `src/lib/s3.js`): resolves the media ID, streams the file to `in/<messageId>` with `@aws-sdk/lib-storage`, counts bytes (100 MB cap), checks magic bytes (D9), and sets `media.state` to `ready` / `failed` / `too_large` / `expired`. 5 receives, then DLQ; the last attempt marks it `failed`. Logs hold messageId, mime type, size and state only.

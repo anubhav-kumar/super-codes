@@ -21,8 +21,9 @@ Set up the repository skeleton, plus the shared contracts (data schemas, API sha
 
 ### Data shapes
 See `docs/arch/boilerplate.md` section 4 for the table design. The Zod schemas must match it exactly:
-- `Message`: `messageId`, `chatId`, `prevMessageId | null`, `direction ('in'|'out')`, `senderType ('client'|'agent'|'admin')`, `senderId | null`, `type ('text')`, `text`, `waMessageId | null`, `status`, `createdAt`.
-- `Chat`: `chatId`, `headMessageId | null`, `assignedTo (userId | 'UNASSIGNED')`, `lastClientMessageAt`, `lastMessageAt`, `lastMessagePreview`, `clientName | null`.
+- `Message`: `messageId`, `chatId`, `prevMessageId | null`, `direction ('in'|'out')`, `senderType ('client'|'agent'|'admin')`, `senderId | null`, `type ('text')`, `text`, `waMessageId | null` (server only, never returned by the API: F3), `status`, `createdAt`.
+- `Chat`: `chatId`, `headMessageId | null`, `assignedTo (userId | 'UNASSIGNED')`, `lastClientMessageAt`, `lastMessageAt`, `lastMessagePreview`, `clientName | null`, `publicId` (F3: `c_` + 26 Crockford base32 chars, random, never changes; optional until backfilled).
+- F4 `Chat` fields (all optional): `description`, `descriptionUpdatedAt`, `descriptionUpdatedBy` (userId), `profileVersion` (number, 0 when absent), `tags` (string array, ≤ 10). `Note`: see the F4 rows below.
 - `User` (public view, never includes `passwordHash`): `userId`, `email`, `name`, `role ('admin'|'agent')`, `active`.
 - Message `status` ranks: `pending` 0 < `sent` 1 < `delivered` 2 < `read` 3. `failed` is terminal and only allowed from `pending` or `sent`.
 
@@ -48,13 +49,30 @@ Error response body: `{ "error": { "code": "<CODE>", "message": "<text>" } }`
 | `PUT /api/me/password` | any | `{ currentPassword, newPassword }` | `204` |
 | `GET /api/users` | admin | — | `{ users: User[] }` |
 | `POST /api/users` | admin | `{ email, name, role, password }` | `{ user }` |
-| `GET /api/chats?filter=mine\|unassigned\|all` | agent: `mine` only; admin: all | — | `{ chats: ChatSummary[] }` sorted by `lastMessageAt` desc |
-| `GET /api/chats/:phone/messages?before=<messageId>&limit=30` | assignee or admin | — | `{ chat, headMessageId, messages: Message[] (newest first), nextBefore \| null }` |
-| `POST /api/chats/:phone/messages` | assignee or admin | `{ text }` | `{ message }` (status `pending`) |
-| `PUT /api/chats/:phone/assign` | admin | `{ userId }` | `{ chat }` |
-| `POST /api/chats/:phone/auto-assign` | admin | — | `{ chat }` |
+| `GET /api/chats?filter=mine\|unassigned\|all` | agent: `mine` only; admin: all | — | `{ chats: ChatView[] }` sorted by `lastMessageAt` desc |
+| `GET /api/chats/:id/messages?before=<messageId>&limit=30` | assignee or admin | — | `{ chat: ChatView, headMessageId, messages: MessageView[] (newest first), nextBefore \| null }` |
+| `POST /api/chats/:id/messages` | assignee or admin | `{ text }` | `{ message: MessageView }` (status `pending`) |
+| `PUT /api/chats/:id/assign` | admin | `{ userId }` | `{ chat: ChatView }` |
+| `POST /api/chats/:id/auto-assign` | admin | — | `{ chat: ChatView }` |
+| `GET /api/chats?…&tag=<tag>` (F4) | as above | `tag` optional, normalized | as above, filtered to chats with that tag; `400 VALIDATION` for a bad tag |
+| `PUT /api/chats/:id/description` (F4) | assignee or admin | `{ description, version }` (`""` clears) | `{ chat: ChatView }`; stale `version` → `409 CONFLICT` with `details.current: { description, profileVersion, descriptionUpdatedAt, descriptionUpdatedBy }` |
+| `POST /api/chats/:id/tags` (F4) | assignee or admin | `{ tag }` | `200 { tags }` (idempotent); 11th tag → `409 CONFLICT`; not in catalog while "catalog only" → `400 VALIDATION` |
+| `DELETE /api/chats/:id/tags/:tag` (F4) | assignee or admin | — | `200 { tags }` |
+| `GET /api/chats/:id/notes?before=<noteId>&limit=20` (F4) | assignee or admin | limit 1–50 | `{ notes: Note[] (newest first), nextBefore \| null }` |
+| `POST /api/chats/:id/notes` (F4) | assignee or admin | `{ body }` | `201 { note }` |
+| `PATCH /api/chats/:id/notes/:noteId` (F4) | author, within 15 min | `{ body }` | `{ note }`; otherwise `403`; deleted/missing `404` |
+| `DELETE /api/chats/:id/notes/:noteId` (F4) | author, or any admin | — | `204` (soft delete) |
+| `GET /api/tags` (F4 phase 3) | any signed-in user | — | `{ tags: [{ name, createdAt?, createdBy? }], catalogOnly }` (dates/creator for admins) |
+| `POST /api/tags` / `PATCH /api/tags` / `DELETE /api/tags/:name` (F4 phase 3) | admin | `{ name }` / `{ catalogOnly }` / — | `201 { tag }` (`409` if it exists) / `{ catalogOnly }` / `204` |
 
-`ChatSummary` = `Chat` plus `assignee: { userId, name } | null` and `windowOpen: boolean`.
+`ChatSummary` = `Chat` plus `assignee: { userId, name } | null` and `windowOpen: boolean` (internal; never returned as is). F4: in a `ChatSummary`, `descriptionUpdatedBy` is resolved to `{ userId, name } | null` and `tags` is always an array.
+
+`Note` (F4) = `{ noteId, body | null, author: { userId, name }, authorRole, createdAt, editedAt | null, deleted, deletedBy?, deletedAt? }`. No `chatId`. Note bodies, descriptions and tag values never appear in logs, error messages or the outbound queue.
+
+**F3 (hide the client's phone):** `:id` is the chat's opaque `publicId`. Chats and messages leave the API only through the views in core (`toChatView`, `toMessageView`), which use a denylist:
+- `ChatView` = `ChatSummary` without `chatId`/`publicId`, plus `id` (= `publicId`), `displayName` (`clientName`, or `Client #XXXX` from the last 4 characters of `publicId`) and `phone` (**admins only**). For agents, a `clientName` with 5 or more digits is returned as `null`. Other chat fields (e.g. F4's) pass through.
+- `MessageView` = `Message` without `chatId`, `waMessageId` and `statusRank`. Inbound `messageId`s are ULIDs (never a wamid, which embeds the number).
+- An unknown or malformed `:id` (including an old phone URL) gets the same answer as a missing chat: agents `403 FORBIDDEN`, admins `404 NOT_FOUND`. Error `details` never carry `chatId`.
 
 ## Done when
 - [ ] `npm install` at the root links all workspaces.

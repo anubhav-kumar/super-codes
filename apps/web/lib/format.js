@@ -64,8 +64,9 @@ export function formatDuration(ms) {
   return hours ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
 }
 
+// F3: the server computes displayName (clientName, or 'Client #XXXX'); never a phone number.
 export function chatTitle(chat) {
-  return chat?.clientName || chat?.chatId || '';
+  return chat?.displayName || chat?.clientName || '';
 }
 
 // Up to two initials from a name; null when there is nothing name-like (e.g. only digits).

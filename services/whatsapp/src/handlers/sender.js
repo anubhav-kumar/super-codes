@@ -8,6 +8,7 @@ import {
   updateStatus,
 } from '@vartalap/core';
 import { WhatsAppSendError, sendText } from '../whatsapp/client.js';
+import { sendMediaMessage } from '../whatsapp/send-media.js'; // F2
 
 // Keep in sync with maxReceiveCount on OutboundQueue in serverless.yml.
 const MAX_RECEIVE_COUNT = 3;
@@ -29,12 +30,19 @@ async function processRecord(record) {
     return; // Retrying would not fix it.
   }
 
-  const ctx = { messageId: job.messageId, phone: lastFour(job.chatId), receiveCount };
+  // F3: the job is phone-free ({ messageId, publicId }); a legacy job may still carry chatId.
+  const ctx = {
+    messageId: job.messageId,
+    publicId: job.publicId ?? null,
+    phone: lastFour(job.chatId),
+    receiveCount,
+  };
   const message = await getMessage(job.messageId);
   if (!message) {
     log('warn', 'sender.not_found', ctx);
     return;
   }
+  ctx.phone = lastFour(message.chatId); // D6: last 4 digits only, from the stored message
   if (message.status !== 'pending') {
     log('info', 'sender.skipped', { ...ctx, status: message.status });
     return; // Already sent or failed: a redelivery.
@@ -42,7 +50,10 @@ async function processRecord(record) {
 
   let waMessageId;
   try {
-    ({ waMessageId } = await sendText({ to: message.chatId, body: message.text }));
+    // F2: a message with a file goes through upload + media send; everything else is text.
+    ({ waMessageId } = message.media
+      ? await sendMediaMessage(message, (event, fields) => log('info', event, { ...ctx, ...fields }))
+      : await sendText({ to: message.chatId, body: message.text }));
   } catch (err) {
     await handleSendFailure(err, ctx, receiveCount);
     return;

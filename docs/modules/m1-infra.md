@@ -35,7 +35,7 @@ Define every AWS resource in `services/whatsapp/serverless.yml`, so that one `se
   - webhook reads `WA_PHONE_NUMBER_ID`, `WA_APP_SECRET` and `WA_VERIFY_TOKEN`; sender reads `WA_PHONE_NUMBER_ID` and `WA_ACCESS_TOKEN`.
 - **Other env:** `STAGE`, `MESSAGES_TABLE`, `CHATS_TABLE`, `USERS_TABLE`, `OUTBOUND_QUEUE_URL` and `WA_GRAPH_VERSION` (plain value, `v26.0`). `AWS_REGION` is not set in `serverless.yml`: it is a reserved variable that the Lambda runtime provides.
 - **Outputs:** table names, queue URL, DLQ URL, webhook URL.
-- **Config parameters (2026-10-17):** the stack also writes `/vartalap/<stage>/config/{MESSAGES_TABLE,CHATS_TABLE,USERS_TABLE,OUTBOUND_QUEUE_URL}` (String, real values via `!Ref`). The local web app and seed script load them at startup, so `apps/web/.env.local` needs only `AWS_REGION` and `STAGE`.
+- **Config parameters (2026-10-17):** the stack also writes `/vartalap/<stage>/config/{MESSAGES_TABLE,CHATS_TABLE,USERS_TABLE,OUTBOUND_QUEUE_URL}` (String, real values via `!Ref`). The local web app and scripts load them at startup, so `apps/web/.env.local` needs only `AWS_REGION` and `STAGE` (the scripts read those two from the shell instead).
 - A separate IAM note in the README on what the local Next.js app needs: read/write on all three tables + indexes, and `sqs:SendMessage`. It runs with `assume` credentials.
 
 ## Exposes
@@ -47,3 +47,16 @@ Define every AWS resource in `services/whatsapp/serverless.yml`, so that one `se
 - [ ] All three tables, the indexes, the FIFO queue and the DLQ exist with the settings above.
 - [ ] The four SSM parameters are created by the stack with the placeholder value; no secret values are in the repo.
 - [ ] The local app can reach the tables and queue using `assume` credentials.
+
+## F4 changes (client attributes, 2026-10-17)
+- New `ClientNotesTable` (`vartalap-<stage>-client-notes`; PK `chatId`, SK `noteId`; on-demand; `DeletionProtectionEnabled`; no GSI; PITR off for the trial) and SSM `/vartalap/<stage>/config/CLIENT_NOTES_TABLE`, in a commented F4 block in `serverless.yml`. Output `ClientNotesTableName`.
+- No Lambda IAM or environment changes: the Lambdas never touch notes or the new Chats attributes. `CLIENT_NOTES_TABLE` is an optional config key for the web app only.
+
+## F2 changes (media messages, 2026-10-17)
+In commented F2 blocks in `serverless.yml` (defined, not yet deployed):
+- `MediaBucket` (`vartalap-<stage>-media-<accountId>`): Block Public Access, BucketOwnerEnforced, SSE-S3, lifecycle (abort multipart after 1 day, expire everything after 90 days), CORS `POST` from `${param:mediaWebOrigin}`, `DeletionPolicy: Retain`. `MediaBucketPolicy` denies non-TLS access and any `GetObject` of objects tagged `THREATS_FOUND`.
+- `MediaFetchQueue` (standard, visibility 720 s, maxReceiveCount 5) + `MediaFetchDlq`; `mediaFetch` Lambda (1024 MB, 120 s).
+- `MediaMalwareProtectionRole` + `MediaMalwareProtectionPlan` (GuardDuty Malware Protection for S3, tagging on, prefixes `in/` and `out/`). The role policy is unverified against current AWS docs.
+- SSM `/vartalap/<stage>/config/MEDIA_BUCKET` and `MEDIA_SCAN_REQUIRED` (optional config keys for the web app).
+- Webhook: `sqs:SendMessage` on `MediaFetchQueue`, env `MEDIA_FETCH_QUEUE_URL`. Sender: `s3:GetObject`/`s3:GetObjectTagging` on `out/*`, env `MEDIA_BUCKET`, `MEDIA_SCAN_REQUIRED`, 512 MB, timeout 90 s (queue visibility 540 s).
+- No new DynamoDB table or GSI.

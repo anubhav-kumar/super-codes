@@ -10,9 +10,9 @@ Read the outbound SQS FIFO queue and deliver each message through the WhatsApp C
 
 ## Queue message contract (written by M7)
 ```json
-{ "messageId": "<ulid>", "chatId": "<E.164 phone>" }
+{ "messageId": "<ulid>", "publicId": "c_…" }
 ```
-`MessageGroupId = chatId`, `MessageDeduplicationId = messageId`.
+`MessageGroupId = publicId`, `MessageDeduplicationId = messageId`. F3: the payload is phone-free, so the queue and the DLQ never hold a client's number. The recipient comes from the stored message (`message.chatId`). A legacy `{ messageId, chatId }` body still validates (both extra fields are optional) for jobs in flight during the rollout.
 
 ## Settings
 Read the WhatsApp values with `getParams(['WA_PHONE_NUMBER_ID', 'WA_ACCESS_TOKEN'])` from `src/lib/params.js`. They are SSM parameters created by the stack; the env vars only hold their names (`WA_*_PARAM`). Values are cached for 5 minutes, and an unset (`CHANGE_ME`) value throws a clear error.
@@ -35,7 +35,7 @@ Read the WhatsApp values with `getParams(['WA_PHONE_NUMBER_ID', 'WA_ACCESS_TOKEN
 - A malformed queue body (bad JSON or failed `OutboundQueueMessageSchema` check) is logged and dropped.
 - Unexpected errors during the send (for example, SSM settings still `CHANGE_ME`) are retried like retryable errors. On the final attempt they are marked `failed` with `errorCode: 'INTERNAL'`.
 - If `setWaMessageId` throws after WhatsApp accepted the message, the error is logged (`sender.record_failed`, including the `waMessageId`) and the record resolves **without** a retry. Retrying would send the message twice. The message stays `pending` until someone reconciles it.
-- Logs are one JSON line per event: `messageId`, the last 4 digits of the phone, the receive count, the HTTP status and the error code. They never include the message text, the full number or the token.
+- Logs are one JSON line per event: `messageId`, `publicId` (F3), the last 4 digits of the phone (from the stored message), the receive count, the HTTP status and the error code. They never include the message text, the full number or the token.
 
 ## Open issues
 - **Duplicate send after a crash.** If the Lambda dies or times out between a successful Cloud API call and `setWaMessageId`, the message is still `pending` on redelivery and is sent again. Fixing this needs a "sending" claim before the call, which in turn needs a status-model change in M2. It is not done in v1.
@@ -45,3 +45,8 @@ Read the WhatsApp values with `getParams(['WA_PHONE_NUMBER_ID', 'WA_ACCESS_TOKEN
 - [ ] Simulated 5xx responses produce 3 attempts, then `failed`, and the payload ends up in the DLQ.
 - [ ] A permanent 4xx marks the message `failed` immediately, with no retries.
 - [ ] Redelivering an already-sent queue message does not send it twice.
+
+## F2 changes (media messages, 2026-10-17)
+- A message with `media` goes through `src/whatsapp/send-media.js`: wait (≤ 15 s) for the GuardDuty tag `NO_THREATS_FOUND` on `out/<messageId>` (else retry; `THREATS_FOUND` → final `MALWARE`), read the file, re-check size and magic bytes, `POST /{phone-number-id}/media`, cache `media.waMediaId` (so a retry doesn't upload again), then send `{ type, <type>: { id, caption, filename } }`. Audio has no caption.
+- `client.js`: `sendMedia`, shared `postMessage` / `graphError`; 131053 (media format) is final.
+- Timeout 90 s, 512 MB, queue visibility 540 s.
