@@ -1,0 +1,10 @@
+{
+  "name": "agentic-chat",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": { "chat": "bin/chat.js" },
+  "scripts": { "start": "node server.js", "dev": "node --watch server.js" },
+  "engines": { "node": ">=22" },
+  "dependencies": { "zod": "^4.0.0" }
+}

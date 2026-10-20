@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Agentic Chat</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <!-- Shown until app.js runs. If app.js or lib/constants.js can't load, the module never runs, so the
+       "can't reach server" message appears after a CSS delay (no inline script: CSP script-src 'self'). -->
+  <section id="boot-screen" class="boot-screen" aria-live="polite">
+    <p class="boot-loading">Connecting…</p>
+    <div class="fatal-card boot-fail">
+      <h1>Can't reach server</h1>
+      <p class="muted">The chat server that served this page isn't answering, or its UI code failed to load.</p>
+      <p><a class="btn btn-primary" href="">Retry</a></p>
+    </div>
+  </section>
+
+  <div id="app" class="app" hidden>
+    <header class="topbar">
+      <button id="sidebar-toggle" class="icon-btn only-narrow" type="button" aria-label="Show chats"
+              aria-expanded="false" aria-controls="sidebar">☰</button>
+      <span class="brand">Agentic Chat</span>
+      <button id="conn-indicator" class="conn" type="button" aria-haspopup="dialog" data-state="reconnecting">
+        <span class="conn-dot" aria-hidden="true"></span>
+        <span id="conn-label" class="conn-label">connecting</span>
+        <span id="conn-host" class="conn-host"></span>
+        <span id="conn-hint" class="conn-hint"></span>
+      </button>
+      <span class="spacer"></span>
+      <button id="author-btn" class="author-btn" type="button" aria-label="Change your name">
+        <span class="hide-narrow">posting as </span><strong id="author-name">(no name)</strong>
+      </button>
+      <button id="settings-btn" class="icon-btn" type="button" aria-label="Connection settings">⚙</button>
+    </header>
+
+    <div class="layout">
+      <nav id="sidebar" class="sidebar" aria-label="Chats">
+        <button id="new-chat-btn" class="new-chat-btn" type="button">+ New chat</button>
+        <form id="new-chat-form" class="new-chat-form" hidden novalidate>
+          <label for="new-chat-input" class="sr-only">New chat ID</label>
+          <input id="new-chat-input" type="text" autocomplete="off" spellcheck="false" autocapitalize="none"
+                 placeholder="chat-id" aria-describedby="new-chat-hint new-chat-error">
+          <p id="new-chat-hint" class="field-hint">Lowercase letters, digits and -, up to 64. Enter to create, Esc to cancel.</p>
+          <p id="new-chat-error" class="field-error" role="alert"></p>
+        </form>
+        <ul id="chat-list" class="chat-list"></ul>
+        <p id="chat-list-empty" class="muted chat-list-empty" hidden>No chats yet.</p>
+      </nav>
+      <div id="sidebar-backdrop" class="sidebar-backdrop" hidden></div>
+
+      <main id="main" class="main">
+        <section id="empty-state" class="empty-state">
+          <p id="empty-title" class="empty-title">Pick or create a chat</p>
+        </section>
+
+        <section id="chat-view" class="chat-view" hidden>
+          <div class="chat-head"><h1 id="chat-title" class="chat-title"></h1></div>
+          <div class="thread-wrap">
+            <div id="thread-scroller" class="thread-scroller" tabindex="0" aria-label="Messages">
+              <div class="load-older-wrap">
+                <button id="load-older" class="btn btn-small" type="button" hidden>Load older</button>
+              </div>
+              <div id="thread" class="thread" aria-live="polite" aria-relevant="additions"></div>
+              <div id="thread-status" class="thread-status" hidden></div>
+            </div>
+            <button id="new-pill" class="new-pill" type="button" hidden>↓ <span id="new-count">0</span> new</button>
+          </div>
+
+          <form id="composer" class="composer" novalidate>
+            <div class="composer-row">
+              <button id="attach-btn" class="icon-btn" type="button" aria-label="Attach files">📎</button>
+              <input id="file-input" type="file" multiple hidden>
+              <label for="message-input" class="sr-only">Message</label>
+              <textarea id="message-input" class="message-input" rows="1" placeholder="Write a message…"></textarea>
+              <button id="send-btn" class="btn btn-primary" type="submit">Send</button>
+            </div>
+            <div id="attachments" class="attachments" hidden></div>
+            <div id="upload-progress" class="upload-progress" hidden>
+              <progress id="upload-bar" max="100" value="0" aria-label="Upload progress"></progress>
+              <span id="upload-label" class="upload-label" aria-live="polite"></span>
+              <button id="upload-cancel" class="btn btn-small" type="button">Cancel</button>
+            </div>
+            <p id="composer-error" class="composer-error" role="alert" hidden></p>
+          </form>
+          <div id="drop-overlay" class="drop-overlay" hidden><span>Drop files to attach</span></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <dialog id="name-dialog" class="dialog" aria-labelledby="name-title">
+    <form id="name-form" class="stack" novalidate>
+      <h2 id="name-title">Your name</h2>
+      <p class="muted">Others see this next to your messages. You can read without one, but need it to send.</p>
+      <label for="name-input" class="sr-only">Your name</label>
+      <input id="name-input" type="text" autocomplete="nickname" spellcheck="false" autocapitalize="none"
+             aria-describedby="name-hint name-error">
+      <p id="name-hint" class="field-hint">1–32 characters: lowercase letters, digits, - and _; starts with a letter or digit.</p>
+      <p id="name-error" class="field-error" role="alert"></p>
+      <div class="row row-end">
+        <button id="name-later" type="button" class="btn">Later</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="conn-dialog" class="dialog dialog-wide" aria-labelledby="conn-title">
+    <div class="dialog-head">
+      <h2 id="conn-title">Connection</h2>
+      <button id="conn-close" class="icon-btn" type="button" aria-label="Close">×</button>
+    </div>
+    <ul id="check-list" class="check-list"></ul>
+    <dl id="server-info" class="server-info"></dl>
+    <div class="row row-end">
+      <button id="retest-btn" type="button" class="btn">Re-test</button>
+    </div>
+  </dialog>
+
+  <dialog id="lightbox" class="lightbox" aria-label="Image preview">
+    <img id="lightbox-img" alt="">
+    <div class="lightbox-bar">
+      <a id="lightbox-open" href="#" target="_blank" rel="noopener noreferrer">Open original</a>
+      <button id="lightbox-close" class="btn btn-small" type="button">Close</button>
+    </div>
+  </dialog>
+</body>
+</html>
