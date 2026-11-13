@@ -199,3 +199,6 @@ scripts/activity-labels/results/
 
 # Mutation testing sandboxes
 .stryker-tmp/
+
+infra/venv
+infra/venv/*

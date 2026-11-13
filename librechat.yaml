@@ -5,6 +5,9 @@ version: 1.3.18
 
 cache: true
 
+# Phase 1.5: uploaded files go to the S3 bucket from infra/ (AWS_REGION and AWS_BUCKET_NAME in .env).
+fileStrategy: 's3'
+
 endpoints:
   custom:
     - name: 'OpenRouter'
