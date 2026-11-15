@@ -1,0 +1,1246 @@
+# tests/test_batch_processing.py
+import pytest
+from unittest.mock import Mock, AsyncMock, patch, MagicMock
+from langchain_core.documents import Document
+
+
+class TestProcessMemoryDetails:
+    """Test process memory details used by ingestion logging."""
+
+    @pytest.mark.parametrize(
+        ("platform_name", "ru_maxrss"),
+        [
+            pytest.param("linux", 1536, id="linux-kib"),
+            pytest.param("darwin", 1536 * 1024, id="darwin-bytes"),
+        ],
+    )
+    def test_fallback_converts_peak_rss_to_mb(self, platform_name, ru_maxrss):
+        """Fallback should normalize native ru_maxrss units to MiB."""
+        from app.routes.document_routes import get_process_memory_details
+
+        mock_resource = MagicMock()
+        mock_resource.RUSAGE_SELF = object()
+        mock_resource.getrusage.return_value = Mock(ru_maxrss=ru_maxrss)
+
+        with (
+            patch("builtins.open", side_effect=FileNotFoundError),
+            patch("app.routes.document_routes.sys.platform", platform_name),
+            patch.dict("sys.modules", {"resource": mock_resource}),
+        ):
+            assert get_process_memory_details() == "rss_peak_mb=1.5"
+
+        mock_resource.getrusage.assert_called_once_with(mock_resource.RUSAGE_SELF)
+
+
+class TestDocumentChunkOrdering:
+    """Test source-order restoration for parallel pgvector ingestion."""
+
+    def test_orders_documents_by_ingestion_chunk_index(self):
+        from app.routes.document_routes import _order_documents_by_chunk_index
+
+        documents = [
+            Document(
+                page_content="third",
+                metadata={
+                    "_rag_chunk_index": 2,
+                    "_rag_ingestion_attempt_id": "attempt-a",
+                    "_rag_ingestion_attempt_started_at_ns": 100,
+                },
+            ),
+            Document(
+                page_content="first",
+                metadata={
+                    "_rag_chunk_index": 0,
+                    "_rag_ingestion_attempt_id": "attempt-a",
+                    "_rag_ingestion_attempt_started_at_ns": 100,
+                },
+            ),
+            Document(
+                page_content="second",
+                metadata={
+                    "_rag_chunk_index": 1,
+                    "_rag_ingestion_attempt_id": "attempt-a",
+                    "_rag_ingestion_attempt_started_at_ns": 100,
+                },
+            ),
+        ]
+
+        ordered = _order_documents_by_chunk_index(documents)
+
+        assert [document.page_content for document in ordered] == [
+            "first",
+            "second",
+            "third",
+        ]
+        assert documents[0].page_content == "third"
+
+    def test_groups_repeated_attempts_before_ordering_chunks(self):
+        """Chunk indexes from repeated attempts must not collide."""
+        from app.routes.document_routes import _order_documents_by_chunk_index
+
+        def marked(content, chunk_index, attempt_id, started_at_ns):
+            return Document(
+                page_content=content,
+                metadata={
+                    "_rag_chunk_index": chunk_index,
+                    "_rag_ingestion_attempt_id": attempt_id,
+                    "_rag_ingestion_attempt_started_at_ns": started_at_ns,
+                },
+            )
+
+        documents = [
+            Document(page_content="legacy", metadata={}),
+            marked("a2", 2, "attempt-a", 100),
+            marked("b1", 1, "attempt-b", 200),
+            marked("a0", 0, "attempt-a", 100),
+            marked("b0", 0, "attempt-b", 200),
+            marked("a1", 1, "attempt-a", 100),
+        ]
+
+        ordered = _order_documents_by_chunk_index(documents)
+
+        assert [document.page_content for document in ordered] == [
+            "legacy",
+            "a0",
+            "a1",
+            "a2",
+            "b0",
+            "b1",
+        ]
+
+    @pytest.mark.parametrize(
+        "metadata",
+        [
+            pytest.param([{}, {}, {}], id="legacy-missing-index"),
+            pytest.param(
+                [
+                    {"_rag_chunk_index": 0},
+                    {"_rag_chunk_index": 0},
+                    {"_rag_chunk_index": 1},
+                ],
+                id="duplicate-index",
+            ),
+            pytest.param(
+                [
+                    {"_rag_chunk_index": 2},
+                    {"_rag_chunk_index": "0"},
+                    {"_rag_chunk_index": 1},
+                ],
+                id="invalid-index",
+            ),
+        ],
+    )
+    def test_preserves_received_order_without_trustworthy_indexes(self, metadata):
+        from app.routes.document_routes import _order_documents_by_chunk_index
+
+        documents = [
+            Document(page_content=content, metadata=document_metadata)
+            for content, document_metadata in zip(
+                ["third", "first", "second"], metadata
+            )
+        ]
+
+        ordered = _order_documents_by_chunk_index(documents)
+
+        assert [document.page_content for document in ordered] == [
+            "third",
+            "first",
+            "second",
+        ]
+
+
+class TestBatchProcessing:
+    """Test batch processing functions."""
+
+    @pytest.fixture
+    def mock_documents(self):
+        """Create mock documents for testing."""
+        return [
+            Document(page_content=f"content_{i}", metadata={"file_id": "test_file"})
+            for i in range(10)
+        ]
+
+    @pytest.fixture
+    def mock_async_vector_store(self):
+        """Create mock async vector store."""
+        store = AsyncMock()
+        store.aadd_documents = AsyncMock(return_value=["id1", "id2"])
+        store.delete = AsyncMock()
+        store.delete_by_metadata = AsyncMock()
+        return store
+
+    @pytest.fixture
+    def mock_sync_vector_store(self):
+        """Create mock sync vector store."""
+        store = Mock()
+        store.add_documents = Mock(return_value=["id1", "id2"])
+        store.delete = Mock()
+        return store
+
+    # --- Async Pipeline Tests ---
+
+    @pytest.mark.asyncio
+    async def test_async_pipeline_basic(self, mock_documents, mock_async_vector_store):
+        """Test basic async pipeline processing."""
+        from app.routes.document_routes import _process_documents_async_pipeline
+
+        with patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 3):
+            result = await _process_documents_async_pipeline(
+                documents=mock_documents,
+                file_id="test_file",
+                user_id="testuser",
+                vector_store=mock_async_vector_store,
+                executor=None,
+            )
+
+        assert len(result) > 0
+        assert mock_async_vector_store.aadd_documents.called
+
+    @pytest.mark.asyncio
+    async def test_async_pipeline_single_batch(self, mock_async_vector_store):
+        """Test when all documents fit in one batch."""
+        from app.routes.document_routes import _process_documents_async_pipeline
+
+        docs = [Document(page_content="test", metadata={})]
+        with patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 10):
+            result = await _process_documents_async_pipeline(
+                documents=docs,
+                file_id="test_file",
+                user_id="testuser",
+                vector_store=mock_async_vector_store,
+                executor=None,
+            )
+
+        assert mock_async_vector_store.aadd_documents.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_async_pipeline_exact_batch_size(self, mock_async_vector_store):
+        """Test when document count equals batch size."""
+        from app.routes.document_routes import _process_documents_async_pipeline
+
+        docs = [Document(page_content=f"test_{i}", metadata={}) for i in range(5)]
+        with patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 5):
+            result = await _process_documents_async_pipeline(
+                documents=docs,
+                file_id="test_file",
+                user_id="testuser",
+                vector_store=mock_async_vector_store,
+                executor=None,
+            )
+
+        assert mock_async_vector_store.aadd_documents.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_async_pipeline_empty_documents(self, mock_async_vector_store):
+        """Test with empty document list."""
+        from app.routes.document_routes import _process_documents_async_pipeline
+
+        with patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 3):
+            result = await _process_documents_async_pipeline(
+                documents=[],
+                file_id="test_file",
+                user_id="testuser",
+                vector_store=mock_async_vector_store,
+                executor=None,
+            )
+
+        assert result == []
+        assert not mock_async_vector_store.aadd_documents.called
+
+    @pytest.mark.asyncio
+    async def test_async_pipeline_rollback_on_error(
+        self, mock_documents, mock_async_vector_store
+    ):
+        """Test that rollback occurs when insertion fails after some success."""
+        from app.routes.document_routes import _process_documents_async_pipeline
+
+        # First batch succeeds, second batch fails
+        mock_async_vector_store.aadd_documents = AsyncMock(
+            side_effect=[["id1"], Exception("DB error")]
+        )
+
+        with patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 3):
+            with pytest.raises(Exception, match="DB error"):
+                await _process_documents_async_pipeline(
+                    documents=mock_documents,
+                    file_id="test_file",
+                    user_id="testuser",
+                    vector_store=mock_async_vector_store,
+                    executor=None,
+                )
+
+        mock_async_vector_store.delete.assert_not_called()
+        mock_async_vector_store.delete_by_metadata.assert_called_once()
+        metadata_filter = mock_async_vector_store.delete_by_metadata.call_args.args[0]
+        assert metadata_filter == {
+            "file_id": "test_file",
+            "_rag_ingestion_attempt_id": mock_documents[0].metadata[
+                "_rag_ingestion_attempt_id"
+            ],
+        }
+
+    @pytest.mark.asyncio
+    async def test_async_pipeline_canonicalizes_file_id_for_rollback(
+        self, mock_async_vector_store
+    ):
+        """Rollback must match the canonical file ID, not loader metadata."""
+        from app.routes.document_routes import _process_documents_async_pipeline
+
+        documents = [
+            Document(page_content="inserted", metadata={"file_id": "spoofed"}),
+            Document(page_content="failed", metadata={}),
+        ]
+        mock_async_vector_store.aadd_documents = AsyncMock(
+            side_effect=[["inserted"], ValueError("DB error")]
+        )
+
+        with patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 1):
+            with pytest.raises(ValueError, match="DB error"):
+                await _process_documents_async_pipeline(
+                    documents=documents,
+                    file_id="canonical-file",
+                    vector_store=mock_async_vector_store,
+                    executor=None,
+                )
+
+        assert all(
+            document.metadata["file_id"] == "canonical-file" for document in documents
+        )
+        assert mock_async_vector_store.delete_by_metadata.call_args.args[0] == {
+            "file_id": "canonical-file",
+            "_rag_ingestion_attempt_id": documents[0].metadata[
+                "_rag_ingestion_attempt_id"
+            ],
+        }
+
+    @pytest.mark.asyncio
+    async def test_async_pipeline_no_rollback_before_insert_starts(
+        self, mock_documents, mock_async_vector_store
+    ):
+        """Test failed async ingestion does not delete existing vectors if no insert started."""
+        from app.routes.document_routes import _process_documents_async_pipeline
+
+        mock_async_vector_store.aadd_documents = AsyncMock(
+            side_effect=Exception("DB error")
+        )
+
+        with patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 3):
+            with pytest.raises(Exception):
+                await _process_documents_async_pipeline(
+                    documents=mock_documents,
+                    file_id="test_file",
+                    user_id="testuser",
+                    vector_store=mock_async_vector_store,
+                    executor=None,
+                )
+
+        assert not mock_async_vector_store.delete.called
+        assert not mock_async_vector_store.delete_by_metadata.called
+
+    # --- Sync Batched Tests ---
+
+    @pytest.mark.asyncio
+    async def test_sync_batched_basic(self, mock_documents, mock_sync_vector_store):
+        """Test basic sync batch processing."""
+        from app.routes.document_routes import _process_documents_batched_sync
+        import asyncio
+
+        # Create a real executor for the test
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            with patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 3):
+                result = await _process_documents_batched_sync(
+                    documents=mock_documents,
+                    file_id="test_file",
+                    user_id="testuser",
+                    vector_store=mock_sync_vector_store,
+                    executor=executor,
+                )
+
+        assert len(result) > 0
+        assert mock_sync_vector_store.add_documents.called
+
+    @pytest.mark.asyncio
+    async def test_sync_batched_empty_documents(self, mock_sync_vector_store):
+        """Test sync batch processing with empty documents."""
+        from app.routes.document_routes import _process_documents_batched_sync
+
+        with patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 3):
+            result = await _process_documents_batched_sync(
+                documents=[],
+                file_id="test_file",
+                user_id="testuser",
+                vector_store=mock_sync_vector_store,
+                executor=None,
+            )
+
+        assert result == []
+        assert not mock_sync_vector_store.add_documents.called
+
+    @pytest.mark.asyncio
+    async def test_sync_batched_rollback_on_error(
+        self, mock_documents, mock_sync_vector_store
+    ):
+        """Test sync rollback behavior."""
+        from app.routes.document_routes import _process_documents_batched_sync
+        from concurrent.futures import ThreadPoolExecutor
+
+        # First batch succeeds, second batch fails
+        mock_sync_vector_store.add_documents = Mock(
+            side_effect=[["id1"], Exception("DB error")]
+        )
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            with patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 3):
+                with pytest.raises(Exception):
+                    await _process_documents_batched_sync(
+                        documents=mock_documents,
+                        file_id="test_file",
+                        user_id="testuser",
+                        vector_store=mock_sync_vector_store,
+                        executor=executor,
+                    )
+
+        mock_sync_vector_store.delete_scoped.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_sync_batched_no_rollback_on_first_error(
+        self, mock_documents, mock_sync_vector_store
+    ):
+        """Test that no rollback occurs if first batch fails."""
+        from app.routes.document_routes import _process_documents_batched_sync
+        from concurrent.futures import ThreadPoolExecutor
+
+        mock_sync_vector_store.add_documents = Mock(side_effect=Exception("DB error"))
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            with patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 3):
+                with pytest.raises(Exception):
+                    await _process_documents_batched_sync(
+                        documents=mock_documents,
+                        file_id="test_file",
+                        user_id="testuser",
+                        vector_store=mock_sync_vector_store,
+                        executor=executor,
+                    )
+
+        # Should not attempt rollback since nothing was inserted
+        assert not mock_sync_vector_store.delete.called
+
+
+class TestBatchConfiguration:
+    """Test configuration and edge cases."""
+
+    def test_batch_calculation(self):
+        """Test batch count calculation using the utility function."""
+        from app.routes.document_routes import calculate_num_batches
+
+        # 10 docs, batch size 3 = 4 batches (3+3+3+1)
+        assert calculate_num_batches(10, 3) == 4
+
+        # Exact division
+        assert calculate_num_batches(9, 3) == 3
+
+        # Single item
+        assert calculate_num_batches(1, 3) == 1
+
+        # Zero items
+        assert calculate_num_batches(0, 3) == 0
+
+        # Batch size larger than total
+        assert calculate_num_batches(5, 10) == 1
+
+        # Edge case: batch_size of 0 returns 1 (fallback)
+        assert calculate_num_batches(10, 0) == 1
+
+        # Edge case: batch_size of 1
+        assert calculate_num_batches(5, 1) == 5
+
+    def test_embedding_batch_size_from_env(self):
+        """Test that EMBEDDING_BATCH_SIZE is read from environment variable."""
+        import os
+        from importlib import reload
+
+        # Save current value
+        original = os.environ.get("EMBEDDING_BATCH_SIZE")
+
+        try:
+            # Set a specific test value
+            os.environ["EMBEDDING_BATCH_SIZE"] = "999"
+
+            import app.config as config_module
+
+            reload(config_module)
+
+            assert config_module.EMBEDDING_BATCH_SIZE == 999
+        finally:
+            # Restore original value
+            if original is not None:
+                os.environ["EMBEDDING_BATCH_SIZE"] = original
+            elif "EMBEDDING_BATCH_SIZE" in os.environ:
+                del os.environ["EMBEDDING_BATCH_SIZE"]
+
+    def test_embedding_max_queue_size_from_env(self):
+        """Test that EMBEDDING_MAX_QUEUE_SIZE is read from environment variable."""
+        import os
+        from importlib import reload
+
+        original = os.environ.get("EMBEDDING_MAX_QUEUE_SIZE")
+
+        try:
+            os.environ["EMBEDDING_MAX_QUEUE_SIZE"] = "10"
+
+            import app.config as config_module
+
+            reload(config_module)
+
+            assert config_module.EMBEDDING_MAX_QUEUE_SIZE == 10
+        finally:
+            if original is not None:
+                os.environ["EMBEDDING_MAX_QUEUE_SIZE"] = original
+            elif "EMBEDDING_MAX_QUEUE_SIZE" in os.environ:
+                del os.environ["EMBEDDING_MAX_QUEUE_SIZE"]
+
+
+class TestBatchSizeEdgeCases:
+    """Test various batch size configurations."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "batch_size,doc_count,expected_batches",
+        [
+            (1, 5, 5),  # Each doc separate
+            (5, 5, 1),  # Exact fit
+            (10, 5, 1),  # Batch larger than docs
+            (3, 10, 4),  # Normal case
+            (100, 1, 1),  # Large batch, single doc
+        ],
+    )
+    async def test_batch_counts(self, batch_size, doc_count, expected_batches):
+        """Test various batch size and document count combinations."""
+        from app.routes.document_routes import _process_documents_async_pipeline
+
+        mock_store = AsyncMock()
+        mock_store.aadd_documents = AsyncMock(return_value=["id"])
+
+        docs = [
+            Document(page_content=f"doc_{i}", metadata={}) for i in range(doc_count)
+        ]
+
+        with patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", batch_size):
+            await _process_documents_async_pipeline(
+                documents=docs,
+                file_id="test",
+                user_id="testuser",
+                vector_store=mock_store,
+                executor=None,
+            )
+
+        assert mock_store.aadd_documents.call_count == expected_batches
+
+    @pytest.mark.asyncio
+    async def test_large_batch_size_single_call(self):
+        """Test that a very large batch size results in a single call."""
+        from app.routes.document_routes import _process_documents_async_pipeline
+
+        mock_store = AsyncMock()
+        mock_store.aadd_documents = AsyncMock(return_value=["id"])
+
+        docs = [Document(page_content=f"doc_{i}", metadata={}) for i in range(100)]
+
+        with patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 1000):
+            await _process_documents_async_pipeline(
+                documents=docs,
+                file_id="test",
+                user_id="testuser",
+                vector_store=mock_store,
+                executor=None,
+            )
+
+        assert mock_store.aadd_documents.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_batch_size_one_multiple_calls(self):
+        """Test that batch size of 1 results in many calls."""
+        from app.routes.document_routes import _process_documents_async_pipeline
+
+        mock_store = AsyncMock()
+        mock_store.aadd_documents = AsyncMock(return_value=["id"])
+
+        docs = [Document(page_content=f"doc_{i}", metadata={}) for i in range(5)]
+
+        with patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 1):
+            await _process_documents_async_pipeline(
+                documents=docs,
+                file_id="test",
+                user_id="testuser",
+                vector_store=mock_store,
+                executor=None,
+            )
+
+        assert mock_store.aadd_documents.call_count == 5
+
+
+class TestProducerConsumerPattern:
+    """Test the producer-consumer pattern behavior."""
+
+    @pytest.mark.asyncio
+    async def test_producer_signals_completion_on_success(self):
+        """Test that producer always signals completion."""
+        from app.routes.document_routes import _process_documents_async_pipeline
+
+        mock_store = AsyncMock()
+        mock_store.aadd_documents = AsyncMock(return_value=["id"])
+
+        docs = [Document(page_content="test", metadata={})]
+
+        with patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 1):
+            result = await _process_documents_async_pipeline(
+                documents=docs,
+                file_id="test",
+                user_id="testuser",
+                vector_store=mock_store,
+                executor=None,
+            )
+
+        # If we get here without hanging, the producer signaled completion
+        assert result == ["id"]
+
+    @pytest.mark.asyncio
+    async def test_consumer_handles_exception_in_batch(self):
+        """Test that consumer properly handles exceptions from vector store."""
+        from app.routes.document_routes import _process_documents_async_pipeline
+
+        mock_store = AsyncMock()
+        mock_store.aadd_documents = AsyncMock(side_effect=ValueError("Test error"))
+        mock_store.delete = AsyncMock()
+
+        docs = [Document(page_content="test", metadata={})]
+
+        with patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 1):
+            with pytest.raises(ValueError, match="Test error"):
+                await _process_documents_async_pipeline(
+                    documents=docs,
+                    file_id="test",
+                    user_id="testuser",
+                    vector_store=mock_store,
+                    executor=None,
+                )
+
+    @pytest.mark.asyncio
+    async def test_rollback_waits_for_in_flight_parallel_insert(self):
+        """Rollback must not run while another batch insert can still commit."""
+        import asyncio
+
+        from app.routes.document_routes import _process_documents_async_pipeline
+
+        insert_started = asyncio.Event()
+        events = []
+
+        async def add_documents(docs, ids=None, executor=None):
+            idx = docs[0].metadata["idx"]
+            if idx == 0:
+                events.append("slow_insert_started")
+                insert_started.set()
+                await asyncio.sleep(0.05)
+                events.append("slow_insert_finished")
+                return ["slow_id"]
+
+            await insert_started.wait()
+            events.append("failing_insert")
+            raise ValueError("Test error")
+
+        async def delete_by_metadata(metadata_filter, executor=None):
+            assert metadata_filter["file_id"] == "test"
+            assert set(metadata_filter) == {
+                "file_id",
+                "_rag_ingestion_attempt_id",
+            }
+            events.append("rollback")
+
+        mock_store = AsyncMock()
+        mock_store.aadd_documents = add_documents
+        mock_store.delete_by_metadata = delete_by_metadata
+
+        docs = [
+            Document(page_content="slow", metadata={"idx": 0}),
+            Document(page_content="fail", metadata={"idx": 1}),
+        ]
+
+        with patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 1):
+            with pytest.raises(ValueError, match="Test error"):
+                await _process_documents_async_pipeline(
+                    documents=docs,
+                    file_id="test",
+                    vector_store=mock_store,
+                    executor=None,
+                    parallel_execution=2,
+                )
+
+        assert events.index("slow_insert_finished") < events.index("rollback")
+
+    @pytest.mark.asyncio
+    async def test_cancellation_waits_for_in_flight_insert_before_rollback(self):
+        """Request cancellation must not leave a shielded insert committed."""
+        import asyncio
+
+        from app.routes.document_routes import _process_documents_async_pipeline
+
+        insert_started = asyncio.Event()
+        release_insert = asyncio.Event()
+        events = []
+
+        async def add_documents(docs, ids=None, executor=None):
+            events.append("insert_started")
+            insert_started.set()
+            await release_insert.wait()
+            events.append("insert_finished")
+            return ["id"]
+
+        async def delete_by_metadata(metadata_filter, executor=None):
+            assert metadata_filter["file_id"] == "test"
+            assert set(metadata_filter) == {
+                "file_id",
+                "_rag_ingestion_attempt_id",
+            }
+            events.append("rollback")
+
+        mock_store = AsyncMock()
+        mock_store.aadd_documents = add_documents
+        mock_store.delete_by_metadata = delete_by_metadata
+
+        docs = [Document(page_content="test", metadata={})]
+
+        with patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 1):
+            pipeline_task = asyncio.create_task(
+                _process_documents_async_pipeline(
+                    documents=docs,
+                    file_id="test",
+                    vector_store=mock_store,
+                    executor=None,
+                )
+            )
+            await insert_started.wait()
+            pipeline_task.cancel()
+            await asyncio.sleep(0)
+            release_insert.set()
+
+            with pytest.raises(asyncio.CancelledError):
+                await pipeline_task
+
+        assert events == ["insert_started", "insert_finished", "rollback"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("document_count", "blocked_put"),
+        [(3, "batch"), (2, "sentinel")],
+    )
+    async def test_producer_cancellation_does_not_block_on_full_queue(
+        self, document_count, blocked_put
+    ):
+        """One cancellation must release a producer blocked on a full queue."""
+        import asyncio
+
+        from app.routes.document_routes import _process_documents_async_pipeline
+
+        target_put_started = asyncio.Event()
+        sentinel_put_started = asyncio.Event()
+
+        class ObservingQueue(asyncio.Queue):
+            async def put(self, item):
+                if item is None:
+                    sentinel_put_started.set()
+
+                is_target = (blocked_put == "sentinel" and item is None) or (
+                    blocked_put == "batch"
+                    and item is not None
+                    and item[2] == document_count
+                )
+                if is_target:
+                    target_put_started.set()
+                return await super().put(item)
+
+        async def add_documents(docs, ids=None, executor=None):
+            await target_put_started.wait()
+            raise asyncio.CancelledError
+
+        mock_store = AsyncMock()
+        mock_store.aadd_documents = add_documents
+        mock_store.delete_by_metadata = AsyncMock()
+        documents = [
+            Document(
+                page_content=f"doc_{source_index}",
+                metadata={"source_index": source_index},
+            )
+            for source_index in range(document_count)
+        ]
+
+        with (
+            patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 1),
+            patch("app.routes.document_routes.EMBEDDING_MAX_QUEUE_SIZE", 1),
+            patch("app.routes.document_routes.asyncio.Queue", ObservingQueue),
+        ):
+            pipeline_task = asyncio.create_task(
+                _process_documents_async_pipeline(
+                    documents=documents,
+                    file_id="test",
+                    vector_store=mock_store,
+                    executor=None,
+                )
+            )
+            try:
+                done, _ = await asyncio.wait({pipeline_task}, timeout=1)
+                assert (
+                    pipeline_task in done
+                ), f"pipeline hung after cancellation during {blocked_put} enqueue"
+                with pytest.raises(asyncio.CancelledError):
+                    await pipeline_task
+            finally:
+                if not pipeline_task.done():
+                    pipeline_task.cancel()
+                    await asyncio.gather(pipeline_task, return_exceptions=True)
+
+        if blocked_put == "batch":
+            assert not sentinel_put_started.is_set()
+        else:
+            assert sentinel_put_started.is_set()
+        mock_store.delete_by_metadata.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_cancellation_rollback_preserves_same_file_rows(self):
+        """Rollback removes only rows created by the cancelled ingestion attempt."""
+        import asyncio
+
+        from app.routes.document_routes import _process_documents_async_pipeline
+
+        key = "_rag_ingestion_attempt_id"
+        records = [{"content": "existing", "metadata": {"file_id": "test"}}]
+        cancelled_insert_started = asyncio.Event()
+        release_cancelled_insert = asyncio.Event()
+
+        class TrackingStore:
+            async def aadd_documents(self, docs, ids=None, executor=None):
+                document = docs[0]
+                if document.page_content == "cancelled":
+                    cancelled_insert_started.set()
+                    await release_cancelled_insert.wait()
+
+                records.append(
+                    {
+                        "content": document.page_content,
+                        "metadata": dict(document.metadata),
+                    }
+                )
+                return ids
+
+            async def delete_by_metadata(self, metadata_filter, executor=None):
+                records[:] = [
+                    record
+                    for record in records
+                    if not all(
+                        record["metadata"].get(field) == value
+                        for field, value in metadata_filter.items()
+                    )
+                ]
+
+            async def delete(self, ids=None, executor=None):
+                raise AssertionError("rollback must not delete by file_id")
+
+        store = TrackingStore()
+        cancelled_docs = [Document(page_content="cancelled", metadata={})]
+        successful_docs = [Document(page_content="successful", metadata={})]
+
+        with patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 1):
+            cancelled_task = asyncio.create_task(
+                _process_documents_async_pipeline(
+                    documents=cancelled_docs,
+                    file_id="test",
+                    vector_store=store,
+                    executor=None,
+                )
+            )
+            await asyncio.wait_for(cancelled_insert_started.wait(), timeout=1)
+
+            await _process_documents_async_pipeline(
+                documents=successful_docs,
+                file_id="test",
+                vector_store=store,
+                executor=None,
+            )
+
+            cancelled_task.cancel()
+            await asyncio.sleep(0)
+            release_cancelled_insert.set()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(cancelled_task, timeout=1)
+
+        assert [record["content"] for record in records] == [
+            "existing",
+            "successful",
+        ]
+        assert key not in records[0]["metadata"]
+        assert key in records[1]["metadata"]
+        assert cancelled_docs[0].metadata[key] != successful_docs[0].metadata[key]
+
+    @pytest.mark.asyncio
+    async def test_peer_consumer_skips_queued_batch_after_failure(self):
+        """A peer must acknowledge, but not start, queued work after a failure."""
+        import asyncio
+
+        from app.routes.document_routes import _process_documents_async_pipeline
+
+        created_queues = []
+
+        class TrackingQueue(asyncio.Queue):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.get_count = 0
+                self.task_done_count = 0
+                self.checked_out = {}
+                self.completed = []
+                created_queues.append(self)
+
+            async def get(self):
+                item = await super().get()
+                self.get_count += 1
+                self.checked_out[asyncio.current_task()] = item
+                return item
+
+            def task_done(self):
+                self.task_done_count += 1
+                self.completed.append(self.checked_out.pop(asyncio.current_task()))
+                super().task_done()
+
+        loop = asyncio.get_running_loop()
+        failing_result = loop.create_future()
+        successful_result = loop.create_future()
+        first_two_started = asyncio.Event()
+        started_batches = []
+
+        async def add_documents(docs, ids=None, executor=None):
+            batch_idx = docs[0].metadata["idx"]
+            started_batches.append(batch_idx)
+
+            if len(started_batches) == 2:
+                first_two_started.set()
+
+            if batch_idx == 0:
+                return await failing_result
+            if batch_idx == 1:
+                return await successful_result
+            return [f"id_{batch_idx}"]
+
+        mock_store = AsyncMock()
+        mock_store.aadd_documents = add_documents
+        mock_store.delete_by_metadata = AsyncMock()
+
+        docs = [
+            Document(page_content=f"doc_{idx}", metadata={"idx": idx})
+            for idx in range(3)
+        ]
+
+        with (
+            patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 1),
+            patch("app.routes.document_routes.EMBEDDING_MAX_QUEUE_SIZE", 3),
+            patch("app.routes.document_routes.asyncio.Queue", TrackingQueue),
+        ):
+            pipeline_task = asyncio.create_task(
+                _process_documents_async_pipeline(
+                    documents=docs,
+                    file_id="test",
+                    vector_store=mock_store,
+                    executor=None,
+                    parallel_execution=2,
+                )
+            )
+
+            await asyncio.wait_for(first_two_started.wait(), timeout=1)
+            failing_result.set_exception(ValueError("Test error"))
+            successful_result.set_result(["id_1"])
+
+            with pytest.raises(ValueError, match="Test error"):
+                await asyncio.wait_for(pipeline_task, timeout=1)
+
+        assert set(started_batches) == {0, 1}
+
+        queue = created_queues[0]
+        completed_batch_numbers = [
+            item[2] for item in queue.completed if item is not None
+        ]
+        assert 3 in completed_batch_numbers
+        assert queue.get_count == queue.task_done_count
+        assert queue.checked_out == {}
+
+    @pytest.mark.asyncio
+    async def test_all_ids_collected_across_batches(self):
+        """Test that IDs from all batches are collected."""
+        from app.routes.document_routes import _process_documents_async_pipeline
+
+        mock_store = AsyncMock()
+        # Return different IDs for each batch
+        mock_store.aadd_documents = AsyncMock(
+            side_effect=[["id1", "id2"], ["id3", "id4"], ["id5"]]
+        )
+
+        docs = [Document(page_content=f"doc_{i}", metadata={}) for i in range(5)]
+
+        with patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 2):
+            result = await _process_documents_async_pipeline(
+                documents=docs,
+                file_id="test",
+                user_id="testuser",
+                vector_store=mock_store,
+                executor=None,
+            )
+
+        assert len(result) == 5
+        assert result == ["id1", "id2", "id3", "id4", "id5"]
+
+    @pytest.mark.asyncio
+    async def test_parallel_execution_processes_batches_concurrently_in_order(self):
+        """Multiple consumers should process batches concurrently and return IDs in batch order."""
+        import asyncio
+
+        from app.routes.document_routes import _process_documents_async_pipeline
+
+        active_batches = 0
+        max_active_batches = 0
+        active_lock = asyncio.Lock()
+
+        async def tracking_add_documents(docs, ids=None, executor=None):
+            nonlocal active_batches, max_active_batches
+            async with active_lock:
+                active_batches += 1
+                max_active_batches = max(max_active_batches, active_batches)
+
+            await asyncio.sleep(0.01)
+
+            async with active_lock:
+                active_batches -= 1
+
+            return [f"id_{doc.metadata['idx']}" for doc in docs]
+
+        mock_store = AsyncMock()
+        mock_store.aadd_documents = tracking_add_documents
+        mock_store.delete = AsyncMock()
+
+        docs = [
+            Document(page_content=f"doc_{i}", metadata={"idx": i}) for i in range(6)
+        ]
+
+        with patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 1):
+            result = await _process_documents_async_pipeline(
+                documents=docs,
+                file_id="test",
+                vector_store=mock_store,
+                executor=None,
+                parallel_execution=3,
+                user_id="test_user",
+            )
+
+        assert max_active_batches > 1
+        assert result == [f"id_{i}" for i in range(6)]
+
+    @pytest.mark.asyncio
+    async def test_parallel_completion_persists_source_chunk_indexes(self):
+        """Out-of-order commits retain ordinals that reconstruct source order."""
+        import asyncio
+
+        from app.routes.document_routes import _process_documents_async_pipeline
+
+        loop = asyncio.get_running_loop()
+        release_batches = [loop.create_future() for _ in range(3)]
+        all_batches_started = asyncio.Event()
+        started_batches = []
+        completion_order = []
+
+        async def controlled_add_documents(docs, ids=None, executor=None):
+            source_index = docs[0].metadata["source_index"]
+            started_batches.append(source_index)
+            if len(started_batches) == 3:
+                all_batches_started.set()
+
+            await release_batches[source_index]
+            completion_order.append(source_index)
+            return [f"id_{source_index}"]
+
+        mock_store = AsyncMock()
+        mock_store.aadd_documents = controlled_add_documents
+        documents = [
+            Document(
+                page_content=f"doc_{source_index}",
+                metadata={
+                    "source_index": source_index,
+                    "_rag_chunk_index": 99,
+                },
+            )
+            for source_index in range(3)
+        ]
+
+        with patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 1):
+            pipeline_task = asyncio.create_task(
+                _process_documents_async_pipeline(
+                    documents=documents,
+                    file_id="test",
+                    vector_store=mock_store,
+                    executor=None,
+                    parallel_execution=3,
+                )
+            )
+
+            await asyncio.wait_for(all_batches_started.wait(), timeout=1)
+            for source_index in (2, 1, 0):
+                release_batches[source_index].set_result(None)
+                await asyncio.sleep(0)
+
+            result = await asyncio.wait_for(pipeline_task, timeout=1)
+
+        assert completion_order == [2, 1, 0]
+        assert result == ["id_0", "id_1", "id_2"]
+        assert [document.metadata["_rag_chunk_index"] for document in documents] == [
+            0,
+            1,
+            2,
+        ]
+
+
+class TestSyncBatchedMongoCompat:
+    """Regression tests for MongoDB-compatible batch processing (PR #266)."""
+
+    @pytest.mark.asyncio
+    async def test_sync_batched_rejects_documents_keyword_with_legacy_store(self):
+        """Regression: a store using 'docs' (not 'documents') as its param name must
+        still work, proving the call site uses positional — not keyword — dispatch."""
+        from app.routes.document_routes import _process_documents_batched_sync
+        from concurrent.futures import ThreadPoolExecutor
+
+        class LegacyMongoStore:
+            """No **kwargs — documents= keyword would raise TypeError."""
+
+            def add_documents(self, docs, ids):
+                return [f"id_{i}" for i in range(len(docs))]
+
+            def delete(self, ids=None):
+                pass
+
+        docs = [
+            Document(page_content=f"content_{i}", metadata={"file_id": "test_file"})
+            for i in range(5)
+        ]
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            with patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 2):
+                result = await _process_documents_batched_sync(
+                    documents=docs,
+                    file_id="test_file",
+                    user_id="testuser",
+                    vector_store=LegacyMongoStore(),
+                    executor=executor,
+                )
+
+        assert len(result) == 5
+
+    @pytest.mark.asyncio
+    async def test_sync_batched_with_base_class_signature(self):
+        """Positional dispatch also works with a store matching the VectorStore base class signature."""
+        from app.routes.document_routes import _process_documents_batched_sync
+        from concurrent.futures import ThreadPoolExecutor
+
+        class BaseClassStore:
+            def add_documents(self, documents, ids=None, **kwargs):
+                return [f"id_{i}" for i in range(len(documents))]
+
+            def delete(self, ids=None):
+                pass
+
+        docs = [
+            Document(page_content=f"content_{i}", metadata={"file_id": "test_file"})
+            for i in range(3)
+        ]
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            with patch("app.routes.document_routes.EMBEDDING_BATCH_SIZE", 2):
+                result = await _process_documents_batched_sync(
+                    documents=docs,
+                    file_id="test_file",
+                    user_id="testuser",
+                    vector_store=BaseClassStore(),
+                    executor=executor,
+                )
+
+        assert len(result) == 3
+
+
+class TestMongoIdGeneration:
+    """Test that digest-based ID generation produces unique IDs across batches."""
+
+    def test_unique_ids_across_batches(self):
+        """Simulate multiple batch calls and verify no ID collisions."""
+        import hashlib
+
+        file_id = "test_file"
+        all_ids = []
+
+        for batch_idx in range(3):
+            batch_docs = [
+                Document(
+                    page_content=f"content_{batch_idx * 3 + i}",
+                    metadata={
+                        "file_id": file_id,
+                        "digest": hashlib.md5(
+                            f"content_{batch_idx * 3 + i}".encode()
+                        ).hexdigest(),
+                    },
+                )
+                for i in range(3)
+            ]
+            f_ids = [
+                f"{file_id}_{doc.metadata.get('digest') or hashlib.md5(doc.page_content.encode()).hexdigest()}"
+                for doc in batch_docs
+            ]
+            all_ids.extend(f_ids)
+
+        assert len(all_ids) == 9
+        assert len(set(all_ids)) == 9
+
+    def test_old_sequential_ids_would_collide(self):
+        """Demonstrates the old per-batch range(len) approach caused ID collisions."""
+        file_id = "test_file"
+        all_ids = []
+
+        for _ in range(3):
+            batch_size = 3
+            old_ids = [f"{file_id}_{i}" for i in range(batch_size)]
+            all_ids.extend(old_ids)
+
+        assert len(all_ids) == 9
+        assert len(set(all_ids)) == 3
+
+    def test_fallback_to_content_hash_without_digest_metadata(self):
+        """IDs are unique even when documents lack a 'digest' metadata field."""
+        import hashlib
+
+        file_id = "test_file"
+        docs = [
+            Document(page_content=f"content_{i}", metadata={"file_id": file_id})
+            for i in range(5)
+        ]
+
+        f_ids = [
+            f"{file_id}_{doc.metadata.get('digest') or hashlib.md5(doc.page_content.encode()).hexdigest()}"
+            for doc in docs
+        ]
+
+        assert len(set(f_ids)) == 5
+
+    def test_empty_documents_returns_empty(self):
+        """AtlasMongoVector.add_documents with empty list returns empty."""
+        pytest.importorskip("langchain_mongodb", reason="requires langchain_mongodb")
+        from unittest.mock import MagicMock
+        from app.services.vector_store.atlas_mongo_vector import AtlasMongoVector
+
+        store = MagicMock(spec=AtlasMongoVector)
+        store.add_documents = AtlasMongoVector.add_documents.__get__(store)
+        result = store.add_documents([])
+        assert result == []
