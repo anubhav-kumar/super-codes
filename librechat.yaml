@@ -35,6 +35,8 @@ endpoints:
       - artifacts
       - actions
       - deferred_tools
+      # Instruction-only skills (SKILL.md). Skills that run scripts would also need execute_code.
+      - skills
   custom:
     - name: 'OpenRouter'
       # OPENROUTER_KEY is read from .env.
