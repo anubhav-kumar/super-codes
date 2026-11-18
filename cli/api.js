@@ -1,8 +1,8 @@
 // HTTP layer: relative URLs under the base (path prefixes work), error mapping, response validation.
 
-import { MessageSchema, ChatSummarySchema, AssetSchema, formatZodError } from '../lib/schema.js';
+import { MessageSchema, ChatSummarySchema, AssetSchema, ParticipantSchema, formatZodError } from '../lib/schema.js';
 import { ULID_RE } from '../lib/constants.js';
-import { CliError, EXIT, HEALTH_HINT, invalidResponse } from './errors.js';
+import { CliError, EXIT, HEALTH_HINT, invalidResponse, notParticipant } from './errors.js';
 
 export function apiUrl(base, relPath, query) {
   const u = new URL(relPath, base);
@@ -39,7 +39,8 @@ export function httpError(status, body, base) {
   const hasServerError = e && typeof e.code === 'string' && typeof e.message === 'string';
   let exit;
   if (status === 400 || status === 413 || status === 415) exit = EXIT.VALIDATION;
-  else if (status === 404) exit = EXIT.NOT_FOUND;
+  else if (status === 403) exit = EXIT.FORBIDDEN;
+  else if (status === 404 || status === 410) exit = EXIT.NOT_FOUND;
   else if (status === 409) exit = EXIT.CONFLICT;
   else exit = EXIT.NETWORK;
   if (hasServerError) {
@@ -142,6 +143,31 @@ export function checkAsset(obj) {
   const r = AssetSchema.safeParse(obj);
   if (!r.success) throw invalidResponse(`server sent an invalid asset: ${formatZodError(r.error)}`);
   return r.data;
+}
+
+export function checkParticipant(obj) {
+  const r = ParticipantSchema.safeParse(obj);
+  if (!r.success) throw invalidResponse(`server sent an invalid participant: ${formatZodError(r.error)}`);
+  return r.data;
+}
+
+export function checkParticipantList(list, what) {
+  if (!Array.isArray(list)) throw invalidResponse(`${what}: "participants" must be an array`);
+  return list.map(checkParticipant);
+}
+
+export async function fetchParticipants(base, chatId, { signal } = {}) {
+  const body = expectObject(
+    await request(base, 'GET', `api/chats/${enc(chatId)}/participants`, { signal }),
+    'GET api/chats/:chatId/participants',
+  );
+  return checkParticipantList(body.participants, 'GET participants');
+}
+
+// Reading and watching a chat require having joined it (DESIGN §14).
+export async function requireParticipant(base, chatId, author, { signal } = {}) {
+  const list = await fetchParticipants(base, chatId, { signal });
+  if (!list.some((p) => p.name === author)) throw notParticipant(chatId, author);
 }
 
 export function checkUlid(value, what) {

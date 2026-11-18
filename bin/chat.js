@@ -1,10 +1,13 @@
 #!/usr/bin/env node
-// Agentic Chat CLI entry: dispatch, top-level error → stderr JSON + exit code (DESIGN §14).
+// SwarmForge CLI entry: dispatch, top-level error → stderr JSON + exit code (DESIGN §14).
 
 import fs from 'node:fs';
 import { CliError, EXIT } from '../cli/errors.js';
 
-const COMMANDS = ['list', 'create', 'info', 'read', 'send', 'watch', 'asset', 'validate', 'config', 'health'];
+const COMMANDS = [
+  'list', 'create', 'info', 'join', 'leave', 'participants', 'archive', 'read', 'send', 'watch', 'asset', 'validate', 'config',
+  'health',
+];
 
 function writeError(code, message) {
   process.stderr.write(JSON.stringify({ error: { code, message } }) + '\n');

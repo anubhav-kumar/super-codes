@@ -1,4 +1,4 @@
-// Agentic Chat HTTP server entry point (DESIGN §11).
+// SwarmForge HTTP server entry point (DESIGN §11).
 import http from 'node:http';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { LIMITS, ULID_RE, extOf, mimeForExt, INLINE_IMAGE_EXTS } from './lib/constants.js';
-import { ChatIdSchema, formatZodError } from './lib/schema.js';
+import { ChatIdSchema, AuthorSchema, formatZodError } from './lib/schema.js';
 import { validateChatFile } from './lib/validate.js';
 import * as store from './server/store.js';
 import * as sse from './server/sse.js';
@@ -27,8 +27,12 @@ const LIB_DIR = path.resolve(ROOT, 'lib');
 
 const notFound = (what) => new HttpError(404, 'not_found', `${what} not found`);
 
+const DISK_SYNC_MS = 5000;
+
 function requireChat(chatId) {
-  if (!store.hasChat(chatId)) throw notFound(`chat "${chatId}"`);
+  if (store.hasChat(chatId)) return;
+  if (store.isArchived(chatId)) throw store.archivedError(chatId);
+  throw notFound(`chat "${chatId}"`);
 }
 
 function compareSummaries(a, b) {
@@ -58,6 +62,22 @@ function checkUlidParam(name, value) {
 }
 
 const CreateChatSchema = z.strictObject({ id: ChatIdSchema });
+const JoinSchema = z.strictObject({ name: AuthorSchema });
+const ArchiveSchema = z.strictObject({ by: AuthorSchema });
+
+function parseBody(schema, body) {
+  const r = schema.safeParse(body);
+  if (!r.success) {
+    const unknownKeys = r.error.issues.some((i) => i.code === 'unrecognized_keys');
+    throw new HttpError(400, unknownKeys ? 'bad_request' : 'validation_failed', formatZodError(r.error));
+  }
+  return r.data;
+}
+
+function broadcastParticipants(chatId) {
+  sse.broadcastParticipants(chatId, store.listParticipants(chatId));
+  sse.broadcastChat(store.getSummary(chatId));
+}
 
 const router = createRouter();
 
@@ -71,13 +91,8 @@ router.add('GET', '/api/chats', (req, res) => {
 });
 
 router.add('POST', '/api/chats', async (req, res) => {
-  const body = await readJsonBody(req);
-  const r = CreateChatSchema.safeParse(body);
-  if (!r.success) {
-    const unknownKeys = r.error.issues.some((i) => i.code === 'unrecognized_keys');
-    throw new HttpError(400, unknownKeys ? 'bad_request' : 'validation_failed', formatZodError(r.error));
-  }
-  const chat = await store.createChat(r.data.id);
+  const { id } = parseBody(CreateChatSchema, await readJsonBody(req));
+  const chat = await store.createChat(id);
   sse.broadcastChat(chat);
   sendJson(res, 201, { chat });
 });
@@ -85,6 +100,35 @@ router.add('POST', '/api/chats', async (req, res) => {
 router.add('GET', '/api/chats/:chatId', (req, res, { chatId }) => {
   requireChat(chatId);
   sendJson(res, 200, { chat: store.getSummary(chatId) });
+});
+
+router.add('GET', '/api/chats/:chatId/participants', (req, res, { chatId }) => {
+  requireChat(chatId);
+  sendJson(res, 200, { participants: store.listParticipants(chatId) });
+});
+
+// Idempotent: 201 when newly joined, 200 when already a participant.
+router.add('POST', '/api/chats/:chatId/participants', async (req, res, { chatId }) => {
+  requireChat(chatId);
+  const { name } = parseBody(JoinSchema, await readJsonBody(req));
+  const { participant, joined } = await store.joinChat(chatId, name);
+  if (joined) broadcastParticipants(chatId);
+  sendJson(res, joined ? 201 : 200, { participant });
+});
+
+router.add('DELETE', '/api/chats/:chatId/participants/:name', async (req, res, { chatId, name }) => {
+  requireChat(chatId);
+  const participant = await store.leaveChat(chatId, name);
+  broadcastParticipants(chatId);
+  sendJson(res, 200, { participant });
+});
+
+router.add('POST', '/api/chats/:chatId/archive', async (req, res, { chatId }) => {
+  requireChat(chatId);
+  const { by } = parseBody(ArchiveSchema, await readJsonBody(req));
+  const archive = await store.archiveChat(chatId, by);
+  sse.broadcastRemoved(chatId, 'archived');
+  sendJson(res, 200, { archive });
 });
 
 router.add('GET', '/api/chats/:chatId/messages', (req, res, { chatId }, url) => {
@@ -270,6 +314,18 @@ async function main() {
     console.error(`${new Date().toISOString()} ERROR server: ${err.code ?? err.message}`);
     process.exit(1);
   });
+
+  // Manual moves in data/chats (e.g. restoring an archived chat) take effect without a restart.
+  const diskSync = setInterval(async () => {
+    try {
+      const { added, removed } = await store.syncWithDisk();
+      for (const id of added) sse.broadcastChat(store.getSummary(id));
+      for (const id of removed) sse.broadcastRemoved(id, store.isArchived(id) ? 'archived' : 'removed');
+    } catch (err) {
+      console.error(`${new Date().toISOString()} ERROR disk sync failed: ${err.code ?? err.message}`);
+    }
+  }, DISK_SYNC_MS);
+  diskSync.unref();
 
   server.listen(PORT, HOST, () => {
     console.log(`${new Date().toISOString()} listening on http://${HOST}:${PORT} (data: ${DATA_DIR})`);

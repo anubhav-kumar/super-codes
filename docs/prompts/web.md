@@ -1,6 +1,6 @@
-# Prompt: Build the Agentic Chat **Web UI**
+# Prompt: Build the SwarmForge **Web UI**
 
-You are implementing the browser client for "Agentic Chat", used by **humans** to chat with each other and
+You are implementing the browser client for "SwarmForge", used by **humans** to chat with each other and
 with AI agents (who use a CLI). The UI is served by the chat server itself and talks only to that
 same origin (no configurable server URL).
 
@@ -88,7 +88,7 @@ Keep each module focused; a few hundred lines max each. Comments only where inte
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│ Agentic Chat   ● connected                          posting as anubhav ⚙ │
+│ SwarmForge   ● connected                          posting as anubhav ⚙ │
 ├──────────────┬───────────────────────────────────────────────────────┤
 │ + New chat   │ # general                                              │
 │              │ ──────────── 2026-10-20 ────────────                   │
@@ -139,7 +139,7 @@ unknown chat ID → empty state with "Chat not found". Browser back/forward work
   (or never seen and messageCount > 0). Don't mark the open chat unread.
 - "+ New chat": inline input in the sidebar, validated with `C.CHAT_ID_RE` (lowercase as you type), Enter to
   create (`POST api/chats`), Esc to cancel. 409 → just navigate to the existing chat. Other errors inline.
-- Update `document.title` with the unread count, e.g. `(2) Agentic Chat`.
+- Update `document.title` with the unread count, e.g. `(2) SwarmForge`.
 
 ## 8. Thread
 ### Loading

@@ -1,4 +1,4 @@
-# Agentic Chat — Design (Source of Truth)
+# SwarmForge — Design (Source of Truth)
 
 Status: v1 draft · Last updated: 2026-10-20
 
@@ -203,10 +203,17 @@ URLs relative to it (`new URL('api/chats', base.endsWith('/') ? base : base + '/
 data/
   chats/
     <chatId>.jsonl
+    <chatId>.participants.json          # who has joined the chat (§7.5); absent = nobody yet
     <chatId>.jsonl.partial-<epochMs>    # only created by crash recovery (§7.4)
   assets/
     <chatId>/
       <assetId><ext>
+  archive/                              # archived chats, one folder each (§7.6); never loaded
+    <chatId>/
+      <chatId>.jsonl
+      <chatId>.participants.json
+      assets/<assetId><ext>
+      archive.json                      # {"chatId","archivedAt","archivedBy"}
 ```
 
 ### 7.1 JSONL rules (the "perfect format")
@@ -271,6 +278,37 @@ Consequences:
   line append leaves orphan asset files with no message — harmless, not cleaned up in v1.
 - After load, the cache is authoritative. Hand edits while the server runs are unsupported; edit with the
   server stopped, then restart.
+
+### 7.5 Participants
+A chat's participants live in a sidecar file, not in the JSONL:
+```json
+{"participants":[{"name":"anubhav","joinedAt":"2026-10-25T09:00:00.000Z"},{"name":"claude","joinedAt":"..."}]}
+```
+- `name` matches the author format; `joinedAt` is an ISO timestamp; names are unique; order = join order.
+- Written atomically (`.tmp` + rename) through the chat's write queue (§7.3), so joins, leaves and
+  message appends to one chat never interleave.
+- **Only participants can send** (`403 not_participant`). Reading over HTTP is open; the CLI requires
+  membership for `read`/`watch` (§14) and the web UI is read-only until you join (§15).
+- **Migration:** a chat with messages but no participants file is seeded at startup with every author who
+  has posted (`joinedAt` = their first message's `ts`), and the file is written.
+- An unparseable participants file is moved to `<chatId>.participants.json.invalid-<epochMs>` and
+  re-seeded from authors (logged as a warning).
+- `chat validate` checks only the JSONL; the participants file is not part of the "perfect format" (§7.1).
+
+### 7.6 Archived chats
+- `POST /api/chats/:chatId/archive` (participants only) moves, inside the chat's write queue: `archive.json`
+  first, then every `data/chats/<chatId>.*` file except the `.jsonl`, then `data/assets/<chatId>/` →
+  `assets/`, and the `.jsonl` **last** (until it moves, the chat still exists, so a crash leaves it
+  active). The chat is then unloaded; queued writes for it fail with `410 archived`.
+- An archived chat is invisible: not in `GET /api/chats`, and every `/api/chats/:chatId/*` route answers
+  `410 archived`. Creating a chat with an archived ID is `409 conflict`. Archiving fails with `409` if
+  `data/archive/<chatId>/` already exists and is not empty.
+- **No unarchive API.** A chat becomes active again only when someone moves its files back by hand:
+  `mv data/archive/<id>/<id>.* data/chats/` and `mv data/archive/<id>/assets data/assets/<id>`.
+- **Disk sync:** every 5 s the server rescans `data/chats`. A `.jsonl` that has been present for two
+  scans in a row is loaded (so a multi-file move can finish) and announced with a `chat` event; a cached
+  chat whose `.jsonl` is gone is unloaded and announced with `chat-removed`. Restores therefore take
+  effect within ~10 s with no restart.
 
 ---
 
@@ -364,8 +402,8 @@ this message's `assets` → the client's index of already-loaded messages → `G
 
 ### 10.2 Mentions
 `@name` where name matches the author format. Pattern: `(?<![\w@])@([a-z0-9][a-z0-9_-]{0,31})`.
-Mentions are a **convention only** — not stored separately, not validated against known users. Used by
-the web UI for highlighting and by `chat watch --mention`.
+Mentions are not stored separately and not validated by the server. The web UI's mention autocomplete
+suggests the chat's participants (§7.5); mentions are used for highlighting and by `chat watch --mention`.
 
 ### 10.3 Placeholders (send-time only, never stored)
 When sending, the client does not know asset IDs yet. Text may contain `asset:$N`, where N is the
@@ -396,7 +434,10 @@ Every error response (and every CLI stderr error) has this shape:
 | 409 | `conflict` | Chat already exists |
 | 413 | `payload_too_large` | Body/asset/count limits exceeded |
 | 415 | `unsupported_media_type` | Wrong `Content-Type` for the route |
-| 403 | `forbidden_origin` | Cross-origin POST / preflight from an origin not in `CORS_ORIGIN` (§11.5) |
+| 403 | `forbidden_origin` | Cross-origin POST/DELETE / preflight from an origin not in `CORS_ORIGIN` (§11.5) |
+| 403 | `not_participant` | Sending a message as an author who has not joined the chat (§7.5) |
+| 404 | `not_participant` | Leaving a chat you are not a participant of |
+| 410 | `archived` | Any `/api/chats/:chatId/*` request for an archived chat (§7.6) |
 | 421 | `misdirected_request` | `Host` header not in `ALLOWED_HOSTS` (§11.5) |
 | 500 | `internal_error` | Anything else (message must not leak stack traces) |
 | 503 | (health body, not an error body) | `GET /api/health` when a check fails (§11.6) |
@@ -407,9 +448,10 @@ never 400, on every route. Query parameters that fail validation are `400 bad_re
 
 ### 11.2 Chat summary object
 ```json
-{"id":"design-review","messageCount":42,"lastMessageAt":"2026-10-20T10:15:00.123Z"}
+{"id":"design-review","messageCount":42,"lastMessageAt":"2026-10-20T10:15:00.123Z","participants":["anubhav","claude"]}
 ```
-`lastMessageAt` is `null` for an empty chat. Keys in this order.
+`lastMessageAt` is `null` for an empty chat. `participants` = names in join order. Keys in this order.
+**Participant object:** `{"name":"claude","joinedAt":"<ISO>"}`.
 
 ### 11.3 Endpoints
 
@@ -423,6 +465,21 @@ last, ties by `id` asc.
 Broadcasts a `chat` event on the global stream.
 
 **`GET /api/chats/:chatId`** → `200 {"chat":ChatSummary}` · `404`.
+
+**`GET /api/chats/:chatId/participants`** → `200 {"participants":[Participant...]}` in join order · `404`.
+
+**`POST /api/chats/:chatId/participants`** — body `application/json` `{"name":"<author>"}` (no other keys).
+→ `201 {"participant":Participant}` when newly joined · `200` (same body) when already a participant ·
+`400` · `404` · `415`. On a new join broadcasts `participants` on the chat stream and `chat` on the global stream.
+
+**`DELETE /api/chats/:chatId/participants/:name`** → `200 {"participant":Participant}` (the removed entry) ·
+`404 not_participant` if `name` hasn't joined · `404 not_found` for an unknown chat or invalid name.
+Broadcasts like a join.
+
+**`POST /api/chats/:chatId/archive`** — body `{"by":"<author>"}`; `by` must be a participant.
+→ `200 {"archive":{"chatId":"...","archivedAt":"<ISO>","archivedBy":"..."}}` · `403 not_participant` ·
+`404` · `409` (archive folder not empty) · `410` (already archived). Broadcasts `chat-removed` (global) and
+`removed` (chat stream, which is then closed). See §7.6.
 
 **`GET /api/chats/:chatId/messages?since=&before=&tail=`**
 - `since` (ULID, exclusive): only messages with `id > since`.
@@ -438,7 +495,8 @@ Broadcasts a `chat` event on the global stream.
 - `multipart/form-data`: field `author` (exactly once), field `text` (0 or 1 times; missing = `""`),
   file parts named `files` (0–`MAX_ASSETS_PER_MESSAGE`). Any other field name → `400`.
 - Server normalizes `\r\n` and lone `\r` to `\n` in text, resolves placeholders, validates, writes (§7.3).
-- → `201 {"message":Message}` · `400` · `404` · `413` · `415`.
+- `author` must be a participant (§7.5), else `403 not_participant`.
+- → `201 {"message":Message}` · `400` · `403` · `404` · `413` · `415`.
 - Broadcasts the message on the chat stream and a `chat` event on the global stream.
 
 **`GET /api/chats/:chatId/assets/:assetId`** → `200 {"asset":Asset,"messageId":"<ULID>","available":bool}`
@@ -562,10 +620,17 @@ data: {"id":"01M5CCX98VQ2X7F4M8N6P0R5T1","chatId":"design-review",...}
 - Replay and subscriber registration happen synchronously in the same tick (after the chat is loaded)
   so no message can fall into a gap.
 - Clients must de-duplicate by `id` (e.g. a message received both as POST response and via SSE).
+- On every join/leave: `event: participants`, `data: {"chatId":"...","participants":[Participant...]}`
+  (the full list), **without** an `id:` field so it never moves the `Last-Event-ID` resume point. Not
+  replayed on reconnect: clients re-fetch `GET .../participants` after reconnecting.
+- When the chat is archived or its file disappears: `event: removed`, `data: {"id":"...","reason":"archived"|"removed"}`,
+  then the server ends the stream. Reconnects get `410 archived` / `404`.
 
 ### 12.2 Global stream — `GET /api/stream`
 - On connect: no replay. Clients fetch `GET /api/chats` after the stream opens.
-- `event: chat`, `data:` a ChatSummary JSON, sent when a chat is created and after each new message.
+- `event: chat`, `data:` a ChatSummary JSON, sent when a chat is created, after each new message, after
+  each join/leave, and when a restored chat is picked up from disk (§7.6).
+- `event: chat-removed`, `data: {"id":"...","reason":"archived"|"removed"}` — drop the chat from the list.
 - No `id:` field (not resumable; clients re-fetch the list on reconnect).
 
 ---
@@ -643,9 +708,13 @@ Warning codes: `asset_missing`, `asset_size_mismatch`, `partial_file_present` (a
 chat list
 chat create   <chatId>
 chat info     <chatId>
-chat read     <chatId> [--tail N] [--since ULID] [--before ULID]
+chat join     <chatId> [--as <name>]                      # idempotent
+chat leave    <chatId> [--as <name>]
+chat participants <chatId>
+chat archive  <chatId> [--as <name>]                      # participants only; no unarchive command
+chat read     <chatId> [--as <name>] [--tail N] [--since ULID] [--before ULID]
 chat send     <chatId> --as <name> (<text> | - | --text-file <path>) [--attach <file>]...
-chat watch    <chatId> [--since ULID] [--count N] [--timeout SECONDS] [--ignore <name>]... [--mention <name>]
+chat watch    <chatId> [--as <name>] [--since ULID] [--count N] [--timeout SECONDS] [--ignore <name>]... [--mention <name>]
 chat asset    <chatId> <assetId> [-o <path>] [--force]
 chat validate <chatId>                                    # server-side validation (works remotely)
 chat validate --local <chatId | path.jsonl> [--data-dir <dir>]   # read-only, on the server host
@@ -653,7 +722,10 @@ chat config   get [key] | set <key> <value> | unset <key>          # keys: url, 
 chat health   [--upload-bytes N]                          # end-to-end connection check (§11.6)
 Global: --url <baseUrl>, --help, --version
 ```
-Server URL / author resolution: §5.2.
+Server URL / author resolution: §5.2. `join`, `leave`, `read`, `send` and `watch` need an author.
+**Participants:** `read` and `watch` first check (via `GET .../participants`) that the author has joined,
+else exit 7 `not_participant`; `send` is enforced by the server (same code). `watch` re-checks on every
+reconnect and exits 7 when a `participants` event no longer lists the author.
 
 **Output contract:** every line on **stdout** is one JSON object (JSONL). Messages are printed in canonical
 serialization. Nothing else is ever printed to stdout (sole exception: `--help` prints plain text). Errors go
@@ -666,6 +738,9 @@ receives; invalid data from the server is an error, never passed through.
 |---|---|
 | `list` | N × ChatSummary (§11.2), server order |
 | `create`, `info` | 1 × ChatSummary |
+| `join`, `leave` | 1 × Participant (the joined / removed entry) |
+| `participants` | N × Participant, join order |
+| `archive` | 1 × `{"chatId":"...","archivedAt":"<ISO>","archivedBy":"..."}` |
 | `read` | N × Message (§8), ascending by `id`; nothing else |
 | `send` | 1 × Message (the stored message, placeholders resolved) |
 | `watch` | N × Message, in arrival order, deduplicated, after filters |
@@ -691,6 +766,8 @@ Server codes (§11.1) are passed through unchanged. CLI-originated codes:
 | `file_not_found` | 4 | `--attach`, `--text-file` or `validate --local` path missing |
 | `file_exists` | 6 | `asset` output path exists without `--force` |
 | `timeout` | 5 | `watch --timeout` elapsed |
+| `archived` | 4 | The chat is archived (server 410), or was archived during `watch` |
+| `not_participant` | 7 (4 for `leave`) | Author hasn't joined the chat (`read`, `send`, `watch`), or was removed during `watch` |
 | `internal_error` | 2 | Unexpected CLI bug |
 
 ### 14.3 Exit codes
@@ -701,9 +778,10 @@ Server codes (§11.1) are passed through unchanged. CLI-originated codes:
 | 1 | Usage error (bad flags/arguments) |
 | 2 | Network or server error (unreachable, 5xx, protocol error) |
 | 3 | Validation error (local input invalid, server 400/413/415, invalid data received, `validate` found errors — warnings alone don't count) |
-| 4 | Not found (404 incl. `asset_missing`, missing local file) |
+| 4 | Not found (404 incl. `asset_missing`, 410 `archived`, missing local file) |
 | 5 | Timeout (`watch --timeout` elapsed before `--count` reached) |
 | 6 | Conflict (409, or output file exists without `--force`) |
+| 7 | Forbidden (403: not a participant — run `chat join`; or `forbidden_origin`) |
 
 ---
 
@@ -711,7 +789,15 @@ Server codes (§11.1) are passed through unchanged. CLI-originated codes:
 - Name stored in `localStorage` (`chat.author`), validated with `AUTHOR_RE`.
 - Same origin only (§5.3): no server-URL setting; all URLs relative to the page. Shared constants via
   `import * as C from './lib/constants.js'`. Limits come from the health response.
-- Sidebar chat list (live via `/api/stream`), create chat, unread markers.
+- Sidebar chat list (live via `/api/stream`), create chat (the creator auto-joins), unread markers,
+  participant count per chat.
+- **Participants:** header shows the participant count (toggles a participants panel: name, "you" tag,
+  joined time) and a `leave` button when joined. Until you join, the composer is replaced by a read-only
+  join bar. Live via the chat stream's `participants` event; re-fetched after reconnects. The @mention
+  autocomplete lists participants only (recent posters first).
+- **Archive:** participants get an `archive` header button (with a confirm). Archived/removed chats leave
+  the list live (`chat-removed`); an open one closes with "#id was archived" and reopens by itself if the
+  chat is restored on the server.
 - Thread with history (`tail=200`, "load older" via `before`), live via chat SSE with `since`.
 - **Asset upload:** file picker (multiple), drag-and-drop onto the thread/composer, and paste (images from
   clipboard). Pending attachments shown as removable chips (thumbnail for images, name, size) with
@@ -752,12 +838,26 @@ Text 100,000 chars · 10 assets/message · 25 MB/asset · asset name 200 chars �
 
 ## 17. Future (explicitly not v1)
 Typing/thinking presence events, message edit/delete as append-only event lines, loop guards,
-shared-token auth, user roster (`data/users.json`) for @mention autocomplete, agent skill for the CLI.
+shared-token auth, user roster (`data/users.json`), agent skill for the CLI. (Per-chat participants
+shipped in protocol 2, §7.5.)
 
 ---
 
 ## 18. Open issues / deviations
 _Implementers: append here, don't silently diverge._
+
+- 2026-10-25 — **Archived chats** (owner request; §7.6): archiving moves a chat's files to
+  `data/archive/<chatId>/` and hides it everywhere (`410 archived`). By design there is no unarchive API:
+  reactivation is a manual file move, picked up by a 5 s disk-sync loop (which also unloads chats whose
+  file vanished). §7.2's "a chat exists iff its file exists" now holds while the server runs, not only at
+  startup. No protocol bump: new events are ignored by older clients; old CLIs see 410 as exit 2.
+
+- 2026-10-25 — **Chat participants (protocol 2)** (owner request; §7.5, §11, §12, §14, §15): users join
+  a chat before they can send (server-enforced) and, in the CLI, before `read`/`watch` (client-enforced —
+  there is no auth, so HTTP reads stay open and the web UI shows history read-only). ChatSummary gained
+  `participants`, so `PROTOCOL_VERSION` went 1 → 2 and an old CLI fails `chat health`'s protocol check.
+  Existing chats are seeded from their authors at startup. New CLI exit code 7. `DELETE` added to CORS
+  methods and to `checkOrigin`.
 
 - 2026-10-20 — **CORS default changed from `*` to fail-closed** (§5.1, §11.5, §11.1) after a security review:
   `*` on an unauthenticated server let any website the user visited read chats from `localhost`, and

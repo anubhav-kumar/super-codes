@@ -51,7 +51,7 @@ export function localDate(date) {
 }
 
 export function localTime(date) {
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
 export function authorHue(name) {
@@ -294,14 +294,14 @@ export function renderMessage(msg, ctx) {
   sep.append(el('span', null, localDate(date)));
   row.append(sep);
 
-  const head = el('div', 'msg-head');
-  const author = el('span', 'msg-author', msg.author);
-  author.style.setProperty('--hue', String(authorHue(msg.author)));
+  // Log-line layout: time | author | body, laid out by the .msg grid.
   const time = el('time', 'msg-time', localTime(date));
   time.dateTime = msg.ts;
   time.title = msg.ts;
-  head.append(author, time);
-  row.append(head);
+  const author = el('span', 'msg-author', msg.author);
+  author.style.setProperty('--hue', String(authorHue(msg.author)));
+  author.title = msg.author;
+  row.append(time, author);
   row.title = `${msg.author} · ${msg.ts}`;
 
   const body = el('div', 'msg-body');

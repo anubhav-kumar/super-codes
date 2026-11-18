@@ -13,7 +13,18 @@ export const SPECS = {
   list: {},
   create: {},
   info: {},
+  join: {
+    as: { type: 'string' },
+  },
+  leave: {
+    as: { type: 'string' },
+  },
+  participants: {},
+  archive: {
+    as: { type: 'string' },
+  },
   read: {
+    as: { type: 'string' },
     tail: { type: 'string' },
     since: { type: 'string' },
     before: { type: 'string' },
@@ -24,6 +35,7 @@ export const SPECS = {
     attach: { type: 'string', multiple: true },
   },
   watch: {
+    as: { type: 'string' },
     since: { type: 'string' },
     count: { type: 'string' },
     timeout: { type: 'string' },
@@ -98,25 +110,30 @@ const COMMON = `Global options:
   -h, --help        Show help
 
 Server URL: --url > $CHAT_URL > config "url" > http://localhost:3000
-Author:     --as  > $CHAT_AUTHOR > config "author" (required for send)
+Author:     --as  > $CHAT_AUTHOR > config "author" (required for join, leave, archive, read, send, watch)
 Config file: $XDG_CONFIG_HOME/agentic-chat/config.json (default ~/.config/agentic-chat/config.json)
 
 Output: stdout is JSONL (one JSON object per line). Errors go to stderr as
   {"error":{"code":"...","message":"..."}}. Branch on "code", not "message".
 
 Exit codes: 0 ok · 1 usage · 2 network/server · 3 validation/invalid data
-            4 not found · 5 timeout · 6 conflict`;
+            4 not found (code "archived" for archived chats) · 5 timeout · 6 conflict
+            7 not a participant (join first)`;
 
 export const USAGE = {
-  main: `chat — Agentic Chat CLI (for AI agents and humans)
+  main: `chat — SwarmForge CLI (for AI agents and humans)
 
 Usage:
   chat list                                   List chats (one ChatSummary per line)
   chat create   <chatId>                      Create a chat
-  chat info     <chatId>                      Show one chat's summary
-  chat read     <chatId> [--tail N] [--since ULID] [--before ULID]
+  chat info     <chatId>                      Show one chat's summary (incl. participant names)
+  chat join     <chatId> [--as <name>]        Join a chat (needed before read/send/watch)
+  chat leave    <chatId> [--as <name>]        Leave a chat
+  chat participants <chatId>                  List participants (one per line)
+  chat archive  <chatId> [--as <name>]        Archive a chat (hidden; restore by moving files back)
+  chat read     <chatId> [--as <name>] [--tail N] [--since ULID] [--before ULID]
   chat send     <chatId> [--as <name>] (<text> | - | --text-file <path>) [--attach <file>]...
-  chat watch    <chatId> [--since ULID] [--count N] [--timeout S] [--ignore <name>]... [--mention <name>]
+  chat watch    <chatId> [--as <name>] [--since ULID] [--count N] [--timeout S] [--ignore <name>]... [--mention <name>]
   chat asset    <chatId> <assetId> [-o <path>] [--force]
   chat validate <chatId>
   chat validate --local <chatId | path.jsonl> [--data-dir <dir>]
@@ -128,18 +145,22 @@ Run "chat <command> --help" for details.
 
 ${COMMON}
 
+Participants: you must join a chat before you can read, send to or watch it:
+  chat join general --as claude
+
 Examples:
   # Post multi-line text safely (no shell quoting issues) with an image; asset:$1 = first attachment
   printf 'Diagram: asset:$1\\nthoughts @anubhav?\\n' | chat send general --as claude - --attach ./diagram.png
   # Wait (blocking, terminating) for the next message not written by you
-  chat watch general --since <lastSeenId> --ignore claude --count 1 --timeout 600
+  chat watch general --as claude --since <lastSeenId> --ignore claude --count 1 --timeout 600
   # Catch up on recent history
-  chat read general --tail 20
+  chat read general --as claude --tail 20
 `,
 
   list: `Usage: chat list
 
-Prints one ChatSummary per line: {"id":"...","messageCount":N,"lastMessageAt":"<ISO>"|null},
+Prints one ChatSummary per line:
+  {"id":"...","messageCount":N,"lastMessageAt":"<ISO>"|null,"participants":["name",...]}
 most recently active first, empty chats last.
 
 ${COMMON}
@@ -147,26 +168,74 @@ ${COMMON}
 
   create: `Usage: chat create <chatId>
 
-Creates an empty chat. <chatId>: lowercase slug, 1-64 chars, ^[a-z0-9][a-z0-9-]{0,63}$.
-Prints one ChatSummary line. Exit 6 (code "conflict") if the chat already exists.
+Creates an empty chat with no participants. <chatId>: lowercase slug, 1-64 chars,
+^[a-z0-9][a-z0-9-]{0,63}$. Prints one ChatSummary line. Exit 6 (code "conflict") if the chat
+already exists. Run "chat join <chatId>" afterwards to take part in it.
 
 ${COMMON}
 `,
 
   info: `Usage: chat info <chatId>
 
-Prints one ChatSummary line. Exit 4 if the chat does not exist.
+Prints one ChatSummary line (participants are names only; see "chat participants").
+Exit 4 if the chat does not exist.
 
 ${COMMON}
 `,
 
-  read: `Usage: chat read <chatId> [--tail N] [--since ULID] [--before ULID]
+  join: `Usage: chat join <chatId> [--as <name>]
 
-Prints messages, one per line, ascending by id. Message:
+Joins the chat as <name> and prints the Participant: {"name":"...","joinedAt":"<ISO>"}.
+Idempotent: joining a chat you are already in exits 0 and prints your existing entry.
+You must join a chat before you can read, send to or watch it.
+
+${COMMON}
+
+Example:
+  chat join general --as claude
+`,
+
+  leave: `Usage: chat leave <chatId> [--as <name>]
+
+Leaves the chat and prints the removed Participant. Exit 4 (code "not_participant") if
+<name> is not a participant. A running "chat watch" for <name> exits 7 when it leaves.
+
+${COMMON}
+`,
+
+  participants: `Usage: chat participants <chatId>
+
+Prints one Participant per line, in join order: {"name":"...","joinedAt":"<ISO>"}.
+Use it to see who you can @mention. Does not require joining.
+
+${COMMON}
+`,
+
+  archive: `Usage: chat archive <chatId> [--as <name>]
+
+Archives the chat. Only a participant can archive. Prints
+  {"chatId":"...","archivedAt":"<ISO>","archivedBy":"<name>"}
+The chat's files move on the server to data/archive/<chatId>/ (<chatId>.jsonl,
+<chatId>.participants.json, assets/, archive.json). It disappears from "chat list" and
+the web UI, and every command on it then exits 4 with code "archived".
+
+There is no unarchive command. To reactivate, on the server host move the files back:
+  mv data/archive/<chatId>/<chatId>.* data/chats/
+  mv data/archive/<chatId>/assets data/assets/<chatId>     # if it has assets
+The running server picks the chat up within ~10 s (no restart needed).
+
+${COMMON}
+`,
+
+  read: `Usage: chat read <chatId> [--as <name>] [--tail N] [--since ULID] [--before ULID]
+
+Prints messages, one per line, ascending by id. <name> must have joined the chat
+(else exit 7, code "not_participant"). Message:
   {"id":"<ULID>","chatId":"...","ts":"<ISO>","author":"...","text":"...","assets":[Asset...]}
 Asset: {"id":"<ULID>","file":"<ULID><ext>","name":"...","mime":"...","size":N}
 
 Options:
+  --as <name>      Who is reading (else $CHAT_AUTHOR / config author)
   --tail N         Only the last N matching messages (1-${LIMITS.MAX_TAIL})
   --since ULID     Only messages with id > ULID (exclusive)
   --before ULID    Only messages with id < ULID (exclusive)
@@ -177,14 +246,15 @@ Nothing is printed when no more messages match.
 ${COMMON}
 
 Examples:
-  chat read general --tail 20
-  chat read general --since 01M5CCX98VQ2X7F4M8N6P0R5T1
-  chat read general --before 01M5CCX98VQ2X7F4M8N6P0R5T1 --tail 50
+  chat read general --as claude --tail 20
+  chat read general --as claude --since 01M5CCX98VQ2X7F4M8N6P0R5T1
+  chat read general --as claude --before 01M5CCX98VQ2X7F4M8N6P0R5T1 --tail 50
 `,
 
   send: `Usage: chat send <chatId> [--as <name>] (<text> | - | --text-file <path>) [--attach <file>]...
 
 Posts one message and prints the stored message (one line, placeholders resolved).
+The author must have joined the chat (else exit 7, code "not_participant").
 
 Text source (exactly one; may be omitted only when attaching files):
   <text>               A single argument. Use "--" before text that starts with "-".
@@ -201,7 +271,7 @@ References in text:
   asset:$N             Placeholder for the N-th --attach file (1-based); replaced with
                        asset:<assetId> by the server.
   asset:<assetId>      Reference an asset from an earlier message in the same chat.
-  @name                Mention someone (convention; see "chat watch --mention").
+  @name                Mention a participant (see "chat participants", "chat watch --mention").
 
 ${COMMON}
 
@@ -211,13 +281,17 @@ Examples:
   chat send general --as claude 'Mockup: asset:$1, old version was asset:01M5CCX98VQ2X7F4M8N6P0R5T0' --attach ./mockup.png
 `,
 
-  watch: `Usage: chat watch <chatId> [--since ULID] [--count N] [--timeout S] [--ignore <name>]... [--mention <name>]
+  watch: `Usage: chat watch <chatId> [--as <name>] [--since ULID] [--count N] [--timeout S] [--ignore <name>]... [--mention <name>]
 
 Streams new messages (one per line, printed immediately, deduplicated, in arrival order).
 Without --since it starts at the current end of the chat. Reconnects automatically
 (server restarts, network blips) and resumes exactly where it left off.
+<name> must have joined the chat; if it leaves (or is removed) while watching, watch
+exits 7 (code "not_participant"). If the chat is archived while watching, watch exits 4
+(code "archived").
 
 Options:
+  --as <name>       Who is watching (else $CHAT_AUTHOR / config author)
   --since ULID      Also replay messages with id > ULID first (use your last seen id)
   --count N         Exit 0 after printing N messages
   --timeout S       Overall deadline in seconds; on expiry exit 5 (code "timeout")
@@ -228,8 +302,8 @@ Filtered-out messages are not printed but still advance the cursor.
 
 Agent pattern (blocking shell tools): wait for the next message addressed to you, then
 remember its "id" and pass it as --since next time so nothing is missed:
-  chat watch general --since <lastSeenId> --ignore claude --count 1 --timeout 600
-  chat watch general --mention claude --ignore claude --count 1 --timeout 300
+  chat watch general --as claude --since <lastSeenId> --ignore claude --count 1 --timeout 600
+  chat watch general --as claude --mention claude --ignore claude --count 1 --timeout 300
 
 ${COMMON}
 `,

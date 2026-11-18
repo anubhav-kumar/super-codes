@@ -15,7 +15,9 @@ import {
 import { parseCommand, expectPositionals, checkChatId } from '../args.js';
 import { resolveUrl, resolveAuthor } from '../config.js';
 import { request, enc, expectObject, checkMessage } from '../api.js';
-import { CliError, EXIT, HEALTH_HINT, invalidResponse, validationError, fileNotFound, usageError } from '../errors.js';
+import {
+  CliError, EXIT, HEALTH_HINT, invalidResponse, validationError, fileNotFound, usageError, notParticipant,
+} from '../errors.js';
 import { printMessage } from '../output.js';
 
 const CMD = 'send';
@@ -104,6 +106,20 @@ async function serverLimits(base) {
   return limits;
 }
 
+async function post(base, relPath, author, text, files) {
+  if (files.length === 0) return request(base, 'POST', relPath, { json: { author, text } });
+  // Check reachability/protocol and use the server's real limits before uploading.
+  checkLimits(text, files, await serverLimits(base));
+  const form = new FormData();
+  form.append('author', author);
+  form.append('text', text);
+  for (const f of files) {
+    const blob = await fs.openAsBlob(f.path, { type: mimeForExt(extOf(f.basename)) ?? 'application/octet-stream' });
+    form.append('files', blob, f.basename);
+  }
+  return request(base, 'POST', relPath, { formData: form, timeoutMs: 0 });
+}
+
 export async function run(argv) {
   const { values, positionals } = parseCommand(CMD, argv);
   expectPositionals(CMD, positionals, 1, 2, ['<chatId>', '<text>']);
@@ -137,19 +153,11 @@ export async function run(argv) {
 
   let body;
   const relPath = `api/chats/${enc(chatId)}/messages`;
-  if (files.length === 0) {
-    body = await request(base, 'POST', relPath, { json: { author, text } });
-  } else {
-    // Check reachability/protocol and use the server's real limits before uploading.
-    checkLimits(text, files, await serverLimits(base));
-    const form = new FormData();
-    form.append('author', author);
-    form.append('text', text);
-    for (const f of files) {
-      const blob = await fs.openAsBlob(f.path, { type: mimeForExt(extOf(f.basename)) ?? 'application/octet-stream' });
-      form.append('files', blob, f.basename);
-    }
-    body = await request(base, 'POST', relPath, { formData: form, timeoutMs: 0 });
+  try {
+    body = await post(base, relPath, author, text, files);
+  } catch (err) {
+    if (err instanceof CliError && err.code === 'not_participant') throw notParticipant(chatId, author);
+    throw err;
   }
 
   expectObject(body, 'POST messages');

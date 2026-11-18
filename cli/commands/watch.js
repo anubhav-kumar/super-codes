@@ -1,10 +1,12 @@
 import { ZERO_ULID, extractMentions } from '../../lib/constants.js';
 import { parseMessageLine } from '../../lib/schema.js';
 import { parseCommand, expectPositionals, checkChatId, checkUlidArg, checkNameFlag, parseIntFlag } from '../args.js';
-import { resolveUrl } from '../config.js';
-import { request, rawFetch, enc, expectObject, checkSummary, checkMessage } from '../api.js';
+import { resolveUrl, resolveAuthor } from '../config.js';
+import {
+  request, rawFetch, enc, expectObject, checkSummary, checkMessage, checkParticipantList, requireParticipant,
+} from '../api.js';
 import { readEvents, assertEventStream } from '../sse-client.js';
-import { CliError, EXIT, HEALTH_HINT, invalidResponse } from '../errors.js';
+import { CliError, EXIT, HEALTH_HINT, invalidResponse, notParticipant, usageError } from '../errors.js';
 import { printMessage } from '../output.js';
 
 const CMD = 'watch';
@@ -36,6 +38,8 @@ export async function run(argv) {
   const ignore = new Set((values.ignore ?? []).map((n) => checkNameFlag(n, '--ignore', CMD)));
   const mention = values.mention !== undefined ? checkNameFlag(values.mention, '--mention', CMD) : undefined;
   const base = resolveUrl(values, CMD);
+  const author = resolveAuthor(values);
+  if (author === null) throw usageError('no author: pass --as <name>, set CHAT_AUTHOR, or run "chat config set author <name>"', CMD);
 
   // Overall stop controller: deadline, signals, --count reached, fatal error.
   const stop = new AbortController();
@@ -83,6 +87,8 @@ export async function run(argv) {
         liveness = setTimeout(() => conn.abort(), LIVENESS_MS);
       };
       try {
+        // Checked on every (re)connect: a participants event missed while disconnected must not go unnoticed.
+        await requireParticipant(base, chatId, author, { signal: conn.signal });
         bump();
         // Header and ?since= carry the same cursor (the query survives proxies that drop headers).
         const headers = { Accept: 'text/event-stream', 'Cache-Control': 'no-cache', 'Last-Event-ID': lastId };
@@ -104,6 +110,27 @@ export async function run(argv) {
           },
         });
         for await (const ev of events) {
+          if (ev.event === 'participants') {
+            let data;
+            try {
+              data = JSON.parse(ev.data);
+            } catch {
+              throw invalidResponse('server sent a participants event that is not JSON');
+            }
+            const list = checkParticipantList(data?.participants, 'participants event');
+            if (!list.some((p) => p.name === author)) throw notParticipant(chatId, author);
+            continue;
+          }
+          if (ev.event === 'removed') {
+            let reason = null;
+            try {
+              reason = JSON.parse(ev.data)?.reason;
+            } catch {
+              // fall through: treat as removed
+            }
+            if (reason === 'archived') throw new CliError(EXIT.NOT_FOUND, 'archived', `chat "${chatId}" was archived`);
+            throw new CliError(EXIT.NOT_FOUND, 'not_found', `chat "${chatId}" was removed from the server`);
+          }
           if (ev.event !== 'message') continue;
           const parsed = parseMessageLine(ev.data);
           if (!parsed.ok) throw invalidResponse(`server sent an invalid message event (${parsed.code}): ${parsed.error}`);
@@ -124,8 +151,10 @@ export async function run(argv) {
       } catch (err) {
         if (stop.signal.aborted) break;
         if (err instanceof CliError) {
-          // 404 is always fatal; invalid data is fatal; other errors only before the first successful connect.
-          if (err.exitCode === EXIT.NOT_FOUND || err.code === 'invalid_response' || !connectedOnce) throw err;
+          // 404 and 403 (no longer a participant) are always fatal; invalid data is fatal; other errors only before the first successful connect.
+          if (err.exitCode === EXIT.NOT_FOUND || err.exitCode === EXIT.FORBIDDEN || err.code === 'invalid_response' || !connectedOnce) {
+            throw err;
+          }
         } else if (!connectedOnce) {
           const reason = conn.signal.aborted ? `no response within ${LIVENESS_MS / 1000}s` : err.message;
           throw new CliError(EXIT.NETWORK, 'network_error', `cannot reach ${base}: ${reason} — ${HEALTH_HINT}`);

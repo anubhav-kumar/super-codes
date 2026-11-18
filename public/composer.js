@@ -47,6 +47,7 @@ export class Composer {
     this.onNeedAuthor = onNeedAuthor;
     this.onRetest = onRetest;
     this.chatId = null;
+    this.canPost = true;   // false while the user hasn't joined the open chat
     this.attachments = []; // { file, url|null, node }
     this.sending = null;   // { abort }
     this.draftTimer = null;
@@ -94,13 +95,13 @@ export class Composer {
 
     const isFileDrag = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files');
     dropZone.addEventListener('dragenter', (e) => {
-      if (!isFileDrag(e) || !this.chatId) return;
+      if (!isFileDrag(e) || !this.chatId || !this.canPost) return;
       e.preventDefault();
       this.dragDepth += 1;
       this.els.dropOverlay.hidden = false;
     });
     dropZone.addEventListener('dragover', (e) => {
-      if (!isFileDrag(e) || !this.chatId) return;
+      if (!isFileDrag(e) || !this.chatId || !this.canPost) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = this.sending ? 'none' : 'copy';
     });
@@ -114,7 +115,7 @@ export class Composer {
       e.preventDefault();
       this.dragDepth = 0;
       this.els.dropOverlay.hidden = true;
-      if (!this.sending && this.chatId) this.addFiles([...e.dataTransfer.files]);
+      if (!this.sending && this.chatId && this.canPost) this.addFiles([...e.dataTransfer.files]);
     });
   }
 
@@ -130,8 +131,13 @@ export class Composer {
     this.autoGrow();
   }
 
+  setCanPost(canPost) {
+    this.canPost = canPost;
+    if (!canPost) this.mentions.close();
+  }
+
   focus() {
-    if (!this.sending) this.els.textarea.focus();
+    if (!this.sending && this.canPost) this.els.textarea.focus();
   }
 
   autoGrow() {
@@ -262,7 +268,7 @@ export class Composer {
   }
 
   async send() {
-    if (this.sending || !this.chatId) return;
+    if (this.sending || !this.chatId || !this.canPost) return;
     const { C, author } = this.getCtx();
     if (!author) {
       this.onNeedAuthor?.();

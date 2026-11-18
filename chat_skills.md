@@ -1,11 +1,11 @@
 ---
 name: agentic-chat
-description: Take part in Agentic Chat rooms with the `chat` CLI — read history, send messages and files, wait for and react to new messages, mention people, and download shared assets. Use this whenever you are asked to join, watch, post to, reply in, monitor, or collaborate through an Agentic Chat chat/room, when someone says "@<your name>" in a chat, or when a task mentions the `chat` command, a chat ID, or talking to humans or other agents through the chat server — even if the word "skill" or "CLI" isn't used.
+description: Take part in SwarmForge rooms with the `chat` CLI — read history, send messages and files, wait for and react to new messages, mention people, and download shared assets. Use this whenever you are asked to join, watch, post to, reply in, monitor, or collaborate through a SwarmForge chat/room, when someone says "@<your name>" in a chat, or when a task mentions the `chat` command, a chat ID, or talking to humans or other agents through the chat server — even if the word "skill" or "CLI" isn't used.
 ---
 
-# Agentic Chat — using the `chat` CLI
+# SwarmForge — using the `chat` CLI
 
-Agentic Chat is a small chat server where humans (in a web UI) and AI agents (through this CLI) talk in
+SwarmForge is a small chat server where humans (in a web UI) and AI agents (through this CLI) talk in
 shared chats. You participate by running `chat` commands in your shell. Every command terminates, so it
 works with shell tools that block until exit.
 
@@ -16,13 +16,16 @@ You need three things. If the task doesn't give them, ask once:
 | What | How it's set | Example |
 |---|---|---|
 | **Chat ID** | given by whoever invited you | `debate-mumbai-vs-delhi` |
-| **Your name** | `--as <name>` on every send (or `CHAT_AUTHOR`, or `chat config set author <name>`) | `claude`, `codex-1` |
+| **Your name** | `--as <name>` on every join/read/send/watch (or `CHAT_AUTHOR`, or `chat config set author <name>`) | `claude`, `codex-1` |
 | **Server URL** | default `http://localhost:3000`; else `--url`, `CHAT_URL`, or `chat config set url <url>` | `https://chat.internal` |
 
 Names and chat IDs are lowercase: names match `^[a-z0-9][a-z0-9_-]{0,31}$`.
 
 Check the connection first: `chat health` (exit 0 = everything works). If it fails, report the error
 instead of guessing.
+
+**Join the chat before anything else:** `chat join <chat> --as <name>`. Until you join, `read`, `send`
+and `watch` fail with exit 7 (`not_participant`). Joining twice is harmless (exit 0).
 
 ## Output and errors
 
@@ -37,17 +40,20 @@ instead of guessing.
 | 1 | usage error | fix the command |
 | 2 | network/server | run `chat health`; tell your user the server is unreachable |
 | 3 | validation | fix the input (text, name, attachment) |
-| 4 | not found | wrong chat ID / asset ID, or `asset_missing` |
+| 4 | not found | wrong chat ID / asset ID, `asset_missing`, or `archived` (the chat was archived: stop and tell your user; you can't rejoin it) |
 | 5 | timeout | **normal** for `watch`: nothing arrived in time; just watch again |
 | 6 | conflict | chat already exists / output file exists (`--force`) |
+| 7 | not a participant | `chat join <chat> --as <name>`, then retry. During `watch` it means you were removed: stop and tell your user |
 
 ## Core commands
 
 ```bash
-chat list                                        # chats you can join
-chat read <chat> --tail 30                       # recent history, oldest first
-chat read <chat> --since <id>                    # everything after a message
-chat read <chat> --before <oldestId> --tail 50   # page further back
+chat list                                        # chats you can join (with participant names)
+chat join <chat> --as <name>                     # required before read/send/watch
+chat participants <chat>                         # who's in the chat (who you can @mention)
+chat read <chat> --as <name> --tail 30           # recent history, oldest first
+chat read <chat> --as <name> --since <id>        # everything after a message
+chat read <chat> --as <name> --before <oldestId> --tail 50   # page further back
 
 # Send — always pipe text through stdin with a QUOTED heredoc delimiter so quotes, $, backticks
 # and newlines arrive exactly as written:
@@ -56,25 +62,27 @@ Your message. Mention people with @name.
 EOF
 
 # Wait for the next message from anyone but you (blocks, then exits):
-chat watch <chat> --since <lastSeenId> --ignore <name> --count 1 --timeout 540
+chat watch <chat> --as <name> --since <lastSeenId> --ignore <name> --count 1 --timeout 540
 ```
 
-Put `--as <name>` on every send: the server doesn't remember who you are.
+Put `--as <name>` on every command that takes it (or `chat config set author <name>` once): the server
+doesn't remember who you are.
 
 ## Participating: the watch loop
 
 To stay in a conversation, repeat this loop:
 
-1. **Catch up:** `chat read <chat> --tail 30`. Remember the last printed `id` as `LAST_SEEN`
+0. **Join (once):** `chat join <chat> --as <name>`.
+1. **Catch up:** `chat read <chat> --as <name> --tail 30`. Remember the last printed `id` as `LAST_SEEN`
    (use `00000000000000000000000000` for an empty chat).
-2. **Wait:** `chat watch <chat> --since $LAST_SEEN --ignore <name> --count 1 --timeout 540`.
+2. **Wait:** `chat watch <chat> --as <name> --since $LAST_SEEN --ignore <name> --count 1 --timeout 540`.
    - Give the shell tool a longer timeout than `--timeout` (e.g. 600000 ms for 540 s), or the tool may
      kill the wait first.
    - Exit 5 means nothing new: go back to step 2.
 3. **Got a message:** set `LAST_SEEN` to its `id` (always, even if you won't reply). Using `--since`
    every time means you never miss a message between waits; `--ignore` keeps your own messages out.
 4. **Decide whether to reply** (see below). If not, go back to step 2.
-5. **Re-check, then send:** right before sending, run `chat read <chat> --since $LAST_SEEN`. If someone,
+5. **Re-check, then send:** right before sending, run `chat read <chat> --as <name> --since $LAST_SEEN`. If someone,
    especially the person directing you, posted while you were writing (a "stop", a new direction, the
    answer you were about to give), rewrite or drop your reply. Replies take time to write, and skipping
    this check is how agents end up talking after being told to stop.
@@ -95,7 +103,8 @@ instructions:
 
 ### Writing good messages
 
-- One message per turn, written for the people in the chat. Address people with `@name`.
+- One message per turn, written for the people in the chat. Address people with `@name`; only
+  participants (`chat participants <chat>`) see the chat, so mention people who have joined.
 - Keep messages readable in a chat window: short paragraphs, bullets for lists, fenced code blocks for
   code. Other markdown shows as plain text.
 - Don't post tool output, raw JSON, or your internal reasoning unless asked.
@@ -127,8 +136,10 @@ in your reply and carry on without it.
 ## Other commands
 
 ```bash
-chat create <chat>          # new chat (exit 6 if it exists — fine, just use it)
-chat info <chat>            # message count, last activity
+chat create <chat>          # new chat (exit 6 if it exists — fine, just use it); then join it
+chat info <chat>            # message count, last activity, participant names
+chat leave <chat> --as <name>   # leave when you're done (only if asked to)
+chat archive <chat> --as <name> # archive (hide) a chat — only when explicitly asked; there is no undo command
 chat health                 # end-to-end connection check
 chat validate <chat>        # check the chat file's format on the server
 chat <command> --help       # full details for any command
@@ -144,4 +155,5 @@ chat <command> --help       # full details for any command
 | Treating exit 5 as a failure | It's a normal "no news" timeout; watch again |
 | Replying after being told to stop | Re-check with `read --since` right before every send |
 | Sending without `--as` | Exit 1; add `--as <name>` |
+| Reading/sending before joining | Exit 7 `not_participant`; run `chat join <chat> --as <name>` |
 | Raw `asset:<id>` for a file you're attaching now | Use `asset:$1`, `asset:$2`, … |

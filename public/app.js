@@ -6,12 +6,12 @@ import * as config from './config.js';
 import * as api from './api.js';
 import { ManagedStream } from './streams.js';
 import { runDiagnosis, reachCheck, mergeLimits, CHECK_ORDER, CHECK_LABELS } from './health.js';
-import { ThreadView } from './render.js';
+import { ThreadView, authorHue } from './render.js';
 import { Composer } from './composer.js';
 
 const $ = (id) => document.getElementById(id);
 const TAIL = 200;
-const APP_TITLE = 'Agentic Chat';
+const APP_TITLE = 'SwarmForge';
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
 const els = {
@@ -38,6 +38,19 @@ const els = {
   emptyTitle: $('empty-title'),
   chatView: $('chat-view'),
   chatTitle: $('chat-title'),
+  membershipBtn: $('membership-btn'),
+  archiveBtn: $('archive-btn'),
+  membersBtn: $('members-btn'),
+  membersCount: $('members-count'),
+  membersPanel: $('members-panel'),
+  membersTotal: $('members-total'),
+  membersList: $('members-list'),
+  membersEmpty: $('members-empty'),
+  composerForm: $('composer'),
+  joinBar: $('join-bar'),
+  joinText: $('join-text'),
+  joinBtn: $('join-btn'),
+  joinError: $('join-error'),
   scroller: $('thread-scroller'),
   thread: $('thread'),
   threadStatus: $('thread-status'),
@@ -63,7 +76,7 @@ const els = {
 let bootSeq = 0;
 let globalStream = null;
 let chatStream = null;
-let session = null; // { chatId, data, abort, loaded, seenId, loadingOlder }
+let session = null; // { chatId, data, abort, loaded, seenId, loadingOlder, participants, streamOpened, joining }
 let notFoundChatId = null;
 let hiddenAt = null;
 let reachRetryTimer = null;
@@ -96,7 +109,14 @@ function isSummary(c) {
   return Boolean(c) && typeof c === 'object'
     && testRe(C.CHAT_ID_RE, c.id)
     && Number.isInteger(c.messageCount)
-    && (c.lastMessageAt === null || typeof c.lastMessageAt === 'string');
+    && (c.lastMessageAt === null || typeof c.lastMessageAt === 'string')
+    && Array.isArray(c.participants);
+}
+
+function isParticipant(p) {
+  return Boolean(p) && typeof p === 'object'
+    && testRe(C.AUTHOR_RE, p.name)
+    && testRe(C.ISO_TS_RE, p.joinedAt);
 }
 
 function isAsset(a) {
@@ -277,7 +297,7 @@ function renderConnPanel() {
 function startGlobalStream() {
   globalStream = new ManagedStream({
     getUrl: () => api.apiUrl('api/stream'),
-    events: { chat: onChatEvent },
+    events: { chat: onChatEvent, 'chat-removed': onChatRemovedEvent },
     onOpen: () => {
       state.reachOk = true;
       state.reachError = null;
@@ -323,6 +343,30 @@ function onChatEvent(event) {
   if (notFoundChatId === summary.id) route();
 }
 
+// A chat was archived (or its file removed on the server): drop it from the list, and close it if open.
+function onChatRemovedEvent(event) {
+  let body;
+  try {
+    body = JSON.parse(event.data);
+  } catch {
+    console.warn('skipping malformed chat-removed event');
+    return;
+  }
+  if (!testRe(C.CHAT_ID_RE, body?.id)) return;
+  chatRemoved(body.id, body.reason);
+}
+
+function chatRemoved(chatId, reason) {
+  state.chats.delete(chatId);
+  if (session?.chatId === chatId) {
+    closeChat();
+    notFoundChatId = chatId; // reopens by itself if the chat is restored on the server
+    showEmpty(reason === 'archived' ? `#${chatId} was archived` : 'Chat not found');
+    return;
+  }
+  renderChatList();
+}
+
 function isUnread(chat) {
   if (chat.id === state.currentChatId) return false;
   if (!chat.messageCount || !chat.lastMessageAt) return false;
@@ -341,6 +385,7 @@ function renderChatList() {
     link.href = `#/chat/${encodeURIComponent(chat.id)}`;
     link.append(el('span', 'chat-hash', '#'), el('span', 'chat-name', chat.id));
     if (chat.id === state.currentChatId) link.setAttribute('aria-current', 'page');
+    if (state.author && chat.participants.includes(state.author)) link.classList.add('joined');
     if (isUnread(chat)) {
       unreadCount += 1;
       link.classList.add('unread');
@@ -349,6 +394,10 @@ function renderChatList() {
       dot.append(el('span', 'sr-only', 'unread'));
       link.append(dot);
     }
+    const n = chat.participants.length;
+    const count = el('span', 'chat-count', String(n));
+    count.title = `${n} participant${n === 1 ? '' : 's'}`;
+    link.append(count);
     li.append(link);
     return li;
   });
@@ -402,6 +451,11 @@ async function createChat() {
     if (isSummary(body.chat)) {
       state.chats.set(body.chat.id, body.chat);
       renderChatList();
+    }
+    // The creator joins right away; without a name they join later from the chat's join bar.
+    if (state.author) {
+      await api.post(api.chatPath(id, '/participants'), { name: state.author })
+        .catch((err) => console.warn('auto-join failed', err));
     }
     closeNewChat();
     navigate(id);
@@ -497,7 +551,10 @@ async function openChat(chatId) {
   closeChat();
   notFoundChatId = null;
   const data = new ThreadData(chatId);
-  const s = { chatId, data, abort: new AbortController(), loaded: false, seenId: null, loadingOlder: false };
+  const s = {
+    chatId, data, abort: new AbortController(), loaded: false, seenId: null, loadingOlder: false,
+    participants: null, streamOpened: false, joining: false,
+  };
   session = s;
   state.currentChatId = chatId;
   els.emptyState.hidden = true;
@@ -508,6 +565,9 @@ async function openChat(chatId) {
   composer.setChat(chatId);
   setThreadStatus('Loading messages…');
   renderChatList();
+  showJoinError(null);
+  renderMembers();
+  loadParticipants(s);
 
   let body;
   try {
@@ -516,6 +576,10 @@ async function openChat(chatId) {
     if (session !== s || err.code === 'aborted') return;
     if (err.status === 404) {
       markNotFound(chatId);
+      return;
+    }
+    if (err.status === 410) {
+      chatRemoved(chatId, 'archived');
       return;
     }
     setThreadStatus(`Couldn't load messages: ${err.message}`, {
@@ -537,11 +601,222 @@ async function openChat(chatId) {
   if (!window.matchMedia('(max-width: 719px)').matches) composer.focus();
 }
 
+// ---- participants ---------------------------------------------------------
+
+async function loadParticipants(s) {
+  try {
+    const body = await api.get(api.chatPath(s.chatId, '/participants'), { signal: s.abort.signal });
+    if (session !== s) return;
+    setParticipants(s, body.participants);
+  } catch (err) {
+    if (session !== s || err.code === 'aborted') return;
+    console.warn('failed to load participants', err);
+  }
+}
+
+function setParticipants(s, list) {
+  if (!Array.isArray(list)) return;
+  s.participants = list.filter((p) => {
+    if (isParticipant(p)) return true;
+    console.warn('skipping invalid participant from server', p);
+    return false;
+  });
+  renderMembers();
+}
+
+function onParticipantsEvent(s, event) {
+  if (session !== s) return;
+  let body;
+  try {
+    body = JSON.parse(event.data);
+  } catch {
+    console.warn('skipping malformed participants event');
+    return;
+  }
+  if (body?.chatId !== s.chatId) return;
+  setParticipants(s, body.participants);
+}
+
+function isJoined(s = session) {
+  return Boolean(state.author && s?.participants?.some((p) => p.name === state.author));
+}
+
+function membersPanelOpen() {
+  return config.getMembersPanel() ?? window.matchMedia('(min-width: 1100px)').matches;
+}
+
+function fmtJoined(iso) {
+  const d = new Date(iso);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function renderMembers() {
+  const s = session;
+  const list = s?.participants ?? null;
+  const known = list !== null;
+  const joined = isJoined(s);
+
+  els.membersCount.textContent = known ? String(list.length) : '…';
+  els.membersBtn.title = known ? `${list.length} participant${list.length === 1 ? '' : 's'}` : 'Loading participants';
+  const open = membersPanelOpen();
+  els.membersPanel.hidden = !open;
+  els.membersBtn.setAttribute('aria-expanded', String(open));
+  els.membersTotal.textContent = known ? String(list.length) : '';
+  els.membersEmpty.hidden = !known || list.length > 0;
+  els.membersList.replaceChildren(...(list ?? []).map((p) => {
+    const li = el('li', 'member');
+    if (p.name === state.author) li.classList.add('member-self');
+    const name = el('span', 'member-name', p.name);
+    name.style.setProperty('--hue', String(authorHue(p.name)));
+    li.append(name);
+    if (p.name === state.author) li.append(el('span', 'member-tag', 'you'));
+    const since = el('time', 'member-since', fmtJoined(p.joinedAt));
+    since.dateTime = p.joinedAt;
+    since.title = `joined ${p.joinedAt}`;
+    li.append(since);
+    return li;
+  }));
+
+  // Membership controls: the composer only exists for participants; everyone else gets the join bar.
+  els.membershipBtn.hidden = !known || !joined;
+  els.archiveBtn.hidden = !known || !joined;
+  els.archiveBtn.disabled = Boolean(s?.joining);
+  els.membershipBtn.textContent = 'leave';
+  els.membershipBtn.disabled = Boolean(s?.joining);
+  els.composerForm.hidden = !known || !joined;
+  els.joinBar.hidden = !known || joined;
+  els.joinBtn.disabled = Boolean(s?.joining);
+  els.joinBtn.textContent = state.author ? `join as @${state.author}` : 'set name';
+  if (s) {
+    els.joinText.textContent = state.author
+      ? `read-only · join #${s.chatId} to send messages`
+      : `read-only · set your name, then join #${s.chatId} to send messages`;
+  }
+  composer.setCanPost(known && joined);
+}
+
+function showJoinError(message) {
+  els.joinError.textContent = message ?? '';
+  els.joinError.hidden = !message;
+}
+
+async function joinChat() {
+  const s = session;
+  if (!s || s.joining) return;
+  if (!state.author) {
+    openNameDialog();
+    return;
+  }
+  s.joining = true;
+  showJoinError(null);
+  renderMembers();
+  try {
+    const body = await api.post(api.chatPath(s.chatId, '/participants'), { name: state.author }, { signal: s.abort.signal });
+    if (session !== s) return;
+    if (isParticipant(body.participant) && !isJoined(s)) {
+      setParticipants(s, [...(s.participants ?? []), body.participant]);
+    }
+  } catch (err) {
+    if (session !== s || err.code === 'aborted') return;
+    showJoinError(`Couldn't join: ${err.message}`);
+  } finally {
+    if (session === s) {
+      s.joining = false;
+      renderMembers();
+      composer.focus();
+    }
+  }
+}
+
+async function leaveChat() {
+  const s = session;
+  if (!s || s.joining || !isJoined(s)) return;
+  const name = state.author;
+  s.joining = true;
+  showJoinError(null);
+  renderMembers();
+  try {
+    await api.del(api.chatPath(s.chatId, `/participants/${encodeURIComponent(name)}`), { signal: s.abort.signal });
+    if (session !== s) return;
+    setParticipants(s, (s.participants ?? []).filter((p) => p.name !== name));
+  } catch (err) {
+    if (session !== s || err.code === 'aborted') return;
+    // Already gone (e.g. left from another tab): reflect the server's view.
+    if (err.code === 'not_participant') loadParticipants(s);
+    else showJoinError(`Couldn't leave: ${err.message}`);
+  } finally {
+    if (session === s) {
+      s.joining = false;
+      renderMembers();
+    }
+  }
+}
+
+async function archiveChat() {
+  const s = session;
+  if (!s || s.joining || !isJoined(s)) return;
+  const ok = window.confirm(
+    `Archive #${s.chatId}?\n\nIt disappears for everyone and agents can no longer join it. ` +
+    `It comes back only if someone moves its files back from data/archive/${s.chatId} on the server.`,
+  );
+  if (!ok || session !== s) return;
+  s.joining = true;
+  showJoinError(null);
+  renderMembers();
+  try {
+    await api.post(api.chatPath(s.chatId, '/archive'), { by: state.author }, { signal: s.abort.signal });
+    if (session === s) chatRemoved(s.chatId, 'archived');
+  } catch (err) {
+    if (session !== s || err.code === 'aborted') return;
+    if (err.status === 410) chatRemoved(s.chatId, 'archived');
+    else window.alert(`Couldn't archive #${s.chatId}: ${err.message}`);
+  } finally {
+    if (session === s) {
+      s.joining = false;
+      renderMembers();
+    }
+  }
+}
+
+// Mention candidates: participants other than you, most recent posters first, then join order.
+function mentionCandidates() {
+  const s = session;
+  if (!s?.participants) return [];
+  const members = s.participants.map((p) => p.name).filter((n) => n !== state.author);
+  const recent = [];
+  const order = s.data.order;
+  for (let i = order.length - 1; i >= 0 && recent.length < members.length; i--) {
+    const author = s.data.get(order[i])?.author;
+    if (author && members.includes(author) && !recent.includes(author)) recent.push(author);
+  }
+  return [...recent, ...members.filter((n) => !recent.includes(n))];
+}
+
 function startChatStream(s) {
   chatStream = new ManagedStream({
     // Always pass since so nothing falls between the fetch and the stream; native reconnects add Last-Event-ID.
     getUrl: () => api.apiUrl(api.chatPath(s.chatId, '/stream'), { since: s.data.lastId() ?? C.ZERO_ULID }),
-    events: { message: (event) => onChatMessage(s, event) },
+    events: {
+      message: (event) => onChatMessage(s, event),
+      participants: (event) => onParticipantsEvent(s, event),
+      removed: (event) => {
+        if (session !== s) return;
+        let reason = null;
+        try {
+          reason = JSON.parse(event.data)?.reason;
+        } catch {
+          // treat as removed
+        }
+        chatRemoved(s.chatId, reason);
+      },
+    },
+    // Participant changes aren't replayed on reconnect, so re-fetch after every reconnect.
+    onOpen: () => {
+      if (session !== s) return;
+      if (s.streamOpened) loadParticipants(s);
+      s.streamOpened = true;
+    },
     onStatus: (status) => {
       if (session !== s) return;
       state.streams.chat = status;
@@ -555,6 +830,10 @@ function startChatStream(s) {
         if (session !== s) return false;
         if (err.status === 404) {
           markNotFound(s.chatId);
+          return false;
+        }
+        if (err.status === 410) {
+          chatRemoved(s.chatId, 'archived');
           return false;
         }
         return true;
@@ -668,6 +947,10 @@ function saveName() {
   renderAuthor();
   els.nameDialog.close();
   if (changed && session?.loaded) threadView.rerenderAll();
+  if (changed) {
+    renderChatList();
+    renderMembers();
+  }
   composer.focus();
 }
 
@@ -722,15 +1005,7 @@ const composer = new Composer({
     dropOverlay: $('drop-overlay'),
   },
   getCtx: () => ({ C, limits: state.limits ?? C.LIMITS, author: state.author }),
-  getParticipants: () => {
-    const names = [];
-    const order = session?.data.order ?? [];
-    for (let i = order.length - 1; i >= 0; i--) {
-      const author = session.data.get(order[i])?.author;
-      if (author && author !== state.author && !names.includes(author)) names.push(author);
-    }
-    return names;
-  },
+  getParticipants: mentionCandidates,
   onSent: (msg) => {
     if (session && msg && isMessage(msg, session.chatId)) {
       threadView.addLive(msg, { force: true });
@@ -784,6 +1059,13 @@ function bindUi() {
   });
 
   els.loadOlder.addEventListener('click', loadOlder);
+  els.joinBtn.addEventListener('click', joinChat);
+  els.membershipBtn.addEventListener('click', leaveChat);
+  els.archiveBtn.addEventListener('click', archiveChat);
+  els.membersBtn.addEventListener('click', () => {
+    config.setMembersPanel(!membersPanelOpen());
+    renderMembers();
+  });
 
   els.sidebarToggle.addEventListener('click', () => setSidebar(!els.app.classList.contains('sidebar-open')));
   els.sidebarBackdrop.addEventListener('click', closeSidebar);

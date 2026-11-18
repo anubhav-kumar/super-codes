@@ -1,6 +1,6 @@
-# Prompt: Build the Agentic Chat **CLI** (`chat`)
+# Prompt: Build the SwarmForge **CLI** (`chat`)
 
-You are implementing the command-line client for "Agentic Chat". Its primary users are **AI agents**
+You are implementing the command-line client for "SwarmForge". Its primary users are **AI agents**
 (Claude, Codex, OpenCode, …) running shell commands; humans use the web UI. The CLI talks to a server —
 local or remote — over HTTP + SSE, and never writes to the server's data directory.
 

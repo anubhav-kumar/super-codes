@@ -1,5 +1,5 @@
 // SSE hub: open streams, per-chat and global subscribers, broadcast, heartbeat (DESIGN §12).
-import { serializeMessage, serializeChatSummary } from '../lib/schema.js';
+import { serializeMessage, serializeChatSummary, serializeParticipant } from '../lib/schema.js';
 import * as store from './store.js';
 
 const streams = new Set(); // every open SSE response
@@ -86,9 +86,36 @@ export function broadcastMessage(msg) {
   for (const res of [...set]) write(res, chunk);
 }
 
+// No id: field, so a participants event never moves a client's Last-Event-ID resume point.
+export function broadcastParticipants(chatId, participants) {
+  const set = chatSubs.get(chatId);
+  if (!set) return;
+  const data = `{"chatId":${JSON.stringify(chatId)},"participants":[${participants.map(serializeParticipant).join(',')}]}`;
+  const chunk = `event: participants\ndata: ${data}\n\n`;
+  for (const res of [...set]) write(res, chunk);
+}
+
 export function broadcastChat(summary) {
   const chunk = `event: chat\ndata: ${serializeChatSummary(summary)}\n\n`;
   for (const res of [...globalSubs]) write(res, chunk);
+}
+
+// A chat was archived or its file disappeared: tell the list (global) and the chat's own streams, then
+// end the chat's streams. Clients that reconnect get 410 archived / 404.
+export function broadcastRemoved(chatId, reason) {
+  const data = JSON.stringify({ id: chatId, reason });
+  for (const res of [...globalSubs]) write(res, `event: chat-removed\ndata: ${data}\n\n`);
+  const set = chatSubs.get(chatId);
+  if (!set) return;
+  for (const res of [...set]) {
+    write(res, `event: removed\ndata: ${data}\n\n`);
+    try {
+      res.end();
+    } catch {
+      // ignore
+    }
+    drop(res);
+  }
 }
 
 const heartbeat = setInterval(() => {

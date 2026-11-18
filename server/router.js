@@ -1,7 +1,7 @@
 // Tiny method + path router. Invalid path params → no match (callers return 404).
-import { CHAT_ID_RE, ULID_RE, ASSET_FILE_RE } from '../lib/constants.js';
+import { CHAT_ID_RE, ULID_RE, ASSET_FILE_RE, AUTHOR_RE } from '../lib/constants.js';
 
-const PARAM_RES = { chatId: CHAT_ID_RE, assetId: ULID_RE, file: ASSET_FILE_RE };
+const PARAM_RES = { chatId: CHAT_ID_RE, assetId: ULID_RE, file: ASSET_FILE_RE, name: AUTHOR_RE };
 
 export function createRouter() {
   const routes = [];

@@ -179,7 +179,7 @@ function isSameOrigin(req, origin) {
 // 403 for browser POSTs from foreign origins (multipart POSTs skip preflight, so CORS alone isn't enough).
 export function checkOrigin(req) {
   const origin = req.headers.origin;
-  if (req.method !== 'POST' || !origin) return;
+  if ((req.method !== 'POST' && req.method !== 'DELETE') || !origin) return;
   if (isSameOrigin(req, origin) || isAllowedOrigin(origin)) return;
   throw new HttpError(403, 'forbidden_origin', `origin ${origin} is not allowed (set CORS_ORIGIN)`);
 }
@@ -204,7 +204,7 @@ export function applyCors(req, res) {
       return true;
     }
     res.writeHead(204, {
-      'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, HEAD, POST, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Last-Event-ID',
       'Access-Control-Max-Age': '600',
     });

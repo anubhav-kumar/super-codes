@@ -1,6 +1,6 @@
 // stdout is JSONL only; stderr carries one JSON error line (DESIGN §14).
 
-import { serializeMessage, serializeChatSummary } from '../lib/schema.js';
+import { serializeMessage, serializeChatSummary, serializeParticipant } from '../lib/schema.js';
 
 // `chat ... | head -1` closes the pipe: stop quietly with exit 0.
 process.stdout.on('error', (err) => {
@@ -25,6 +25,10 @@ export function printMessage(msg) {
 
 export function printSummary(c) {
   printRaw(serializeChatSummary(c));
+}
+
+export function printParticipant(p) {
+  printRaw(serializeParticipant(p));
 }
 
 export function printError(code, message) {

@@ -1,19 +1,24 @@
 // File store: load chats from disk, in-memory cache, append via per-chat write queue (DESIGN §7).
+import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, writeFile, appendFile, rename, rm, stat, truncate } from 'node:fs/promises';
 import path from 'node:path';
 import {
   CHAT_ID_RE, LIMITS, MIME_RE, normalizeNewlines, sanitizeAssetName, extOf, mimeForExt, resolvePlaceholders,
 } from '../lib/constants.js';
 import { ulid, ulidTime } from '../lib/ulid.js';
-import { MessageSchema, SendInputSchema, parseMessageLine, serializeMessage, formatZodError } from '../lib/schema.js';
+import {
+  MessageSchema, SendInputSchema, ParticipantsFileSchema, parseMessageLine, serializeMessage, serializeParticipant, formatZodError,
+} from '../lib/schema.js';
 import { HttpError } from './http-utils.js';
 
 let dataDir = null;
 let chatsDir = null;
 let assetsRoot = null;
+let archiveRoot = null;
 
-const chats = new Map(); // chatId -> { messages, assetIndex, lastId }
+const chats = new Map(); // chatId -> { messages, assetIndex, lastId, participants: Map<name, joinedAt> }
 const queues = new Map(); // chatId -> Promise (never rejects)
+const appearing = new Set(); // chat files seen once by syncWithDisk, loaded on the next scan
 const loadStats = { invalidLines: 0, missingAssets: 0, partialRecovered: 0 };
 
 const warn = (msg) => console.warn(`${new Date().toISOString()} WARN ${msg}`);
@@ -27,8 +32,21 @@ function chatPath(chatId) {
   return path.join(chatsDir, `${chatId}.jsonl`);
 }
 
+function participantsPath(chatId) {
+  return path.join(chatsDir, `${chatId}.participants.json`);
+}
+
 function chatAssetsDir(chatId) {
   return path.join(assetsRoot, chatId);
+}
+
+function archiveDir(chatId) {
+  return path.join(archiveRoot, chatId);
+}
+
+export function archivedError(chatId) {
+  return new HttpError(410, 'archived',
+    `chat "${chatId}" is archived (data/archive/${chatId}); move its files back into data/chats and data/assets to reactivate it`);
 }
 
 export function chatFilePath(chatId) {
@@ -43,8 +61,10 @@ export async function init(dir) {
   dataDir = path.resolve(dir);
   chatsDir = path.join(dataDir, 'chats');
   assetsRoot = path.join(dataDir, 'assets');
+  archiveRoot = path.join(dataDir, 'archive');
   await mkdir(chatsDir, { recursive: true });
   await mkdir(assetsRoot, { recursive: true });
+  await mkdir(archiveRoot, { recursive: true });
 
   // Remove temp files left by an interrupted upload.
   let tmpCount = 0;
@@ -70,12 +90,7 @@ export async function init(dir) {
   }
   info(`removed ${tmpCount} leftover temp file${tmpCount === 1 ? '' : 's'}`);
 
-  const ids = (await readdir(chatsDir))
-    .filter((n) => n.endsWith('.jsonl'))
-    .map((n) => n.slice(0, -'.jsonl'.length))
-    .filter((id) => CHAT_ID_RE.test(id))
-    .sort();
-  for (const id of ids) {
+  for (const id of await chatFileIds()) {
     try {
       const r = await loadChat(id);
       info(`loaded chat=${id} messages=${r.messages} invalid=${r.invalid} missingAssets=${r.missingAssets}`);
@@ -109,7 +124,7 @@ export async function loadChat(chatId) {
   const lines = text.split('\n');
   if (lines[lines.length - 1] === '') lines.pop();
 
-  const chat = { messages: [], assetIndex: new Map(), lastId: null };
+  const chat = { messages: [], assetIndex: new Map(), lastId: null, participants: new Map() };
   let invalid = 0;
   lines.forEach((line, i) => {
     const n = i + 1;
@@ -140,10 +155,139 @@ export async function loadChat(chatId) {
     }
   }
 
+  await loadParticipants(chatId, chat);
+
   loadStats.invalidLines += invalid;
   loadStats.missingAssets += missing;
   chats.set(chatId, chat);
   return { messages: chat.messages.length, invalid, missingAssets: missing };
+}
+
+// Participants live in a sidecar file. A chat from before participants existed has none: everyone who
+// has posted is seeded as a participant (joinedAt = their first message) so existing agents keep working.
+async function loadParticipants(chatId, chat) {
+  const file = participantsPath(chatId);
+  let raw = null;
+  try {
+    raw = await readFile(file, 'utf8');
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+  }
+  if (raw !== null) {
+    let parsed = null;
+    try {
+      parsed = ParticipantsFileSchema.safeParse(JSON.parse(raw));
+    } catch (err) {
+      parsed = { success: false, error: { issues: [{ message: err.message }] } };
+    }
+    if (parsed.success) {
+      for (const p of parsed.data.participants) chat.participants.set(p.name, p.joinedAt);
+      return;
+    }
+    const aside = `${file}.invalid-${Date.now()}`;
+    await rename(file, aside);
+    warn(`chat=${chatId} invalid participants file (${formatZodError(parsed.error)}) moved to ${path.basename(aside)}; re-seeding from authors`);
+  }
+  for (const m of chat.messages) {
+    if (!chat.participants.has(m.author)) chat.participants.set(m.author, m.ts);
+  }
+  if (chat.participants.size > 0) {
+    await writeParticipants(chatId, chat.participants);
+    info(`chat=${chatId} seeded ${chat.participants.size} participant(s) from message authors`);
+  }
+}
+
+async function writeParticipants(chatId, participants) {
+  const file = participantsPath(chatId);
+  const list = [...participants].map(([name, joinedAt]) => serializeParticipant({ name, joinedAt }));
+  const tmp = `${file}.tmp`;
+  await writeFile(tmp, `{"participants":[${list.join(',')}]}\n`);
+  await rename(tmp, file);
+}
+
+async function chatFileIds() {
+  return (await readdir(chatsDir))
+    .filter((n) => n.endsWith('.jsonl'))
+    .map((n) => n.slice(0, -'.jsonl'.length))
+    .filter((id) => CHAT_ID_RE.test(id))
+    .sort();
+}
+
+// Picks up manual moves in data/chats while running (DESIGN §7.6): a chat file that appeared (e.g. an
+// archived chat moved back) is loaded once it has been present for two scans, so a multi-file move can
+// finish first; a chat whose file is gone is unloaded. → { added: [chatId], removed: [chatId] }
+export async function syncWithDisk() {
+  const onDisk = new Set(await chatFileIds());
+  const added = [];
+  const removed = [];
+  for (const id of [...chats.keys()]) {
+    // Re-check: the chat may have been created after readdir ran.
+    if (!onDisk.has(id) && !existsSync(chatPath(id))) {
+      chats.delete(id);
+      removed.push(id);
+      info(`chat=${id} file is gone from data/chats; unloaded`);
+    }
+  }
+  for (const id of appearing) if (!onDisk.has(id)) appearing.delete(id);
+  for (const id of onDisk) {
+    if (chats.has(id)) continue;
+    if (!appearing.has(id)) {
+      appearing.add(id);
+      continue;
+    }
+    appearing.delete(id);
+    try {
+      const r = await loadChat(id);
+      added.push(id);
+      info(`loaded chat=${id} (appeared on disk) messages=${r.messages} invalid=${r.invalid} missingAssets=${r.missingAssets}`);
+    } catch (err) {
+      console.error(`${new Date().toISOString()} ERROR failed to load chat=${id}: ${err.code ?? err.message}`);
+    }
+  }
+  return { added, removed };
+}
+
+export function isArchived(chatId) {
+  return existsSync(path.join(archiveDir(chatId), `${chatId}.jsonl`));
+}
+
+// Moves a chat out of data/chats into data/archive/<chatId>/ (DESIGN §7.6):
+//   <chatId>.jsonl, <chatId>.participants.json (+ any .partial-/.invalid- leftovers), assets/, archive.json
+// The chat is unloaded; it comes back only when someone moves the files back by hand.
+export async function archiveChat(chatId, by) {
+  if (!chats.has(chatId)) throw new HttpError(404, 'not_found', `chat "${chatId}" not found`);
+  if (!isParticipant(chatId, by)) {
+    throw new HttpError(403, 'not_participant', `"${by}" is not a participant of chat "${chatId}"; only participants can archive it`);
+  }
+  return enqueue(chatId, async () => {
+    if (!chats.has(chatId)) throw archivedError(chatId);
+    const dest = archiveDir(chatId);
+    let existing = [];
+    try {
+      existing = await readdir(dest);
+    } catch (err) {
+      if (err.code !== 'ENOENT') throw err;
+    }
+    if (existing.length > 0) {
+      throw new HttpError(409, 'conflict', `data/archive/${chatId} already exists and is not empty; move or remove it first`);
+    }
+    await mkdir(dest, { recursive: true });
+    const meta = { chatId, archivedAt: new Date().toISOString(), archivedBy: by };
+    await writeFile(path.join(dest, 'archive.json'), JSON.stringify(meta) + '\n');
+
+    // The .jsonl goes last: until it moves, the chat still exists on disk and a crash leaves it active.
+    const files = (await readdir(chatsDir)).filter((n) => n.startsWith(`${chatId}.`) && n !== `${chatId}.jsonl`);
+    for (const name of files) await rename(path.join(chatsDir, name), path.join(dest, name));
+    try {
+      await rename(chatAssetsDir(chatId), path.join(dest, 'assets'));
+    } catch (err) {
+      if (err.code !== 'ENOENT') throw err;
+    }
+    await rename(chatPath(chatId), path.join(dest, `${chatId}.jsonl`));
+    chats.delete(chatId);
+    info(`chat=${chatId} archived by ${by} to data/archive/${chatId}`);
+    return meta;
+  });
 }
 
 export function listChatIds() {
@@ -158,17 +302,67 @@ export function getSummary(chatId) {
   const chat = chats.get(chatId);
   if (!chat) return null;
   const last = chat.messages[chat.messages.length - 1];
-  return { id: chatId, messageCount: chat.messages.length, lastMessageAt: last ? last.ts : null };
+  return {
+    id: chatId,
+    messageCount: chat.messages.length,
+    lastMessageAt: last ? last.ts : null,
+    participants: [...chat.participants.keys()],
+  };
+}
+
+export function listParticipants(chatId) {
+  const chat = chats.get(chatId);
+  if (!chat) return null;
+  return [...chat.participants].map(([name, joinedAt]) => ({ name, joinedAt }));
+}
+
+export function isParticipant(chatId, name) {
+  return chats.get(chatId)?.participants.has(name) ?? false;
+}
+
+// → { participant, joined } where joined is false if `name` was already a participant.
+export async function joinChat(chatId, name) {
+  if (!chats.has(chatId)) throw new HttpError(404, 'not_found', `chat "${chatId}" not found`);
+  return enqueue(chatId, async () => {
+    const chat = chats.get(chatId);
+    if (!chat) throw archivedError(chatId);
+    if (chat.participants.has(name)) return { participant: { name, joinedAt: chat.participants.get(name) }, joined: false };
+    const joinedAt = new Date().toISOString();
+    const next = new Map(chat.participants).set(name, joinedAt);
+    await writeParticipants(chatId, next);
+    chat.participants = next;
+    return { participant: { name, joinedAt }, joined: true };
+  });
+}
+
+export async function leaveChat(chatId, name) {
+  if (!chats.has(chatId)) throw new HttpError(404, 'not_found', `chat "${chatId}" not found`);
+  return enqueue(chatId, async () => {
+    const chat = chats.get(chatId);
+    if (!chat) throw archivedError(chatId);
+    if (!chat.participants.has(name)) {
+      throw new HttpError(404, 'not_participant', `"${name}" is not a participant of chat "${chatId}"`);
+    }
+    const participant = { name, joinedAt: chat.participants.get(name) };
+    const next = new Map(chat.participants);
+    next.delete(name);
+    await writeParticipants(chatId, next);
+    chat.participants = next;
+    return participant;
+  });
 }
 
 export async function createChat(chatId) {
+  if (isArchived(chatId)) {
+    throw new HttpError(409, 'conflict', `chat "${chatId}" is archived; pick another id or restore it by moving its files back`);
+  }
   try {
     await writeFile(chatPath(chatId), '', { flag: 'wx' });
   } catch (err) {
     if (err.code === 'EEXIST') throw new HttpError(409, 'conflict', `chat "${chatId}" already exists`);
     throw err;
   }
-  chats.set(chatId, { messages: [], assetIndex: new Map(), lastId: null });
+  chats.set(chatId, { messages: [], assetIndex: new Map(), lastId: null, participants: new Map() });
   return getSummary(chatId);
 }
 
@@ -228,6 +422,10 @@ export async function appendMessage(chatId, { author, text, files = [] }) {
       throw new HttpError(413, 'payload_too_large', `file "${sanitizeAssetName(f.name)}" exceeds ${LIMITS.MAX_ASSET_BYTES} bytes`);
     }
   }
+  if (!isParticipant(chatId, input.data.author)) {
+    throw new HttpError(403, 'not_participant',
+      `"${input.data.author}" is not a participant of chat "${chatId}" — join the chat before sending`);
+  }
   const normalized = normalizeNewlines(input.data.text);
   if (normalized.trim() === '' && files.length === 0) {
     throw new HttpError(400, 'validation_failed', 'text: must not be empty when there are no files');
@@ -235,6 +433,7 @@ export async function appendMessage(chatId, { author, text, files = [] }) {
 
   return enqueue(chatId, async () => {
     const chat = chats.get(chatId);
+    if (!chat) throw archivedError(chatId); // archived while this send was queued
     const written = [];
     try {
       const assets = [];

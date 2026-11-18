@@ -8,6 +8,7 @@ export const EXIT = {
   NOT_FOUND: 4,
   TIMEOUT: 5,
   CONFLICT: 6,
+  FORBIDDEN: 7,
 };
 
 export const HEALTH_HINT = 'run "chat health" to diagnose';
@@ -32,6 +33,11 @@ export function validationError(message) {
 
 export function invalidResponse(message, exitCode = EXIT.VALIDATION) {
   return new CliError(exitCode, 'invalid_response', message);
+}
+
+export function notParticipant(chatId, author) {
+  return new CliError(EXIT.FORBIDDEN, 'not_participant',
+    `"${author}" is not a participant of chat "${chatId}" — run "chat join ${chatId} --as ${author}" first`);
 }
 
 export function fileNotFound(path) {

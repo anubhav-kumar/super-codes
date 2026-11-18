@@ -75,6 +75,7 @@ export async function request(method, path, { query, json, signal, timeoutMs = 3
 
 export const get = (path, opts) => request('GET', path, opts);
 export const post = (path, json, opts) => request('POST', path, { ...opts, json });
+export const del = (path, opts) => request('DELETE', path, opts);
 
 // Multipart upload via XHR for upload progress (fetch has none). Returns { promise, abort }.
 export function uploadMultipart(path, formData, { onProgress } = {}) {

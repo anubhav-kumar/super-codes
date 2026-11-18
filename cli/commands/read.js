@@ -1,8 +1,8 @@
 import { LIMITS } from '../../lib/constants.js';
 import { parseCommand, expectPositionals, checkChatId, checkUlidArg, parseIntFlag } from '../args.js';
-import { resolveUrl } from '../config.js';
-import { request, enc, expectObject, checkMessage } from '../api.js';
-import { invalidResponse } from '../errors.js';
+import { resolveUrl, resolveAuthor } from '../config.js';
+import { request, enc, expectObject, checkMessage, requireParticipant } from '../api.js';
+import { invalidResponse, usageError } from '../errors.js';
 import { printMessage } from '../output.js';
 
 export async function run(argv) {
@@ -14,6 +14,9 @@ export async function run(argv) {
   if (values.since !== undefined) query.since = checkUlidArg(values.since, '--since', 'read');
   if (values.before !== undefined) query.before = checkUlidArg(values.before, '--before', 'read');
   const base = resolveUrl(values, 'read');
+  const author = resolveAuthor(values);
+  if (author === null) throw usageError('no author: pass --as <name>, set CHAT_AUTHOR, or run "chat config set author <name>"', 'read');
+  await requireParticipant(base, chatId, author);
 
   const body = expectObject(
     await request(base, 'GET', `api/chats/${enc(chatId)}/messages`, { query }),

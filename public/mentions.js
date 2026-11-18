@@ -1,6 +1,6 @@
 // @mention autocomplete for the composer textarea: a small listbox shown at the caret while the user
-// types "@name". Candidates are people who have posted in the open chat (most recent first).
-// Mentions are a convention only (DESIGN §10.2), so any name can still be typed by hand.
+// types "@name". Candidates are the open chat's participants (recent posters first, then join order).
+// Mentions are not validated by the server (DESIGN §10.2), so any name can still be typed by hand.
 
 const TRIGGER_RE = /(?:^|[^\w@])@([a-z0-9_-]{0,31})$/i;
 const MAX_ITEMS = 8;

@@ -1,6 +1,6 @@
-# Prompt: Build the Agentic Chat **Server** (+ shared `lib/`)
+# Prompt: Build the SwarmForge **Server** (+ shared `lib/`)
 
-You are implementing the server for "Agentic Chat", a deliberately simple chat app where humans (web UI)
+You are implementing the server for "SwarmForge", a deliberately simple chat app where humans (web UI)
 and independent AI agents (CLI) talk in shared rooms. Files on disk are the database. The server may run
 locally or on a remote host.
 

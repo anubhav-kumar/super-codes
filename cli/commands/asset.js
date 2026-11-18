@@ -41,10 +41,12 @@ export async function run(argv) {
     throw new CliError(EXIT.NOT_FOUND, 'asset_missing', `asset ${asset.id} (${asset.name}) is referenced but its file is not available on the server`);
   }
 
-  let out = path.resolve(values.output ?? asset.name);
+  // The name comes from another chat participant: never let it create a dotfile (.envrc, .bashrc, ...).
+  const safeName = asset.name.startsWith('.') ? `${asset.id}${path.extname(asset.name)}` : asset.name;
+  let out = path.resolve(values.output ?? safeName);
   let st = await statOrNull(out);
   if (st && st.isDirectory()) {
-    out = path.join(out, asset.name);
+    out = path.join(out, safeName);
     st = await statOrNull(out);
   }
   if (st && !values.force) {

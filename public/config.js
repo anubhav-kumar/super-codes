@@ -2,6 +2,7 @@
 // guarded: when storage is unavailable (private mode, blocked) values live in memory for this page load only.
 
 const KEY_AUTHOR = 'chat.author';
+const KEY_MEMBERS_PANEL = 'chat.membersPanel';
 const lastSeenKey = (chatId) => `chat.lastSeen.${chatId}`;
 const draftKey = (chatId) => `chat.draft.${chatId}`;
 
@@ -46,6 +47,16 @@ export function getAuthor(C) {
 
 export function setAuthor(name) {
   storageSet(KEY_AUTHOR, name);
+}
+
+// null = never toggled (the UI picks a default by screen width).
+export function getMembersPanel() {
+  const v = storageGet(KEY_MEMBERS_PANEL);
+  return v === null ? null : v === '1';
+}
+
+export function setMembersPanel(open) {
+  storageSet(KEY_MEMBERS_PANEL, open ? '1' : '0');
 }
 
 export function getLastSeen(chatId) {
