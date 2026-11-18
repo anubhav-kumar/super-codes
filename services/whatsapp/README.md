@@ -25,6 +25,8 @@ The stack creates these SSM parameters as type `String`, with the placeholder va
 | `/vartalap/<stage>/WA_APP_SECRET`      | Meta app secret (webhook signature check)                 | webhook         |
 | `/vartalap/<stage>/WA_VERIFY_TOKEN`    | Any random string; also entered in the Meta webhook setup | webhook         |
 | `/vartalap/<stage>/JWT_SECRET`         | Web app session signing key (random, 32+ characters)      | web app         |
+| `/vartalap/<stage>/META_APP_ID`        | Meta app ID (I3 onboarding demo; public, not a secret)    | web app         |
+| `/vartalap/<stage>/META_ES_CONFIG_ID`  | Embedded Signup configuration ID (I3 onboarding demo)     | web app         |
 
 After the first deploy, set the real values once:
 
@@ -50,7 +52,7 @@ npx serverless remove --stage dev              # deletes the stack, including th
 
 Stage defaults to `dev` and region to `ap-south-1`. The Graph API version (`WA_GRAPH_VERSION`) and sender timeout are set under `params` in `serverless.yml`.
 
-Deploy outputs (`npx serverless info --stage dev --verbose`): `MessagesTableName`, `ChatsTableName`, `UsersTableName`, `OutboundQueueUrl`, `OutboundDlqUrl`, `WaParameterNames`, `WebhookUrl` (register in the Meta app) and the Framework's `HttpApiUrl`. The stack also publishes the table names and queue URL to SSM `/vartalap/<stage>/config/*` (`MESSAGES_TABLE`, `CHATS_TABLE`, `USERS_TABLE`, `OUTBOUND_QUEUE_URL`). The local web app and scripts load them from there, so `apps/web/.env.local` needs only `AWS_REGION` and `STAGE`; the scripts take those two from the shell instead (`assume`, `STAGE` defaulting to `dev`).
+Deploy outputs (`npx serverless info --stage dev --verbose`): `MessagesTableName`, `ChatsTableName`, `UsersTableName`, `OutboundQueueUrl`, `OutboundDlqUrl`, `WaParameterNames`, `WebhookUrl` (register in the Meta app) and the Framework's `HttpApiUrl`. The stack also publishes the table names, queue URL and Graph API version to SSM `/vartalap/<stage>/config/*` (`MESSAGES_TABLE`, `CHATS_TABLE`, `USERS_TABLE`, `OUTBOUND_QUEUE_URL`, `WA_GRAPH_VERSION`, plus the F2/F4 keys). The local web app and scripts load them from there. They take the region from the shell (`assume`) and `STAGE` from the shell or the repo root `.env` (default `dev`).
 
 ## IAM for the local Next.js app
 

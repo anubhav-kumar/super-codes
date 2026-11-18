@@ -10,7 +10,7 @@ Nobody pays for software that runs on the developer's laptop. Today the Next.js 
 ## 2. Current state
 - **Web app:** `npm run dev` on `localhost:3000`, using the developer's `assume` credentials. "Hosting the web app itself is out of scope for v1" (`docs/deployment.md` §What gets deployed; `docs/PRD.md` §Deferred "Production deployment of the Next.js app").
 - **Framework:** Next.js `^16.4.2`, React 19 (`apps/web/package.json:20-22`). `next.config.mjs` sets `transpilePackages: ['@vartalap/core']`, `outputFileTracingRoot` at the monorepo root and a `Referrer-Policy` header. No `output: 'standalone'`.
-- **Config:** the web app needs only `AWS_REGION` and `STAGE`; table names and the queue URL come from SSM `/vartalap/<stage>/config/*` at startup (`apps/web/instrumentation.js`, `docs/deployment.md` §4). The session key comes from SSM `JWT_SECRET` (`apps/web/lib/session.js:19-52`).
+- **Config:** the web app needs only `AWS_REGION` (locally from `assume`) and `STAGE` (locally from the repo root `.env`); table names and the queue URL come from SSM `/vartalap/<stage>/config/*` at startup (`apps/web/instrumentation.js`, `docs/deployment.md` §4). The session key comes from SSM `JWT_SECRET` (`apps/web/lib/session.js:19-52`).
 - **Cookies:** `secure` only when `NODE_ENV === 'production'` (`apps/web/lib/session.js:84`), so a production build behind HTTPS is required.
 - **AWS side:** one Serverless Framework v4 stack per stage (`services/whatsapp/serverless.yml`), deployed by hand. v4 needs a Serverless login or license key (`docs/arch/boilerplate.md` §9.1).
 - **Stages:** only `dev` exists. Region default `ap-south-1`.

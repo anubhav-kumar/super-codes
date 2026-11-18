@@ -1,6 +1,6 @@
 // F2 (P4): deletes every stored media file of one chat, for a client data-deletion request
 // (GDPR / PDPA / PDPL). Message texts stay; each file's media.state becomes 'expired', so the
-// UI shows "Media expired". Usage (needs AWS_REGION and STAGE, like the seed script):
+// UI shows "Media expired". Region from the shell (`assume`), stage as for the seed script:
 //   npm run delete-client-media -w @vartalap/scripts -- <chat id from the URL> [--yes]
 // Without --yes it only counts what it would delete. Never logs keys, captions or filenames.
 import { DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
@@ -11,6 +11,7 @@ import {
   readMessages,
   setMediaState,
 } from '@vartalap/core';
+import { useShellEnv } from './lib/shell-env.js';
 
 const PAGE = 100;
 
@@ -22,6 +23,7 @@ async function main() {
   }
   const apply = flag === '--yes';
 
+  useShellEnv();
   await loadConfigFromSsm();
   const chatId = await getChatIdByPublicId(publicId);
   if (!chatId) {

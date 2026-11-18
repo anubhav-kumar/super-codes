@@ -14,6 +14,8 @@ export const POST = withHandler(async (request) => {
     ...body,
     cookieState: request.cookies.get(STATE_COOKIE)?.value,
     user,
+    // The site's own origin, for the redirect_uri fallback in the code exchange.
+    origin: request.nextUrl.origin,
   });
   // The state is single use.
   return Response.json({ connection }, { headers: { 'Set-Cookie': stateCookie('', request) } });

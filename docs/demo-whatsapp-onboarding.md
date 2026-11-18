@@ -44,14 +44,14 @@ assume <dev-role>                                  # your usual AWS credentials
 npm run deploy -- --stage dev                      # Lambda + CORS changes for the demo
 ```
 
-Add these to `apps/web/.env.local`, next to `AWS_REGION` and `STAGE`:
+The deploy creates the two Meta ID parameters with the placeholder `CHANGE_ME`. Set them once (they are public IDs, not secrets):
 
 ```bash
-META_APP_ID=<app id>
-META_ES_CONFIG_ID=<configuration id>
+aws ssm put-parameter --overwrite --type String --name /vartalap/dev/META_APP_ID --value '<app id>'
+aws ssm put-parameter --overwrite --type String --name /vartalap/dev/META_ES_CONFIG_ID --value '<configuration id>'
 ```
 
-> `npm run reset-data -w @vartalap/scripts -- --apply` trims `.env.local` back to `AWS_REGION` and `STAGE`. If you reset before the demo (recommended, for a clean inbox), add these two lines afterwards.
+The web app reads them on each page load, so no restart is needed. `reset-data` leaves them alone. The Graph API version comes from `/vartalap/dev/config/WA_GRAPH_VERSION`, which every deploy publishes.
 
 ## 4. Run
 

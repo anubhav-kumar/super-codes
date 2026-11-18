@@ -1,8 +1,8 @@
 // F3: gives every existing chat an opaque publicId (new chats get one from appendMessage).
 //   npm run backfill:public-ids -w @vartalap/scripts             (dry run: counts only)
 //   npm run backfill:public-ids -w @vartalap/scripts -- --apply  (writes)
-// Region comes from the shell (`assume`), the stage from STAGE (default dev), and table names
-// from SSM, as for the seed script.
+// Region comes from the shell (`assume`), the stage from STAGE (shell, else the repo root .env,
+// else dev), and table names from SSM, as for the seed script.
 // Idempotent and safe while the webhook is live: each write is conditioned on the chat still
 // having no publicId, so an id set concurrently by appendMessage is never replaced.
 // Prints counts only, never phone numbers.

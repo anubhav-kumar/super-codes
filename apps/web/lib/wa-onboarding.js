@@ -15,7 +15,8 @@ import {
 import { AppError } from '@vartalap/core';
 
 const GRAPH_BASE_URL = 'https://graph.facebook.com';
-// Keep in sync with waGraphVersion in services/whatsapp/serverless.yml.
+// The stack publishes waGraphVersion to SSM config/WA_GRAPH_VERSION (loaded at startup); this
+// is only the fallback for a stack deployed before that parameter existed.
 const DEFAULT_GRAPH_VERSION = 'v26.0';
 const REQUEST_TIMEOUT_MS = 15_000;
 const PLACEHOLDER = 'CHANGE_ME';
@@ -25,6 +26,8 @@ const STATE_TTL_SECONDS = 15 * 60;
 
 // Stack parameters the Lambdas read (created by serverless.yml with a placeholder).
 const LIVE_KEYS = ['WA_PHONE_NUMBER_ID', 'WA_ACCESS_TOKEN'];
+// Public IDs of the Meta app (not secrets), also created by the stack with a placeholder.
+const META_KEYS = ['META_APP_ID', 'META_ES_CONFIG_ID'];
 // Created here, as SecureString:
 //   CONNECTION  the current onboarding attempt or connected number (incl. token and PIN)
 //   PREVIOUS    the manually configured number and token from before the first connect
@@ -51,15 +54,18 @@ function graphVersion() {
   return process.env.WA_GRAPH_VERSION || DEFAULT_GRAPH_VERSION;
 }
 
-// Public settings for the browser (the app ID and configuration ID are not secrets).
-export function onboardingConfig() {
-  const appId = process.env.META_APP_ID || null;
-  const configId = process.env.META_ES_CONFIG_ID || null;
-  const missing = [!appId && 'META_APP_ID', !configId && 'META_ES_CONFIG_ID'].filter(Boolean);
+// ---- SSM ----------------------------------------------------------------------------------
+
+// Public settings for the browser (the app ID and configuration ID are not secrets), read from
+// SSM on each call so a value set with put-parameter applies without a restart.
+// `missing` lists the full parameter names still unset or placeholder.
+export async function onboardingConfig() {
+  const { META_APP_ID: appId, META_ES_CONFIG_ID: configId } = await readParams(META_KEYS);
+  const missing = [!appId && 'META_APP_ID', !configId && 'META_ES_CONFIG_ID']
+    .filter(Boolean)
+    .map(paramName);
   return { appId, configId, graphVersion: graphVersion(), ready: !missing.length, missing };
 }
-
-// ---- SSM ----------------------------------------------------------------------------------
 
 // → { key: value | null }; null when missing or still the placeholder.
 async function readParams(keys) {
@@ -144,8 +150,10 @@ async function graph(path, { method = 'GET', token, query, body } = {}) {
 }
 
 async function appCredentials() {
-  const { appId } = onboardingConfig();
-  if (!appId) throw new AppError('VALIDATION', 'META_APP_ID is not set in apps/web/.env.local');
+  const { appId } = await onboardingConfig();
+  if (!appId) {
+    throw new AppError('VALIDATION', `Set the Meta app ID in SSM ${paramName('META_APP_ID')}`);
+  }
   const { WA_APP_SECRET } = await readParams(['WA_APP_SECRET']);
   if (!WA_APP_SECRET) {
     throw new AppError(
@@ -156,19 +164,46 @@ async function appCredentials() {
   return { appId, appSecret: WA_APP_SECRET };
 }
 
+// Meta's "Error validating verification code" (redirect_uri mismatch).
+const REDIRECT_MISMATCH_SUBCODE = 36008;
+
 // Exchangeable code from Embedded Signup → business integration system user token.
 // The code is single use and expires about 30 s after the popup returns it.
-async function exchangeCode(code) {
+// Meta's docs exchange it with no redirect_uri. Some apps get a redirect_uri mismatch
+// (subcode 36008) instead, so the demo then retries with the URLs the code may be bound to:
+// the settings page and the site root (the redirect URI listed in the Meta app).
+async function exchangeCode(code, origin) {
   const { appId, appSecret } = await appCredentials();
-  const { access_token: token } = await graph('oauth/access_token', {
-    query: { client_id: appId, client_secret: appSecret, code },
-  });
-  if (!token) throw new AppError('META_ERROR', 'Meta: no access token in the code exchange');
-  return token;
+  const redirectUris = [
+    undefined,
+    ...(origin ? [`${origin}/admin/whatsapp`, `${origin}/`] : []),
+  ];
+  let lastError;
+  for (const redirectUri of redirectUris) {
+    try {
+      const { access_token: token } = await graph('oauth/access_token', {
+        query: {
+          client_id: appId,
+          client_secret: appSecret,
+          code,
+          ...(redirectUri ? { redirect_uri: redirectUri } : {}),
+        },
+      });
+      if (!token) throw new AppError('META_ERROR', 'Meta: no access token in the code exchange');
+      // Demo diagnostics: which variant worked (a URL of this app, not a secret).
+      console.info('wa_onboarding_code_exchanged', { redirectUri: redirectUri ?? 'none' });
+      return token;
+    } catch (err) {
+      if (err?.details?.metaSubcode !== REDIRECT_MISMATCH_SUBCODE) throw err;
+      lastError = err;
+    }
+  }
+  throw lastError;
 }
 
-// WABAs the token was granted (used when the browser did not get the session info event).
-async function grantedWabaIds(token) {
+// What the token was granted: its scopes and the WABAs (used when the browser did not get the
+// session info event). Never includes the token itself.
+async function tokenGrants(token) {
   const { appId, appSecret } = await appCredentials();
   const { data } = await graph('debug_token', {
     query: { input_token: token, access_token: `${appId}|${appSecret}` },
@@ -176,7 +211,15 @@ async function grantedWabaIds(token) {
   const scope = (data?.granular_scopes ?? []).find(
     (s) => s.scope === 'whatsapp_business_management',
   );
-  return (scope?.target_ids ?? []).map(String);
+  return {
+    type: data?.type ?? null,
+    scopes: data?.scopes ?? [],
+    wabaIds: (scope?.target_ids ?? []).map(String),
+  };
+}
+
+async function grantedWabaIds(token) {
+  return (await tokenGrants(token)).wabaIds;
 }
 
 async function listNumbers(wabaId, token) {
@@ -227,9 +270,16 @@ async function numberDetails(phoneNumberId, token) {
 
 // The IDs may come from the browser, so they are checked against what the token can see.
 async function verifyAssets(conn) {
-  const wabaIds = conn.wabaId ? [conn.wabaId] : await grantedWabaIds(conn.token);
+  const grants = conn.wabaId ? null : await tokenGrants(conn.token);
+  const wabaIds = conn.wabaId ? [conn.wabaId] : grants.wabaIds;
   if (!wabaIds.length) {
-    throw new AppError('META_ERROR', 'Meta: no WhatsApp Business Account was shared in signup');
+    // Demo diagnostics: say what the token does have (scopes only, never the token).
+    throw new AppError(
+      'META_ERROR',
+      'Meta: no WhatsApp Business Account was shared in signup ' +
+        `(the browser got no signup-finished event; token type ${grants.type ?? 'unknown'}, ` +
+        `scopes: ${grants.scopes.join(', ') || 'none'})`,
+    );
   }
   if (conn.wabaId) {
     // An empty grant list is not proof either way (app admins may get none); the number
@@ -383,7 +433,7 @@ export async function onboardingStatus() {
   }
 
   return {
-    config: onboardingConfig(),
+    config: await onboardingConfig(),
     connection: toConnectionView(conn),
     active: { source, phoneNumberId, number, numberError },
     canRestorePrevious: Boolean(previous),
@@ -397,6 +447,7 @@ export async function completeOnboarding({
   wabaId,
   phoneNumberId,
   user,
+  origin,
 }) {
   if (!sameState(state, cookieState)) {
     throw new AppError('FORBIDDEN', 'This signup session expired; reload the page and try again');
@@ -406,7 +457,7 @@ export async function completeOnboarding({
     throw new AppError('CONFLICT', 'A number is already connected; disconnect it first');
   }
 
-  const token = await exchangeCode(code);
+  const token = await exchangeCode(code, origin);
   const conn = {
     status: 'pending',
     step: 'exchanged',

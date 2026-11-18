@@ -317,6 +317,8 @@ export default function WhatsAppSettingsPage() {
   }, [isAdmin, load, newState]);
 
   useSignupEvents((data) => {
+    // Demo diagnostics: the event holds only IDs and step names, no token or code.
+    console.info('[wa-signup] event', data.event, data.data);
     if (String(data.event).startsWith('FINISH')) {
       sessionRef.current = {
         wabaId: data.data?.waba_id ? String(data.data.waba_id) : undefined,
@@ -369,6 +371,7 @@ export default function WhatsAppSettingsPage() {
     window.FB.login(
       (response) => {
         const code = response?.authResponse?.code;
+        console.info('[wa-signup] login callback', response?.status, code ? 'code received' : 'no code');
         if (code) {
           finish(code);
         } else {
@@ -380,7 +383,8 @@ export default function WhatsAppSettingsPage() {
         config_id: status.config.configId,
         response_type: 'code',
         override_default_response_type: true,
-        extras: { setup: {} },
+        // sessionInfoVersion makes the popup post the FINISH event with waba_id / phone_number_id.
+        extras: { setup: {}, sessionInfoVersion: '3' },
       },
     );
   };
@@ -452,8 +456,8 @@ export default function WhatsAppSettingsPage() {
       {status && !status.config.ready && (
         <p className="alert danger" role="alert">
           <CircleAlert size={16} aria-hidden="true" />
-          Set {status.config.missing.join(' and ')} in apps/web/.env.local and restart the dev
-          server (docs/demo-whatsapp-onboarding.md).
+          Set SSM {status.config.missing.join(' and ')}, then reload this page
+          (docs/demo-whatsapp-onboarding.md).
         </p>
       )}
 

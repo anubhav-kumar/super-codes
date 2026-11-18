@@ -1,7 +1,7 @@
 // Creates the first admin: npm run seed -- <email> [name]
 // The password is generated here and printed once, so it never has to sit in a file; sign in
 // and change it under Password. Region comes from the shell (`assume`), the stage from STAGE
-// (default dev), and table names from SSM.
+// (shell, else the repo root .env, else dev), and table names from SSM.
 // Idempotent: if a user with that email exists, it changes nothing.
 import { randomBytes } from 'node:crypto';
 import { createUser, getUserByEmail, loadConfigFromSsm } from '@vartalap/core';

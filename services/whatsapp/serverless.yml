@@ -303,6 +303,24 @@ resources:
         Value: CHANGE_ME
         Description: Webhook verify token, also entered in the Meta webhook setup
 
+    # I3 demo: public IDs of the Meta app for Embedded Signup, read by the web app only (not
+    # secrets). Set once with `aws ssm put-parameter --overwrite` (docs/demo-whatsapp-onboarding.md).
+    MetaAppIdParam:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /vartalap/${sls:stage}/META_APP_ID
+        Type: String
+        Value: CHANGE_ME
+        Description: Meta app ID, used by the web app's WhatsApp onboarding
+
+    MetaEsConfigIdParam:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /vartalap/${sls:stage}/META_ES_CONFIG_ID
+        Type: String
+        Value: CHANGE_ME
+        Description: Meta Embedded Signup configuration ID, used by the web app's WhatsApp onboarding
+
     # Session signing key for the web app (not read by the Lambdas). Set it to a random string
     # of at least 32 characters, e.g. `openssl rand -hex 32`.
     JwtSecretParam:
@@ -342,6 +360,14 @@ resources:
         Name: /vartalap/${sls:stage}/config/OUTBOUND_QUEUE_URL
         Type: String
         Value: !Ref OutboundQueue
+
+    # I3 demo: the web app's onboarding uses the same Graph API version as the Lambdas.
+    ConfigWaGraphVersionParam:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /vartalap/${sls:stage}/config/WA_GRAPH_VERSION
+        Type: String
+        Value: ${param:waGraphVersion}
 
     # ---- F2: media messages ---------------------------------------------------------------
     # Private bucket for inbound (in/<messageId>) and outbound (out/<messageId>) files. Keys hold

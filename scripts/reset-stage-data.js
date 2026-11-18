@@ -4,15 +4,13 @@
 //   npm run reset-data -w @vartalap/scripts -- --apply               (deletes)
 //   npm run reset-data -w @vartalap/scripts -- --apply --keep-users  (keeps staff accounts)
 // Region and credentials come from the shell (`assume` sets AWS_REGION / AWS_DEFAULT_REGION).
-// The stage is the shell's STAGE, or dev when unset; .env.local is not read.
+// The stage is the shell's STAGE, else the repo root .env, else dev.
 // Deletes every item in the Messages, Chats, Users and ClientNotes tables, every object in the
-// media bucket, and purges the outbound and media-fetch queues and their DLQs. With --apply it
-// also trims apps/web/.env.local to AWS_REGION and STAGE (everything else comes from SSM).
+// media bucket, and purges the outbound and media-fetch queues and their DLQs.
 // Only runs on dev unless --stage <name> repeats the stage, so prod can't be wiped by a stray
 // STAGE variable. Stop `npm run dev` first. After a reset without --keep-users, run
 // `npm run seed -- <email> [name]` to create the first admin again.
 // Prints counts only, never item contents.
-import { readFile, writeFile } from 'node:fs/promises';
 import {
   BatchWriteItemCommand,
   DescribeTableCommand,
@@ -24,8 +22,6 @@ import { GetQueueUrlCommand, PurgeQueueCommand, SQSClient } from '@aws-sdk/clien
 import { SSM_CONFIG_KEYS, SSM_OPTIONAL_CONFIG_KEYS, loadConfigFromSsm } from '@vartalap/core';
 import { useShellEnv } from './lib/shell-env.js';
 
-const ENV_FILE = new URL('../apps/web/.env.local', import.meta.url);
-const ENV_KEEP = ['AWS_REGION', 'STAGE'];
 const BATCH_SIZE = 25; // BatchWriteItem limit
 
 function parseArgs(argv) {
@@ -83,8 +79,6 @@ async function main() {
       `  queue ${queue.name}: ${apply ? await purgeQueue(sqs, queue.url) : 'would be purged'}`,
     );
   }
-
-  console.log(`  ${await trimEnvFile(apply)}`);
 
   if (!apply) {
     console.log('Nothing was changed. Re-run with --apply to delete.');
@@ -189,27 +183,6 @@ async function purgeQueue(sqs, url) {
     if (String(err.name).includes('PurgeQueueInProgress')) return 'purge already in progress';
     throw err;
   }
-}
-
-// .env.local is still needed for AWS_REGION and STAGE; anything else in it is stale and
-// would override the values the stack publishes to SSM.
-async function trimEnvFile(apply) {
-  let text;
-  try {
-    text = await readFile(ENV_FILE, 'utf8');
-  } catch (err) {
-    if (err.code === 'ENOENT') return 'apps/web/.env.local: not found, skipped';
-    throw err;
-  }
-  const lines = text.split('\n').filter((line) => /^\s*[A-Za-z_][A-Za-z0-9_]*\s*=/.test(line));
-  const keyOf = (line) => line.split('=')[0].trim();
-  const kept = lines.filter((line) => ENV_KEEP.includes(keyOf(line)));
-  const removed = lines.map(keyOf).filter((key) => !ENV_KEEP.includes(key));
-
-  if (!removed.length) return 'apps/web/.env.local: already only AWS_REGION and STAGE';
-  if (!apply) return `apps/web/.env.local: would remove ${removed.join(', ')}`;
-  await writeFile(ENV_FILE, `${kept.join('\n')}\n`, { mode: 0o600 });
-  return `apps/web/.env.local: removed ${removed.join(', ')}`;
 }
 
 function sleep(ms) {

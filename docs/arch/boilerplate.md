@@ -202,12 +202,13 @@ If the transaction is cancelled because the head changed, re-read the head and r
 Environment variables (listed in `.env.example`; real values never committed):
 | Var | Used by |
 |---|---|
-| `AWS_REGION`, `STAGE` | all |
+| `AWS_REGION`, `STAGE` | all. Locally: region from the shell (`assume`), `STAGE` from the repo root `.env` (`@vartalap/core/env`) |
 | `MESSAGES_TABLE`, `CHATS_TABLE`, `USERS_TABLE`, `OUTBOUND_QUEUE_URL` | Lambdas get them from `serverless.yml`. The web app and seed script load them at startup from SSM `/vartalap/<STAGE>/config/*` (`loadConfigFromSsm` in core, called from `apps/web/instrumentation.js`) |
 | `CLIENT_NOTES_TABLE` (F4) | Web app only. An optional SSM config key (`SSM_OPTIONAL_CONFIG_KEYS`): loaded when present, checked on first use by `getClientNotesTable()`. Not in `getConfig()` REQUIRED and not set on the Lambdas |
 | `JWT_SECRET_PARAM` (optional; defaults to `/vartalap/<STAGE>/JWT_SECRET` in SSM) | web |
 | `WA_PHONE_NUMBER_ID`, `WA_ACCESS_TOKEN`, `WA_APP_SECRET`, `WA_VERIFY_TOKEN` | Lambdas |
-| `WA_GRAPH_VERSION` | Lambdas (plain value in `serverless.yml`, e.g. `v26.0`) |
+| `WA_GRAPH_VERSION` | Lambdas (plain value in `serverless.yml`, e.g. `v26.0`); web app from SSM `config/WA_GRAPH_VERSION` (optional key) |
+| `META_APP_ID`, `META_ES_CONFIG_ID` (I3 demo) | Web app only, read from SSM `/vartalap/<STAGE>/META_*` by `lib/wa-onboarding.js`; not env vars |
 | (none) | seed script: email and name are command-line arguments |
 
 In AWS, the WhatsApp settings are SSM `String` parameters that the stack itself creates, with a placeholder value. The real values are set once after the first deploy. Lambdas get only the parameter names and read the values at runtime (`services/whatsapp/src/lib/params.js`); see `services/whatsapp/README.md`.

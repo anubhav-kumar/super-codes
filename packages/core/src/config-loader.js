@@ -18,6 +18,8 @@ export const SSM_OPTIONAL_CONFIG_KEYS = [
   // F2: media bucket and the GuardDuty clean-tag switch (web app; see media/config.js).
   'MEDIA_BUCKET',
   'MEDIA_SCAN_REQUIRED',
+  // I3 demo: Graph API version for onboarding calls (web app; see lib/wa-onboarding.js).
+  'WA_GRAPH_VERSION',
 ];
 
 export function configPath(stage = process.env.STAGE) {

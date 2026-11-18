@@ -11,10 +11,11 @@ Commands are bash/zsh. For fish, use `set VAR value` instead of `VAR=value` and 
 | SQS FIFO queue `vartalap-<stage>-outbound.fifo`, plus its DLQ | AWS | same |
 | Lambdas `webhook` (HTTP API `GET`/`POST /webhook`) and `sender` (SQS) | AWS | same |
 | SSM secrets `/vartalap/<stage>/WA_*` and `/vartalap/<stage>/JWT_SECRET` (placeholder `CHANGE_ME`; you set them in step 3) | AWS | same |
-| SSM config `/vartalap/<stage>/config/*`: table names and queue URL (real values, written by every deploy) | AWS | same |
+| SSM `/vartalap/<stage>/META_APP_ID` and `META_ES_CONFIG_ID` (placeholder; set only for the onboarding demo, see `docs/demo-whatsapp-onboarding.md`) | AWS | same |
+| SSM config `/vartalap/<stage>/config/*`: table names, queue URL and Graph API version (real values, written by every deploy) | AWS | same |
 | Web app (Next.js UI + API) | Your machine (`localhost:3000`) for now | `npm run dev` |
 
-Hosting the web app itself is out of scope for v1. It runs locally against the AWS stage. Its `.env.local` holds only `AWS_REGION` and `STAGE`; everything else comes from SSM.
+Hosting the web app itself is out of scope for v1. It runs locally against the AWS stage. The region comes from your shell (`assume`), `STAGE` from the repo root `.env`, and everything else from SSM.
 
 **Already deployed before the SSM changes?** See [Upgrading an existing deployment](#upgrading-an-existing-deployment).
 
@@ -40,6 +41,8 @@ The role that runs the **web app** needs less. A sample policy is in [`services/
 - `sqs:SendMessage` on the outbound queue;
 - `ssm:GetParametersByPath` on `/vartalap/<stage>/config`;
 - `ssm:GetParameter` on `/vartalap/<stage>/JWT_SECRET`.
+
+The WhatsApp onboarding demo also reads and writes `WA_*`, `META_*` and `onboarding/*` parameters; run it with an admin role (`docs/demo-whatsapp-onboarding.md`).
 
 ### 1.3 Install and log in
 ```bash
@@ -115,16 +118,19 @@ put JWT_SECRET         "$(openssl rand -hex 32)"
 ---
 
 ## 4. Run the web app
-Create `apps/web/.env.local` from `.env.example`. It needs just two lines:
+Create `.env` at the repo root (`<repo>/whatsapp/.env`) from `.env.example`. It needs one line:
 ```dotenv
-AWS_REGION=ap-south-1           # must be the stack's region
 STAGE=dev                       # selects /vartalap/<stage>/... in SSM
 ```
+The web app and the scripts both read it. A `STAGE` set in your shell wins.
+
+The **region** and AWS credentials come from your shell: `assume` sets `AWS_REGION` and `AWS_DEFAULT_REGION`. It must be the stack's region. Without it the web app stops at startup with "No AWS region in the shell; run `assume` first".
+
 Everything else comes from SSM:
-- The table names and queue URL come from `/vartalap/<stage>/config/*`. The stack publishes them on every deploy, and the web app and seed script load them at startup.
+- The table names, queue URL and Graph API version come from `/vartalap/<stage>/config/*`. The stack publishes them on every deploy, and the web app and scripts load them at startup.
 - The session key comes from `/vartalap/<stage>/JWT_SECRET` (step 3).
 
-AWS credentials come from your shell. A variable set in `.env.local` still overrides the SSM value, if you ever need that locally.
+`apps/web/.env.local` is no longer used; delete it if you have one. A variable exported in your shell still overrides the SSM value, if you ever need that locally.
 
 With AWS credentials active in the same shell:
 ```bash
@@ -216,7 +222,7 @@ For a stage deployed **before** the session key and config moved to SSM (`fc2c1a
    aws ssm put-parameter --region ap-south-1 --overwrite --type String \
      --name /vartalap/dev/JWT_SECRET --value "$(openssl rand -hex 32)"
    ```
-3. **Trim `apps/web/.env.local`** to `AWS_REGION` and `STAGE`. Delete `JWT_SECRET`, `SEED_ADMIN_PASSWORD`, `SEED_ADMIN_EMAIL`, `SEED_ADMIN_NAME`, and the table and queue lines. Leftover table and queue lines would override SSM.
+3. **Move to the root `.env`.** Create `<repo>/whatsapp/.env` with `STAGE=dev` and delete `apps/web/.env.local` (its `AWS_REGION` and `STAGE` would otherwise still apply; the region now comes from `assume`).
 4. **Permissions:** if your role isn't admin, add the two SSM permissions from step 1.2.
 5. **Restart** `npm run dev`. If the old admin password was ever stored in `.env.local`, change it under **Password**.
 
@@ -234,14 +240,14 @@ For a stage deployed **before** the session key and config moved to SSM (`fc2c1a
 | Inbound messages ignored | `WA_PHONE_NUMBER_ID` doesn't match the number Meta is sending for |
 | Replies fail with code `190` | The access token has expired or is invalid. Use a System User token |
 | Replies fail with code `131047` | More than 24 h since the client's last message |
-| Web app or seed fails with "Missing config … under SSM /vartalap/<stage>/config/" | The stack for that stage/region hasn't been deployed with the config parameters yet; run `serverless deploy` (step 2). Check `STAGE`/`AWS_REGION` in `.env.local` |
-| The web app fails with "Missing required env vars" | `AWS_REGION` or `STAGE` is missing from `apps/web/.env.local` (step 4) |
-| A script (`seed`, `backfill:public-ids`, `reset-data`) says "No AWS region in the shell" | Run `assume` first. Scripts take the region from the shell and `STAGE` from the shell (default `dev`), not from `.env.local` |
-| Login fails; log says "SSM parameter /vartalap/<stage>/JWT_SECRET not found in <region>" (older versions: `ParameterNotFound` / `UnknownError`) | The stack hasn't been redeployed since `JWT_SECRET` was added, or `.env.local` points to another stage or region. Run `serverless deploy` (step 2), then set it (step 3) |
-| Web app fails with "SSM parameter /vartalap/<stage>/JWT_SECRET must be a random string…" | It's still `CHANGE_ME` or too short. Set it (step 3); check `STAGE` and `AWS_REGION` in `.env.local` |
+| Web app or seed fails with "Missing config … under SSM /vartalap/<stage>/config/" | The stack for that stage/region hasn't been deployed with the config parameters yet; run `serverless deploy` (step 2). Check `STAGE` in the root `.env` and the region from `assume` |
+| The web app fails with "No AWS region in the shell" or "Missing required env vars" | Run `assume` in the shell that starts `npm run dev`, and check `STAGE` in the root `.env` (step 4) |
+| A script (`seed`, `backfill:public-ids`, `reset-data`, `delete-client-media`) says "No AWS region in the shell" | Run `assume` first. Scripts take the region from the shell and `STAGE` from the shell, else the root `.env`, else `dev` |
+| Login fails; log says "SSM parameter /vartalap/<stage>/JWT_SECRET not found in <region>" (older versions: `ParameterNotFound` / `UnknownError`) | The stack hasn't been redeployed since `JWT_SECRET` was added, or `STAGE` (root `.env`) or the `assume` region points to another stage or region. Run `serverless deploy` (step 2), then set it (step 3) |
+| Web app fails with "SSM parameter /vartalap/<stage>/JWT_SECRET must be a random string…" | It's still `CHANGE_ME` or too short. Set it (step 3); check `STAGE` in the root `.env` and the `assume` region |
 | Lost the seeded admin's one-time password | Delete that user's item and its `EMAIL#<email>` guard item from the users table, then re-run `npm run seed -- <email> [name]` (or have another admin create a new admin) |
 | Web app API calls return 500 / AccessDenied, or startup fails reading SSM | AWS credentials expired (re-run `assume`), or the role lacks the web-app permissions (step 1.2) |
 | Signed out right after changing the password elsewhere | Expected: a password change ends all other sessions |
 | Lambda crashes at start: `Dynamic require of "node:https" is not supported` | The esbuild `configFile` banner is missing. Check `build.esbuild.configFile: ./esbuild.config.cjs` in `serverless.yml`, then redeploy |
 | Signed test webhook returns 200 but no chat appears; log `item_skipped` `other_phone_number_id` | The payload's `metadata.phone_number_id` doesn't match `/vartalap/<stage>/WA_PHONE_NUMBER_ID`. Use the same value in both. Meta's dashboard **Test** button also uses a fake ID, so it's skipped too; that's expected |
-| Webhook logs `message_stored` but the UI shows nothing | `apps/web/.env.local` `AWS_REGION` isn't the stack's region, or you're on the wrong tab (new chats are under **Unassigned**) |
+| Webhook logs `message_stored` but the UI shows nothing | The `assume` region isn't the stack's region, or you're on the wrong tab (new chats are under **Unassigned**) |
