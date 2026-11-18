@@ -1,0 +1,13 @@
+{
+  "name": "algotrading",
+  "private": true,
+  "description": "Daily rebalancing paper-trading bot (NSE)",
+  "scripts": {
+    "deploy": "serverless deploy",
+    "lint": ".venv/bin/ruff check src && .venv/bin/ruff format --check src"
+  },
+  "devDependencies": {
+    "serverless": "4.46.0",
+    "serverless-python-requirements": "6.1.2"
+  }
+}

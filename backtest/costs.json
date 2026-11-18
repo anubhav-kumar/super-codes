@@ -1,0 +1,45 @@
+{
+  "_source": "taxes_and_charges.md (researched 2026-11-12). Re-verify rates before relying on results.",
+
+  "charges": {
+    "brokerage_per_order": 0,
+    "exchange_pct": 0.00307,
+    "sebi_per_crore": 10,
+    "ipft_per_crore": 0.01,
+    "stamp_buy_pct": 0.015,
+    "gst_pct": 18,
+    "dp_per_scrip_sell_day": 15.34
+  },
+
+  "stt_pct": {
+    "equity_share": { "buy": 0.1, "sell": 0.1 },
+    "equity_etf": { "buy": 0, "sell": 0.001 },
+    "non_equity_etf": { "buy": 0, "sell": 0 }
+  },
+
+  "tax": {
+    "slab_rate_pct": 30,
+    "cess_pct": 4,
+    "ltcg_equity_exemption": 125000,
+    "categories": {
+      "EQUITY": { "stcg_pct": 20, "ltcg_pct": 12.5, "long_term_after_months": 12 },
+      "NON_EQUITY": { "stcg_pct": "slab", "ltcg_pct": 12.5, "long_term_after_months": 12 },
+      "DEBT": { "stcg_pct": "slab", "ltcg_pct": "slab", "long_term_after_months": null }
+    }
+  },
+
+  "instruments": {
+    "NIFTYBEES.NS": { "type": "equity_etf", "tax": "EQUITY" },
+    "JUNIORBEES.NS": { "type": "equity_etf", "tax": "EQUITY" },
+    "MON100.NS": { "type": "non_equity_etf", "tax": "NON_EQUITY" },
+    "GOLDBEES.NS": { "type": "non_equity_etf", "tax": "NON_EQUITY" },
+    "SILVERBEES.NS": { "type": "non_equity_etf", "tax": "NON_EQUITY" },
+    "LTGILTBEES.NS": { "type": "non_equity_etf", "tax": "DEBT" },
+    "NIFTY1.NS": { "type": "equity_etf", "tax": "EQUITY" },
+    "HDFCNIFTY.NS": { "type": "equity_etf", "tax": "EQUITY" },
+    "GOLD1.NS": { "type": "non_equity_etf", "tax": "NON_EQUITY" },
+    "HDFCGOLD.NS": { "type": "non_equity_etf", "tax": "NON_EQUITY" },
+    "BANKBEES.NS": { "type": "equity_etf", "tax": "EQUITY" },
+    "BANKIETF.NS": { "type": "equity_etf", "tax": "EQUITY" }
+  }
+}

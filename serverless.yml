@@ -1,0 +1,277 @@
+service: algotrading
+frameworkVersion: "4"
+
+plugins:
+  - serverless-python-requirements
+
+provider:
+  name: aws
+  runtime: python3.12
+  architecture: arm64
+  region: ap-south-1
+  stage: dev
+  memorySize: 512
+  timeout: 120
+  logRetentionInDays: 30
+  environment:
+    BROKER: paper
+    ACCOUNT_ID: paper
+    ORDERS_TABLE: ${self:custom.names.orders}
+    PORTFOLIO_TABLE: ${self:custom.names.portfolio}
+    LEDGER_TABLE: ${self:custom.names.ledger}
+    REPORTS_BUCKET: ${self:custom.names.reports}
+    ORDERS_QUEUE_URL: !Ref OrdersQueue
+    NOTIFY_EMAIL: ${env:NOTIFY_EMAIL}
+    PAPER_INITIAL_CASH: "5000"
+    PAPER_SLIPPAGE_PCT: "0.05"
+    CASH_GUARD_BUFFER_PCT: "0.5"
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:Query
+            - dynamodb:ConditionCheckItem
+          Resource:
+            - !GetAtt OrdersTable.Arn
+            - !Join ["/", [!GetAtt OrdersTable.Arn, "index", "*"]]
+            - !GetAtt PortfolioTable.Arn
+            - !GetAtt LedgerTable.Arn
+        - Effect: Allow
+          Action: sqs:SendMessage
+          Resource: !GetAtt OrdersQueue.Arn
+        - Effect: Allow
+          Action: s3:PutObject
+          Resource: !Join ["", [!GetAtt ReportsBucket.Arn, "/*"]]
+        - Effect: Allow
+          Action:
+            - ses:SendEmail
+            - ses:SendRawEmail
+          Resource: "*"
+
+custom:
+  prefix: ${self:service}-${sls:stage}
+  names:
+    orders: ${self:custom.prefix}-orders
+    portfolio: ${self:custom.prefix}-portfolio
+    ledger: ${self:custom.prefix}-ledger
+    reports: ${self:custom.prefix}-reports-${aws:accountId}
+  pythonRequirements:
+    layer: true
+    slim: true
+    strip: false
+    dockerizePip: false
+    # Download prebuilt Linux arm64 wheels so no Docker is needed on macOS.
+    pipCmdExtraArgs:
+      - --platform
+      - manylinux2014_aarch64
+      - --platform
+      - manylinux_2_28_aarch64
+      - --implementation
+      - cp
+      - --python-version
+      - "3.12"
+      - --only-binary=:all:
+
+package:
+  individually: false
+  patterns:
+    - "!**"
+    - "src/**"
+    - "config/**"
+    - "!**/__pycache__/**"
+
+functions:
+  quant:
+    handler: src/handlers/quant.handler
+    timeout: 300
+    layers:
+      - !Ref PythonRequirementsLambdaLayer
+    events:
+      - schedule:
+          method: scheduler
+          rate: cron(30 18 ? * MON-FRI *)
+          timezone: Asia/Kolkata
+
+  executor:
+    handler: src/handlers/executor.handler
+    timeout: 30
+    layers:
+      - !Ref PythonRequirementsLambdaLayer
+    events:
+      - schedule:
+          method: scheduler
+          rate: cron(0 9 ? * MON-FRI *)
+          timezone: Asia/Kolkata
+          input:
+            side: SELL
+      - schedule:
+          method: scheduler
+          rate: cron(30 9 ? * MON-FRI *)
+          timezone: Asia/Kolkata
+          input:
+            side: BUY
+
+  broker:
+    handler: src/handlers/broker.handler
+    timeout: 120
+    layers:
+      - !Ref PythonRequirementsLambdaLayer
+    events:
+      - sqs:
+          arn: !GetAtt OrdersQueue.Arn
+          batchSize: 1
+          functionResponseType: ReportBatchItemFailures
+
+  deposit:
+    handler: src/handlers/deposit.handler
+    timeout: 60
+    layers:
+      - !Ref PythonRequirementsLambdaLayer
+
+resources:
+  Resources:
+    OrdersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.names.orders}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - { AttributeName: orderDate, AttributeType: S }
+          - { AttributeName: orderId, AttributeType: S }
+          - { AttributeName: status, AttributeType: S }
+        KeySchema:
+          - { AttributeName: orderDate, KeyType: HASH }
+          - { AttributeName: orderId, KeyType: RANGE }
+        GlobalSecondaryIndexes:
+          - IndexName: status-index
+            KeySchema:
+              - { AttributeName: status, KeyType: HASH }
+              - { AttributeName: orderId, KeyType: RANGE }
+            Projection:
+              ProjectionType: ALL
+
+    PortfolioTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.names.portfolio}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - { AttributeName: accountId, AttributeType: S }
+          - { AttributeName: sk, AttributeType: S }
+        KeySchema:
+          - { AttributeName: accountId, KeyType: HASH }
+          - { AttributeName: sk, KeyType: RANGE }
+
+    LedgerTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.names.ledger}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - { AttributeName: accountId, AttributeType: S }
+          - { AttributeName: sk, AttributeType: S }
+        KeySchema:
+          - { AttributeName: accountId, KeyType: HASH }
+          - { AttributeName: sk, KeyType: RANGE }
+
+    ReportsBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:custom.names.reports}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+
+    OrdersDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:custom.prefix}-orders-dlq
+        MessageRetentionPeriod: 1209600
+
+    OrdersQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:custom.prefix}-orders
+        VisibilityTimeout: 300
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt OrdersDLQ.Arn
+          maxReceiveCount: 6
+
+    AlertsTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: ${self:custom.prefix}-alerts
+        Subscription:
+          - Protocol: email
+            Endpoint: ${env:NOTIFY_EMAIL}
+
+    OrdersDLQAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        AlarmName: ${self:custom.prefix}-orders-dlq-not-empty
+        Namespace: AWS/SQS
+        MetricName: ApproximateNumberOfMessagesVisible
+        Dimensions:
+          - { Name: QueueName, Value: !GetAtt OrdersDLQ.QueueName }
+        Statistic: Maximum
+        Period: 300
+        EvaluationPeriods: 1
+        Threshold: 0
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: [!Ref AlertsTopic]
+
+    QuantErrorsAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        AlarmName: ${self:custom.prefix}-quant-errors
+        Namespace: AWS/Lambda
+        MetricName: Errors
+        Dimensions:
+          - { Name: FunctionName, Value: !Ref QuantLambdaFunction }
+        Statistic: Sum
+        Period: 300
+        EvaluationPeriods: 1
+        Threshold: 0
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: [!Ref AlertsTopic]
+
+    ExecutorErrorsAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        AlarmName: ${self:custom.prefix}-executor-errors
+        Namespace: AWS/Lambda
+        MetricName: Errors
+        Dimensions:
+          - { Name: FunctionName, Value: !Ref ExecutorLambdaFunction }
+        Statistic: Sum
+        Period: 300
+        EvaluationPeriods: 1
+        Threshold: 0
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: [!Ref AlertsTopic]
+
+    BrokerErrorsAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        AlarmName: ${self:custom.prefix}-broker-errors
+        Namespace: AWS/Lambda
+        MetricName: Errors
+        Dimensions:
+          - { Name: FunctionName, Value: !Ref BrokerLambdaFunction }
+        Statistic: Sum
+        Period: 300
+        EvaluationPeriods: 1
+        Threshold: 0
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: [!Ref AlertsTopic]

@@ -1,0 +1,12 @@
+{
+  "drift_threshold_pct": 5,
+  "targets": {
+    "NIFTYBEES.NS": 20,
+    "JUNIORBEES.NS": 20,
+    "MON100.NS": 15,
+    "GOLDBEES.NS": 15,
+    "SILVERBEES.NS": 10,
+    "LTGILTBEES.NS": 15,
+    "CASH": 5
+  }
+}

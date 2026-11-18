@@ -1,1 +1,10 @@
 **/node_modules/*
+.venv/
+.serverless/
+.requirements/
+.requirements.zip
+__pycache__/
+*.pyc
+.ruff_cache/
+backtest/data/
+backtest/results/
