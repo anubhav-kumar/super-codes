@@ -54,7 +54,7 @@ function Rows({ items, fields, query, setQuery, subtitle, emptyTitle, emptyText,
     );
 }
 
-function ClientSheet({ title, initialTab, onPick, onClose }) {
+function ClientSheet({ title, initialTab, anyPerson, onPick, onClose }) {
     const titleId = useId();
     const people = usePeople();
     const companies = useCompanies();
@@ -104,13 +104,13 @@ function ClientSheet({ title, initialTab, onPick, onClose }) {
                         <DataView resource={people} compact loaderRows={3}>
                             {(data) => (
                                 <Rows
-                                    items={(data || []).filter((p) => p.isIndividualClient)}
+                                    items={anyPerson ? data : (data || []).filter((p) => p.isIndividualClient)}
                                     fields={PERSON_FIELDS}
                                     query={query}
                                     setQuery={setQuery}
                                     subtitle={(p) => [p.pan, p.phone].filter(Boolean).join(' · ')}
-                                    emptyTitle="No individual clients yet"
-                                    emptyText="Only people marked as individual clients can be order clients."
+                                    emptyTitle={anyPerson ? 'No people yet' : 'No individual clients yet'}
+                                    emptyText={anyPerson ? undefined : 'Only people marked as individual clients can be order clients.'}
                                     onPick={(p) => onPick({ type: 'PERSON', id: p.id, name: p.name })}
                                 />
                             )}
@@ -139,6 +139,7 @@ function ClientSheet({ title, initialTab, onPick, onClose }) {
 /**
  * Field that opens a sheet to choose an order client: an individual-client person or a company
  * (two tabs). value / onChange use { type: 'PERSON' | 'COMPANY', id, name } (null when empty).
+ * `anyPerson` offers every person, not only individual clients (invoice billed-to).
  */
 export default function ClientPicker({
     label = 'Client',
@@ -149,6 +150,7 @@ export default function ClientPicker({
     required = false,
     disabled = false,
     sheetTitle = 'Choose a client',
+    anyPerson = false,
     className = '',
 }) {
     const fieldId = useId();
@@ -178,6 +180,7 @@ export default function ClientPicker({
                 <ClientSheet
                     title={sheetTitle}
                     initialTab={value ? value.type : 'PERSON'}
+                    anyPerson={anyPerson}
                     onClose={() => setOpen(false)}
                     onPick={(picked) => {
                         setOpen(false);

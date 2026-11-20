@@ -18,6 +18,7 @@ export const NAV_ITEMS = [
     { id: 'orders', label: 'Orders', to: '/orders', match: ['/orders'], icon: 'orders', order: 30, description: 'Work clients ask for, who owns it and where it stands.', quickAction: { label: 'New order', to: '/orders/new' } },
 
     // P-05 Invoices and payments
+    { id: 'invoices', label: 'Invoices', to: '/invoices', match: ['/invoices'], icon: 'invoices', order: 40, description: 'What the firm has billed, to whom and its status.', quickAction: { label: 'New invoice', to: '/invoices/new' } },
 
 ];
 

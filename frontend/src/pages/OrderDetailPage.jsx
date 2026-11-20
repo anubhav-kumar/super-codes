@@ -5,6 +5,7 @@ import Card from '../components/Card.jsx';
 import DataView from '../components/DataView.jsx';
 import DetailField from '../components/DetailField.jsx';
 import FormError from '../components/FormError.jsx';
+import OrderInvoicesSection from '../components/OrderInvoicesSection.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import RelatedSection from '../components/RelatedSection.jsx';
@@ -136,6 +137,7 @@ function OrderDetail({ order, reload }) {
             </Card>
             <AssignmentsSection assignments={order.assignments || []} />
             {/* Sections added by later pipelines (one line each): P-05 invoices, P-06 received/outstanding. */}
+            <OrderInvoicesSection orderId={order.id} />
         </>
     );
 }
