@@ -1,0 +1,7 @@
+{
+  "name": "ca-crm-common-layer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Common Lambda layer source. Code lives in nodejs/node_modules/common and is imported as require('common').",
+  "license": "UNLICENSED"
+}

@@ -1,0 +1,23 @@
+{
+  "name": "ca-crm-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CA CRM backend: shared API Gateway stack plus one Serverless stack per service.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "deploy": "node deploy.js",
+    "undeploy": "node undeploy.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-api-gateway": "^3.700.0",
+    "@aws-sdk/client-cloudformation": "^3.700.0",
+    "@aws-sdk/client-s3": "^3.700.0",
+    "@aws-sdk/client-sts": "^3.700.0"
+  },
+  "devDependencies": {
+    "serverless": "^3.39.0"
+  }
+}

@@ -1,1 +1,19 @@
-**/node_modules/*
+# Dependencies (but keep Lambda layer sources, which live under nodejs/node_modules)
+node_modules/
+!backend/libs/*/nodejs/node_modules/
+
+# Build and deploy output
+dist/
+dev-dist/
+.serverless/
+
+# Environment files (only the example is committed)
+.env*
+!.env.example
+
+# Sub-worktrees created by later pipelines
+.worktrees/
+
+# OS / editor noise
+.DS_Store
+*.log

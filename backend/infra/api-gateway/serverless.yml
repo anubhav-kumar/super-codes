@@ -1,0 +1,53 @@
+# Shared REST API for every ca-crm backend service (backend-architecture.md section 8).
+# Declares no functions. Services attach routes via ${cf:ca-crm-api-gateway-<stage>.*}.
+service: ca-crm-api-gateway
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  stage: ${opt:stage, 'prod'}
+  region: ${opt:region, 'ap-southeast-1'}
+  deploymentMethod: direct
+
+resources:
+  Resources:
+    SharedRestApi:
+      Type: AWS::ApiGateway::RestApi
+      Properties:
+        Name: ${self:service}-${sls:stage}
+        EndpointConfiguration:
+          Types: [REGIONAL]
+
+    # CORS headers on API Gateway generated errors (403/404/429/5xx), so the browser
+    # does not hide the real error from the frontend (frontend-architecture.md section 10).
+    GatewayResponseDefault4XX:
+      Type: AWS::ApiGateway::GatewayResponse
+      Properties:
+        RestApiId: { Ref: SharedRestApi }
+        ResponseType: DEFAULT_4XX
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,Idempotency-Key,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+    GatewayResponseDefault5XX:
+      Type: AWS::ApiGateway::GatewayResponse
+      Properties:
+        RestApiId: { Ref: SharedRestApi }
+        ResponseType: DEFAULT_5XX
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,Idempotency-Key,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+
+  Outputs:
+    RestApiId:
+      Value: { Ref: SharedRestApi }
+    RestApiRootResourceId:
+      Value: { 'Fn::GetAtt': [SharedRestApi, RootResourceId] }
+    ApiHost:
+      Description: Host name of the shared API Gateway
+      Value:
+        'Fn::Join': ['', [{ Ref: SharedRestApi }, '.execute-api.', { Ref: 'AWS::Region' }, '.amazonaws.com']]
+    ApiBaseUrl:
+      Description: Base URL (host + stage) that all service routes hang off
+      Value:
+        'Fn::Join': ['', ['https://', { Ref: SharedRestApi }, '.execute-api.', { Ref: 'AWS::Region' }, '.amazonaws.com/', '${sls:stage}']]

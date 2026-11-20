@@ -1,0 +1,18 @@
+{
+  "name": "ca-crm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CA CRM - root deployment orchestrator (backend, then frontend).",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "deploy": "node deploy.js",
+    "undeploy": "node undeploy.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cloudformation": "^3.700.0",
+    "@aws-sdk/client-sts": "^3.700.0"
+  }
+}

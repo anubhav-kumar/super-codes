@@ -1,0 +1,43 @@
+# Health check service. Attaches GET /health to the shared ca-crm REST API.
+service: ca-crm-health
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  stage: ${opt:stage, 'prod'}
+  region: ${opt:region, 'ap-southeast-1'}
+  deploymentMethod: direct
+  memorySize: 128
+  timeout: 6
+  logRetentionInDays: 14
+  apiGateway:
+    restApiId: ${cf:ca-crm-api-gateway-${sls:stage}.RestApiId}
+    restApiRootResourceId: ${cf:ca-crm-api-gateway-${sls:stage}.RestApiRootResourceId}
+
+package:
+  patterns:
+    - '!node_modules/**'
+    - '!tests/**'
+    - '!package-lock.json'
+
+layers:
+  common:
+    path: ../../libs/common
+    name: ${self:service}-${sls:stage}-common
+    description: ca-crm common layer (logger, http helpers)
+    compatibleRuntimes:
+      - nodejs20.x
+
+functions:
+  get:
+    handler: handlers/get.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: health
+          method: get
+          # Origin "*": the CloudFront URL does not exist on the first backend deploy.
+          cors: true
