@@ -1,0 +1,222 @@
+# Directory service. People (F-02), companies and person-company associations (F-03).
+# Owns the People, Companies and CompanyAssociations tables. All three tables and every GSI are
+# created here at once, because CloudFormation can add only one GSI per table update.
+service: ca-crm-directory
+
+frameworkVersion: '3'
+
+custom:
+  peopleTable: ca-crm-directory-${sls:stage}-people
+  companiesTable: ca-crm-directory-${sls:stage}-companies
+  associationsTable: ca-crm-directory-${sls:stage}-company-associations
+  sessionsTable: ca-crm-auth-${sls:stage}-sessions
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  stage: ${opt:stage, 'prod'}
+  region: ${opt:region, 'ap-southeast-1'}
+  deploymentMethod: direct
+  memorySize: 256
+  timeout: 10
+  logRetentionInDays: 14
+  apiGateway:
+    restApiId: ${cf:ca-crm-api-gateway-${sls:stage}.RestApiId}
+    restApiRootResourceId: ${cf:ca-crm-api-gateway-${sls:stage}.RestApiRootResourceId}
+  environment:
+    PEOPLE_TABLE: ${self:custom.peopleTable}
+    COMPANIES_TABLE: ${self:custom.companiesTable}
+    ASSOCIATIONS_TABLE: ${self:custom.associationsTable}
+    SESSIONS_TABLE: ${self:custom.sessionsTable}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:Query
+            - dynamodb:BatchGetItem
+            - dynamodb:ConditionCheckItem
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.peopleTable}
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.peopleTable}/index/*
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.companiesTable}
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.companiesTable}/index/*
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.associationsTable}
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.associationsTable}/index/*
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.sessionsTable}
+
+package:
+  patterns:
+    - '!node_modules/**'
+    - '!tests/**'
+    - '!package-lock.json'
+
+layers:
+  common:
+    path: ../../libs/common
+    name: ${self:service}-${sls:stage}-common
+    description: ca-crm common layer (logger, http, errors, middleware, auth, database, validators)
+    compatibleRuntimes:
+      - nodejs20.x
+
+functions:
+  # F-02 People
+  createPerson:
+    handler: handlers/people/create.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: directory/people
+          method: post
+          cors: true
+  listPeople:
+    handler: handlers/people/list.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: directory/people
+          method: get
+          cors: true
+  getPerson:
+    handler: handlers/people/get.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: directory/people/{id}
+          method: get
+          cors: true
+  updatePerson:
+    handler: handlers/people/update.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: directory/people/{id}
+          method: put
+          cors: true
+
+resources:
+  Resources:
+    PeopleTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        TableName: ${self:custom.peopleTable}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: entity
+            AttributeType: S
+          - AttributeName: nameSort
+            AttributeType: S
+          - AttributeName: pan
+            AttributeType: S
+          - AttributeName: individualKey
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: byName
+            KeySchema:
+              - AttributeName: entity
+                KeyType: HASH
+              - AttributeName: nameSort
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+          - IndexName: byPan
+            KeySchema:
+              - AttributeName: pan
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: byIndividual
+            KeySchema:
+              - AttributeName: individualKey
+                KeyType: HASH
+              - AttributeName: nameSort
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+
+    CompaniesTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        TableName: ${self:custom.companiesTable}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: entity
+            AttributeType: S
+          - AttributeName: nameSort
+            AttributeType: S
+          - AttributeName: pan
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: byName
+            KeySchema:
+              - AttributeName: entity
+                KeyType: HASH
+              - AttributeName: nameSort
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+          - IndexName: byPan
+            KeySchema:
+              - AttributeName: pan
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+
+    CompanyAssociationsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        TableName: ${self:custom.associationsTable}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: companyId
+            AttributeType: S
+          - AttributeName: personId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: companyId
+            KeyType: HASH
+          - AttributeName: personId
+            KeyType: RANGE
+        GlobalSecondaryIndexes:
+          - IndexName: byPerson
+            KeySchema:
+              - AttributeName: personId
+                KeyType: HASH
+              - AttributeName: companyId
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
