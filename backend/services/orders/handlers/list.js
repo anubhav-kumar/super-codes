@@ -1,13 +1,15 @@
 'use strict';
 
 const { QueryCommand } = require('@aws-sdk/lib-dynamodb');
-const { middleware, database, errors, http } = require('common');
+const { middleware, database, errors, validators, http } = require('common');
 const { STATUSES } = require('../validators/order');
 const { ENTITY } = require('../models/order');
 const { enrichOrders } = require('../utils/enrich');
 
 const DEFAULT_LIMIT = 200;
 const MAX_LIMIT = 500;
+const FILTERS = ['status', 'clientId', 'receivedFromId'];
+const ID_FILTER_INDEX = { clientId: 'byClient', receivedFromId: 'byReceivedFrom' };
 
 function parseLimit(raw) {
     if (raw === undefined || raw === null || raw === '') return DEFAULT_LIMIT;
@@ -31,6 +33,9 @@ async function sendListQuery(command, startKey) {
 /**
  * GET /orders?limit=&nextToken=   all orders, paginated
  * GET /orders?status=<STATUS>     filtered by status, unpaginated
+ * GET /orders?clientId=<uuid>     orders where this person/company is the client, unpaginated
+ * GET /orders?receivedFromId=<uuid>  orders this person requested, unpaginated
+ * Only one filter per request.
  * Sorted newest order date first, then highest order number first.
  * 200 { items: [Order], nextToken: string | null }, 400 VALIDATION_FAILED
  * List items carry primaryOwner but not assignments.
@@ -38,6 +43,30 @@ async function sendListQuery(command, startKey) {
 module.exports.handler = middleware.withHandler(async ({ event }) => {
     const query = event.queryStringParameters || {};
     const table = process.env.ORDERS_TABLE;
+    const given = FILTERS.filter((f) => query[f] !== undefined);
+    if (given.length > 1) {
+        throw errors.validationFailed(
+            given.map((f) => ({ field: f, message: 'Use only one filter per request' })),
+            'Use only one filter per request'
+        );
+    }
+
+    const idFilter = given.find((f) => ID_FILTER_INDEX[f]);
+    if (idFilter) {
+        const id = query[idFilter];
+        if (!validators.isUuidV4(id)) {
+            throw errors.validationFailed([{ field: idFilter, message: `${idFilter} must be a lowercase UUID v4` }]);
+        }
+        const items = await database.queryAll({
+            TableName: table,
+            IndexName: ID_FILTER_INDEX[idFilter],
+            KeyConditionExpression: '#key = :id',
+            ExpressionAttributeNames: { '#key': idFilter },
+            ExpressionAttributeValues: { ':id': id },
+            ScanIndexForward: false,
+        });
+        return http.ok({ items: await enrichOrders(items), nextToken: null });
+    }
 
     if (query.status !== undefined) {
         if (!STATUSES.includes(query.status)) {
