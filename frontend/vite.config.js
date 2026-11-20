@@ -36,9 +36,10 @@ export default defineConfig(({ mode }) => {
 
     const apiRules = apiBaseUrl
         ? [
-              // Health must always hit the network: a cached "API online" would be misleading.
+              // Health and auth must always hit the network: a cached "API online" would be
+              // misleading, and a cached GET /auth/me would hide an ended session.
               {
-                  urlPattern: new RegExp(`^${escapeRegExp(apiBaseUrl)}/health(?:[/?#]|$)`),
+                  urlPattern: new RegExp(`^${escapeRegExp(apiBaseUrl)}/(?:health|auth)(?:[/?#]|$)`),
                   handler: 'NetworkOnly',
               },
               {
@@ -70,8 +71,8 @@ export default defineConfig(({ mode }) => {
                     scope: '/',
                     display: 'standalone',
                     orientation: 'portrait',
-                    theme_color: '#0f172a',
-                    background_color: '#0f172a',
+                    theme_color: '#2556e0',
+                    background_color: '#f5f7fa',
                     icons: [
                         { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
                         { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },

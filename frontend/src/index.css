@@ -2,9 +2,36 @@
 
 @theme {
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --color-brand-400: #818cf8;
-  --color-brand-500: #6366f1;
-  --color-brand-600: #4f46e5;
+
+  /* Primary (actions, links, active nav) */
+  --color-primary-50:  #eff4ff;
+  --color-primary-100: #dbe6fe;
+  --color-primary-500: #3b6ef5;
+  --color-primary-600: #2556e0;
+  --color-primary-700: #1d44b8;
+
+  /* Surfaces and lines */
+  --color-page:    #f5f7fa;   /* app background */
+  --color-surface: #ffffff;   /* cards, sheets, nav */
+  --color-line:    #e2e8f0;   /* borders, dividers */
+
+  /* Text */
+  --color-ink:       #0f172a; /* main text */
+  --color-ink-muted: #64748b; /* secondary text, labels */
+
+  /* Status */
+  --color-success:    #15803d;
+  --color-success-bg: #dcfce7;
+  --color-warning:    #b45309;
+  --color-warning-bg: #fef3c7;
+  --color-danger:     #b91c1c;
+  --color-danger-bg:  #fee2e2;
+  --color-info:       #1d44b8;
+  --color-info-bg:    #dbe6fe;
+
+  /* Shape */
+  --radius-control: 0.5rem;   /* inputs, buttons, chips  -> rounded-control */
+  --radius-card:    0.75rem;  /* cards, dialogs, sheets  -> rounded-card */
 }
 
 html,

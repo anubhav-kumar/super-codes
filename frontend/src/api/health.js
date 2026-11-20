@@ -7,5 +7,5 @@ import { request } from './client.js';
  */
 export function getHealth({ signal } = {}) {
     const clientTs = encodeURIComponent(new Date().toISOString());
-    return request(`/health?clientTs=${clientTs}`, { cache: 'no-store', signal, trackConnectivity: false });
+    return request(`/health?clientTs=${clientTs}`, { cache: 'no-store', signal, trackConnectivity: false, auth: false });
 }

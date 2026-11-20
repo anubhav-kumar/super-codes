@@ -1,39 +1,57 @@
-import HealthIndicator from '../components/HealthIndicator.jsx';
+import Button from '../components/Button.jsx';
+import Card from '../components/Card.jsx';
+import Icon from '../components/Icon.jsx';
+import OfflineActionHint from '../components/OfflineActionHint.jsx';
+import PageHeader from '../components/PageHeader.jsx';
 import InstallButton from '../components/offline/InstallButton.jsx';
-import { APP_NAME } from '../config.js';
-import useHealth from '../hooks/useHealth.js';
+import useAuth from '../hooks/useAuth.js';
+import useOnlineStatus from '../hooks/useOnlineStatus.js';
+import { sortedNavItems } from '../navigation.js';
 
+/** Signed-in Home: greeting, then one card per navigation section (read from NAV_ITEMS). */
 export default function HomePage() {
-    const health = useHealth();
+    const { user } = useAuth();
+    const { online } = useOnlineStatus();
+    const sections = sortedNavItems().filter((item) => item.id !== 'home');
+    const hasQuickActions = sections.some((item) => item.quickAction);
 
     return (
-        <main className="relative isolate flex min-h-dvh flex-col overflow-hidden px-6">
-            <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10">
-                <div className="absolute -top-32 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-brand-500/30 blur-3xl" />
-                <div className="absolute -bottom-40 -right-20 h-80 w-80 rounded-full bg-fuchsia-500/20 blur-3xl" />
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-size-[24px_24px]" />
-            </div>
+        <>
+            <PageHeader title="Home" subtitle={user ? `Signed in as ${user.email}` : undefined} actions={<InstallButton />} />
 
-            <div className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center py-16 text-center">
-                <span className="mb-6 inline-flex items-center rounded-full bg-brand-500/10 px-3 py-1 text-xs font-semibold tracking-widest text-brand-400 uppercase ring-1 ring-brand-500/30">
-                    Coming soon
-                </span>
-                <h1 className="bg-linear-to-b from-white to-slate-400 bg-clip-text text-5xl font-extrabold tracking-tight text-transparent sm:text-6xl">
-                    {APP_NAME}
-                </h1>
-                <p className="mt-5 max-w-md text-base text-slate-400 sm:text-lg">
-                    We are building something new. Check back soon.
-                </p>
-
-                <div className="mt-10 flex flex-col items-center gap-4">
-                    <HealthIndicator status={health.status} serverTimestamp={health.serverTimestamp} onRetry={health.refresh} />
-                    <InstallButton />
+            {sections.length === 0 ? (
+                <Card>
+                    <p className="text-sm text-ink-muted">Sections such as Clients, Orders and Invoices appear here as they are added.</p>
+                </Card>
+            ) : (
+                <div className="grid gap-4 sm:grid-cols-2">
+                    {sections.map((item) => (
+                        <Card
+                            key={item.id}
+                            title={
+                                <span className="flex items-center gap-2">
+                                    <Icon name={item.icon} className="h-5 w-5 text-primary-600" />
+                                    {item.label}
+                                </span>
+                            }
+                        >
+                            {item.description && <p className="text-sm text-ink-muted">{item.description}</p>}
+                            <div className="flex flex-wrap gap-2">
+                                <Button variant="secondary" size="sm" to={item.to}>
+                                    Open {item.label}
+                                </Button>
+                                {item.quickAction && (
+                                    <Button size="sm" icon="plus" to={item.quickAction.to} disabled={!online}>
+                                        {item.quickAction.label}
+                                    </Button>
+                                )}
+                            </div>
+                        </Card>
+                    ))}
                 </div>
-            </div>
+            )}
 
-            <footer className="pb-6 text-center text-xs text-slate-600">
-                © {new Date().getFullYear()} {APP_NAME}
-            </footer>
-        </main>
+            {hasQuickActions && !online && <OfflineActionHint className="mt-4" />}
+        </>
     );
 }
