@@ -106,6 +106,72 @@ functions:
           method: put
           cors: true
 
+  # F-03 Companies with associated people. Path params at the same level share a name:
+  # {id} is always the company, {personId} the associated person.
+  createCompany:
+    handler: handlers/companies/create.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: directory/companies
+          method: post
+          cors: true
+  listCompanies:
+    handler: handlers/companies/list.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: directory/companies
+          method: get
+          cors: true
+  getCompany:
+    handler: handlers/companies/get.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: directory/companies/{id}
+          method: get
+          cors: true
+  updateCompany:
+    handler: handlers/companies/update.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: directory/companies/{id}
+          method: put
+          cors: true
+  addAssociation:
+    handler: handlers/associations/add.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: directory/companies/{id}/associations
+          method: post
+          cors: true
+  updateAssociation:
+    handler: handlers/associations/update.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: directory/companies/{id}/associations/{personId}
+          method: put
+          cors: true
+  removeAssociation:
+    handler: handlers/associations/remove.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: directory/companies/{id}/associations/{personId}
+          method: delete
+          cors: true
+
 resources:
   Resources:
     PeopleTable:
