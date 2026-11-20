@@ -17,6 +17,11 @@ export const ROUTES = [
     { path: '/people/new', Page: page(() => import('./pages/PersonFormPage.jsx')) },
     { path: '/people/:personId', Page: page(() => import('./pages/PersonDetailPage.jsx')) },
     { path: '/people/:personId/edit', Page: page(() => import('./pages/PersonFormPage.jsx')) },
+    { path: '/companies', Page: page(() => import('./pages/CompaniesListPage.jsx')) },
+    { path: '/companies/new', Page: page(() => import('./pages/CompanyFormPage.jsx')) },
+    { path: '/companies/:companyId', Page: page(() => import('./pages/CompanyDetailPage.jsx')) },
+    { path: '/companies/:companyId/edit', Page: page(() => import('./pages/CompanyFormPage.jsx')) },
+    { path: '/companies/:companyId/people/new', Page: page(() => import('./pages/CompanyLinkPersonPage.jsx')) },
 
     // P-03 Workers
 

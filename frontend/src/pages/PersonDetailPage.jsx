@@ -6,6 +6,7 @@ import DataView from '../components/DataView.jsx';
 import DetailField from '../components/DetailField.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
 import PageHeader from '../components/PageHeader.jsx';
+import PersonCompaniesSection from '../components/PersonCompaniesSection.jsx';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { usePerson } from '../hooks/usePeople.js';
 
@@ -67,6 +68,7 @@ export default function PersonDetailPage() {
                         </Card>
 
                         {/* Sections added by later features, one line each */}
+                        <PersonCompaniesSection companies={p.companies} />
                     </div>
                 </>
             )}

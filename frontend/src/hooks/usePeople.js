@@ -12,3 +12,12 @@ export function usePerson(id) {
     const fetcher = useCallback(({ signal }) => getPerson(id, { signal }), [id]);
     return useResource(id ? `person:${id}` : null, fetcher);
 }
+
+/**
+ * The companies a person is linked to. The contract returns them inside the person detail
+ * (`companies`), so this reads the same resource; `data` is the companies list.
+ */
+export function usePersonCompanies(id) {
+    const person = usePerson(id);
+    return { ...person, data: person.data ? person.data.companies || [] : person.data };
+}
