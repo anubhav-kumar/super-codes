@@ -15,6 +15,7 @@ export const NAV_ITEMS = [
     { id: 'workers', label: 'Workers', to: '/workers', match: ['/workers'], icon: 'workers', order: 50, description: "The firm's team: who can be assigned to orders.", quickAction: { label: 'Add worker', to: '/workers/new' } },
 
     // P-04 Orders
+    { id: 'orders', label: 'Orders', to: '/orders', match: ['/orders'], icon: 'orders', order: 30, description: 'Work clients ask for, who owns it and where it stands.', quickAction: { label: 'New order', to: '/orders/new' } },
 
     // P-05 Invoices and payments
 

@@ -30,6 +30,10 @@ export const ROUTES = [
     { path: '/workers/:workerId/edit', Page: page(() => import('./pages/WorkerFormPage.jsx')) },
 
     // P-04 Orders
+    { path: '/orders', Page: page(() => import('./pages/OrdersListPage.jsx')) },
+    { path: '/orders/new', Page: page(() => import('./pages/OrderFormPage.jsx')) },
+    { path: '/orders/:orderId', Page: page(() => import('./pages/OrderDetailPage.jsx')) },
+    { path: '/orders/:orderId/edit', Page: page(() => import('./pages/OrderFormPage.jsx')) },
 
     // P-05 Invoices and payments
 
