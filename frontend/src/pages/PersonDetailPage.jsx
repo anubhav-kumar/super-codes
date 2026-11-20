@@ -1,12 +1,15 @@
 import { useParams } from 'react-router-dom';
 import Badge from '../components/Badge.jsx';
+import BilledInvoicesSection from '../components/BilledInvoicesSection.jsx';
 import Button from '../components/Button.jsx';
 import Card from '../components/Card.jsx';
+import ClientOrdersSection from '../components/ClientOrdersSection.jsx';
 import DataView from '../components/DataView.jsx';
 import DetailField from '../components/DetailField.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import PersonCompaniesSection from '../components/PersonCompaniesSection.jsx';
+import PersonRequestedOrdersSection from '../components/PersonRequestedOrdersSection.jsx';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { usePerson } from '../hooks/usePeople.js';
 
@@ -69,6 +72,9 @@ export default function PersonDetailPage() {
 
                         {/* Sections added by later features, one line each */}
                         <PersonCompaniesSection companies={p.companies} />
+                        <ClientOrdersSection clientId={p.id} title="Orders as client" />
+                        <PersonRequestedOrdersSection personId={p.id} />
+                        <BilledInvoicesSection billedToId={p.id} />
                     </div>
                 </>
             )}

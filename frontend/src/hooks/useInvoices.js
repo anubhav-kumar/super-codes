@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { getInvoice, listInvoices, listOrderInvoices } from '../api/invoices.js';
+import { getInvoice, listBilledToInvoices, listInvoices, listOrderInvoices } from '../api/invoices.js';
 import useResource from './useResource.js';
 
 /** All invoices, newest first. useResource shape: { status, data: Invoice[], fromCache, fetchedAt, error, reload }. */
@@ -17,4 +17,13 @@ export function useInvoice(id) {
 export function useOrderInvoices(orderId) {
     const fetcher = useCallback(({ signal }) => listOrderInvoices(orderId, { signal }), [orderId]);
     return useResource(orderId ? `order-invoices:${orderId}` : null, fetcher);
+}
+
+/**
+ * Invoices billed to one person or company (F-08), newest first, with the server's totals.
+ * data = { items: Invoice[], summary: { totalOutstanding, totalReceived } | null }. Pass null to skip loading.
+ */
+export function useBillingEntityInvoices(billedToId) {
+    const fetcher = useCallback(({ signal }) => listBilledToInvoices(billedToId, { signal }), [billedToId]);
+    return useResource(billedToId ? `billed-invoices:${billedToId}` : null, fetcher);
 }

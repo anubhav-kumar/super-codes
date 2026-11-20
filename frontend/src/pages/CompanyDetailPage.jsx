@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import BilledInvoicesSection from '../components/BilledInvoicesSection.jsx';
 import Button from '../components/Button.jsx';
 import Card from '../components/Card.jsx';
+import ClientOrdersSection from '../components/ClientOrdersSection.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import DataView from '../components/DataView.jsx';
 import DetailField from '../components/DetailField.jsx';
@@ -208,6 +210,8 @@ export default function CompanyDetailPage() {
                         <CompanyPeopleSection company={c} online={online} reload={company.reload} />
 
                         {/* Sections added by later features, one line each */}
+                        <ClientOrdersSection clientId={c.id} />
+                        <BilledInvoicesSection billedToId={c.id} />
                     </div>
                 </>
             )}
