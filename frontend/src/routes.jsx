@@ -36,6 +36,12 @@ export const ROUTES = [
     { path: '/orders/:orderId/edit', Page: page(() => import('./pages/OrderFormPage.jsx')) },
 
     // P-05 Invoices and payments
+    { path: '/invoices', Page: page(() => import('./pages/InvoicesListPage.jsx')) },
+    { path: '/invoices/new', Page: page(() => import('./pages/InvoiceFormPage.jsx')) },
+    { path: '/invoices/:invoiceId', Page: page(() => import('./pages/InvoiceDetailPage.jsx')) },
+    { path: '/invoices/:invoiceId/edit', Page: page(() => import('./pages/InvoiceFormPage.jsx')) },
+    { path: '/invoices/:invoiceId/payments/new', Page: page(() => import('./pages/PaymentFormPage.jsx')) },
+    { path: '/invoices/:invoiceId/payments/:paymentId/edit', Page: page(() => import('./pages/PaymentFormPage.jsx')) },
 
     // P-06 Client profile
 

@@ -1,0 +1,237 @@
+# Billing service. Invoices, payments and invoice/payment numbering.
+# Owns the Invoices, Payments and BillingCounters tables. Reads People and Companies (directory)
+# and Orders (orders) by their deterministic names, read-only.
+# IAM is set for the whole service here (F-06), including what F-07 (payments) needs.
+service: ca-crm-billing
+
+frameworkVersion: '3'
+
+custom:
+  invoicesTable: ca-crm-billing-${sls:stage}-invoices
+  paymentsTable: ca-crm-billing-${sls:stage}-payments
+  countersTable: ca-crm-billing-${sls:stage}-counters
+  peopleTable: ca-crm-directory-${sls:stage}-people
+  companiesTable: ca-crm-directory-${sls:stage}-companies
+  ordersTable: ca-crm-orders-${sls:stage}-orders
+  sessionsTable: ca-crm-auth-${sls:stage}-sessions
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  stage: ${opt:stage, 'prod'}
+  region: ${opt:region, 'ap-southeast-1'}
+  deploymentMethod: direct
+  memorySize: 256
+  timeout: 10
+  logRetentionInDays: 14
+  apiGateway:
+    restApiId: ${cf:ca-crm-api-gateway-${sls:stage}.RestApiId}
+    restApiRootResourceId: ${cf:ca-crm-api-gateway-${sls:stage}.RestApiRootResourceId}
+  environment:
+    INVOICES_TABLE: ${self:custom.invoicesTable}
+    PAYMENTS_TABLE: ${self:custom.paymentsTable}
+    COUNTERS_TABLE: ${self:custom.countersTable}
+    PEOPLE_TABLE: ${self:custom.peopleTable}
+    COMPANIES_TABLE: ${self:custom.companiesTable}
+    ORDERS_TABLE: ${self:custom.ordersTable}
+    SESSIONS_TABLE: ${self:custom.sessionsTable}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:Query
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.invoicesTable}
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.invoicesTable}/index/*
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.paymentsTable}
+        - Effect: Allow
+          Action:
+            - dynamodb:UpdateItem
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.countersTable}
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:BatchGetItem
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.peopleTable}
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.companiesTable}
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.ordersTable}
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.sessionsTable}
+
+package:
+  patterns:
+    - '!node_modules/**'
+    - '!tests/**'
+    - '!package-lock.json'
+
+layers:
+  common:
+    path: ../../libs/common
+    name: ${self:service}-${sls:stage}-common
+    description: ca-crm common layer (logger, http, errors, middleware, auth, database, validators)
+    compatibleRuntimes:
+      - nodejs20.x
+
+functions:
+  invoicesCreate:
+    handler: handlers/invoices/create.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: billing/invoices
+          method: post
+          cors: true
+  invoicesList:
+    handler: handlers/invoices/list.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: billing/invoices
+          method: get
+          cors: true
+  invoicesGet:
+    handler: handlers/invoices/get.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: billing/invoices/{id}
+          method: get
+          cors: true
+  invoicesUpdate:
+    handler: handlers/invoices/update.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: billing/invoices/{id}
+          method: put
+          cors: true
+  paymentsCreate:
+    handler: handlers/payments/create.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: billing/invoices/{id}/payments
+          method: post
+          cors: true
+  paymentsUpdate:
+    handler: handlers/payments/update.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: billing/invoices/{id}/payments/{paymentId}
+          method: put
+          cors: true
+
+resources:
+  Resources:
+    InvoicesTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        TableName: ${self:custom.invoicesTable}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: entity
+            AttributeType: S
+          - AttributeName: sortKey
+            AttributeType: S
+          - AttributeName: baseStatus
+            AttributeType: S
+          - AttributeName: dueSortKey
+            AttributeType: S
+          - AttributeName: billedToId
+            AttributeType: S
+          - AttributeName: orderId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: byDate
+            KeySchema:
+              - AttributeName: entity
+                KeyType: HASH
+              - AttributeName: sortKey
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+          - IndexName: byBaseStatus
+            KeySchema:
+              - AttributeName: baseStatus
+                KeyType: HASH
+              - AttributeName: dueSortKey
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+          - IndexName: byBilledTo
+            KeySchema:
+              - AttributeName: billedToId
+                KeyType: HASH
+              - AttributeName: sortKey
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+          - IndexName: byOrder
+            KeySchema:
+              - AttributeName: orderId
+                KeyType: HASH
+              - AttributeName: sortKey
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+
+    PaymentsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        TableName: ${self:custom.paymentsTable}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: invoiceId
+            AttributeType: S
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: invoiceId
+            KeyType: HASH
+          - AttributeName: id
+            KeyType: RANGE
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+
+    BillingCountersTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        TableName: ${self:custom.countersTable}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: name
+            AttributeType: S
+        KeySchema:
+          - AttributeName: name
+            KeyType: HASH
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
