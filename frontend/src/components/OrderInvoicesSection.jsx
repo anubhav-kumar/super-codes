@@ -10,7 +10,7 @@ import RelatedSection from './RelatedSection.jsx';
 
 /**
  * "Invoices" section on the order detail screen (F-06): number, billed to, total and status of each
- * invoice of the order, "Not billed" when none, and the "Raise invoice" action. Loads on its own,
+ * invoice of the order (F-08 adds received and outstanding per invoice), "Not billed" when none, and the "Raise invoice" action. Loads on its own,
  * so a failure or a missing offline copy stays inside the section.
  */
 export default function OrderInvoicesSection({ orderId }) {
@@ -46,8 +46,13 @@ export default function OrderInvoicesSection({ orderId }) {
                                     <ListItem
                                         to={`/invoices/${i.id}`}
                                         title={<span className="font-mono text-sm">{i.invoiceNumber}</span>}
-                                        subtitle={i.billedTo && i.billedTo.name ? `Billed to ${i.billedTo.name}` : undefined}
-                                        meta={formatMoney(i.total)}
+                                        subtitle={[
+                                            i.billedTo && i.billedTo.name ? `Billed to ${i.billedTo.name}` : null,
+                                            `Received ${formatMoney(i.amountReceived ?? 0)}`,
+                                        ]
+                                            .filter(Boolean)
+                                            .join(' · ')}
+                                        meta={`${formatMoney(i.total)} · Outstanding ${formatMoney(i.outstanding ?? 0)}`}
                                         badges={<InvoiceStatusBadges invoice={i} />}
                                     />
                                 </li>

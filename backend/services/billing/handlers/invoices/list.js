@@ -9,7 +9,8 @@ const { enrichInvoices } = require('../../utils/enrich');
 
 const DEFAULT_LIMIT = 200;
 const MAX_LIMIT = 500;
-const FILTERS = ['orderId', 'status'];
+const FILTERS = ['orderId', 'billedToId', 'status'];
+const ID_FILTER_INDEX = { orderId: 'byOrder', billedToId: 'byBilledTo' };
 
 function parseLimit(raw) {
     if (raw === undefined || raw === null || raw === '') return DEFAULT_LIMIT;
@@ -67,11 +68,28 @@ async function itemsForStatus(status) {
 }
 
 /**
+ * summary for the orderId and billedToId lists (F-08). Summed in paise, then converted to INR.
+ * totalOutstanding sums outstanding (0 for DRAFT/CANCELLED); totalReceived skips CANCELLED invoices.
+ */
+function summarize(items, today) {
+    let outstandingPaise = 0;
+    let receivedPaise = 0;
+    for (const item of items) {
+        const derived = deriveInvoiceStatus(item, today);
+        outstandingPaise += derived.outstandingPaise;
+        if (item.baseStatus !== 'CANCELLED') receivedPaise += derived.receivedPaise;
+    }
+    return { totalOutstanding: validators.toInr(outstandingPaise), totalReceived: validators.toInr(receivedPaise) };
+}
+
+/**
  * GET /billing/invoices?limit=&nextToken=   all invoices, paginated
- * GET /billing/invoices?orderId=<uuid>      invoices of an order, unpaginated
+ * GET /billing/invoices?orderId=<uuid>      invoices of an order, unpaginated, with summary
+ * GET /billing/invoices?billedToId=<uuid>   invoices billed to a person/company, unpaginated, with summary
  * GET /billing/invoices?status=<STATUS>     DRAFT|ISSUED|PARTIALLY_PAID|PAID|OVERDUE|CANCELLED|UNPAID, unpaginated
  * Sorted newest invoice date first, then highest invoice number first.
  * 200 { items: [Invoice], nextToken: string | null }, 400 VALIDATION_FAILED
+ * orderId / billedToId lists add summary: { totalOutstanding, totalReceived }.
  */
 module.exports.handler = middleware.withHandler(async ({ event }) => {
     const query = event.queryStringParameters || {};
@@ -83,18 +101,22 @@ module.exports.handler = middleware.withHandler(async ({ event }) => {
         );
     }
 
-    if (query.orderId !== undefined) {
-        if (!validators.isUuidV4(query.orderId)) {
-            throw errors.validationFailed([{ field: 'orderId', message: 'orderId must be a lowercase UUID v4' }]);
+    const idFilter = given.find((f) => ID_FILTER_INDEX[f]);
+    if (idFilter) {
+        const id = query[idFilter];
+        if (!validators.isUuidV4(id)) {
+            throw errors.validationFailed([{ field: idFilter, message: `${idFilter} must be a lowercase UUID v4` }]);
         }
         const items = await database.queryAll({
             TableName: process.env.INVOICES_TABLE,
-            IndexName: 'byOrder',
-            KeyConditionExpression: 'orderId = :orderId',
-            ExpressionAttributeValues: { ':orderId': query.orderId },
+            IndexName: ID_FILTER_INDEX[idFilter],
+            KeyConditionExpression: '#key = :id',
+            ExpressionAttributeNames: { '#key': idFilter },
+            ExpressionAttributeValues: { ':id': id },
             ScanIndexForward: false,
         });
-        return http.ok({ items: await enrichInvoices(items), nextToken: null });
+        const summary = summarize(items, validators.todayIst());
+        return http.ok({ items: await enrichInvoices(items), nextToken: null, summary });
     }
 
     if (query.status !== undefined) {

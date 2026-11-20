@@ -49,3 +49,16 @@ export function createInvoice(body) {
 export function updateInvoice(id, body) {
     return request(`/billing/invoices/${enc(id)}`, { method: 'PUT', body });
 }
+
+/**
+ * GET /billing/invoices?billedToId= (F-08, filtered, unpaginated) -> data = { items: Invoice[], summary }
+ * where summary = { totalOutstanding, totalReceived } as computed by the server (null if absent).
+ */
+export async function listBilledToInvoices(billedToId, { signal } = {}) {
+    const res = await request(`/billing/invoices?billedToId=${enc(billedToId)}`, { signal });
+    const page = res.data || {};
+    return {
+        ...res,
+        data: { items: Array.isArray(page.items) ? page.items : [], summary: page.summary || null },
+    };
+}

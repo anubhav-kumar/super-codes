@@ -70,3 +70,18 @@ export function orderUpdateBody(order, changes = {}) {
         ...changes,
     };
 }
+
+const filteredItems = (res) => ({ ...res, data: (res.data && Array.isArray(res.data.items) && res.data.items) || [] });
+
+/** GET /orders?clientId= (F-08, filtered, unpaginated) -> data = Order[] where this person/company is the client. */
+export async function listClientOrders(clientId, { signal } = {}) {
+    return filteredItems(await request(`/orders?clientId=${enc(clientId)}`, { signal }));
+}
+
+/**
+ * GET /orders?receivedFromId= (F-08, filtered, unpaginated) -> data = Order[] this person requested.
+ * Includes orders where the person is also the client; callers filter on client.type as needed.
+ */
+export async function listOrdersReceivedFrom(personId, { signal } = {}) {
+    return filteredItems(await request(`/orders?receivedFromId=${enc(personId)}`, { signal }));
+}
