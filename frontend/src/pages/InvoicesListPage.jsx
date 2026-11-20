@@ -24,6 +24,14 @@ function subtitleOf(i) {
     return parts.join(' · ');
 }
 
+// Total, plus the server's outstanding when something is still owed (F-07).
+function metaOf(i) {
+    const owed = Number(i.outstanding) > 0;
+    if (owed && Number(i.outstanding) !== Number(i.total)) return `${formatMoney(i.total)} · ${formatMoney(i.outstanding)} due`;
+    if (owed) return `${formatMoney(i.total)} due`;
+    return formatMoney(i.total);
+}
+
 function InvoiceRows({ invoices, filter, addDisabled }) {
     const active = INVOICE_FILTERS.find((f) => f.value === filter) || INVOICE_FILTERS[0];
     const byFilter = invoices.filter(active.test);
@@ -66,7 +74,7 @@ function InvoiceRows({ invoices, filter, addDisabled }) {
                                 </>
                             }
                             subtitle={subtitleOf(i)}
-                            meta={formatMoney(i.total)}
+                            meta={metaOf(i)}
                             badges={<InvoiceStatusBadges invoice={i} />}
                         />
                     ))}

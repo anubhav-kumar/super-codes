@@ -3,25 +3,31 @@ import Button from '../components/Button.jsx';
 import Card from '../components/Card.jsx';
 import DataView from '../components/DataView.jsx';
 import DetailField from '../components/DetailField.jsx';
+import InvoicePaymentsSection from '../components/InvoicePaymentsSection.jsx';
 import InvoiceStatusBadges from '../components/InvoiceStatusBadges.jsx';
+import MoneySummary from '../components/MoneySummary.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import { clientPath } from '../constants/orders.js';
 import { useInvoice } from '../hooks/useInvoices.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
-import { formatDate, formatMoney } from '../utils/format.js';
+import { formatDate } from '../utils/format.js';
 
 const linkClass = 'text-primary-700 hover:underline';
 
-const Money = ({ value, strong = false }) =>
-    value === null || value === undefined ? null : (
-        <span className={`tabular-nums ${strong ? 'font-semibold' : ''}`}>{formatMoney(value)}</span>
-    );
+/** Outstanding tone and hint from server-derived fields only (F-07). */
+function outstandingLook(invoice) {
+    if (invoice.baseStatus === 'DRAFT') return { tone: 'neutral', hint: 'Nothing is due until the invoice is issued.' };
+    if (invoice.baseStatus === 'CANCELLED') return { tone: 'neutral', hint: 'Cancelled invoices are not outstanding.' };
+    if (Number(invoice.outstanding) > 0) return { tone: invoice.isOverdue ? 'danger' : 'warning' };
+    return { tone: 'success' };
+}
 
 function InvoiceDetail({ invoice }) {
     const { online } = useOnlineStatus();
     const toBilledTo = clientPath(invoice.billedTo);
     const billedToName = (invoice.billedTo && invoice.billedTo.name) || 'Unknown';
+    const look = outstandingLook(invoice);
 
     return (
         <>
@@ -61,26 +67,18 @@ function InvoiceDetail({ invoice }) {
                     </DetailField>
                     <DetailField label="Invoice date" value={formatDate(invoice.invoiceDate)} />
                     <DetailField label="Due date" value={formatDate(invoice.dueDate)} />
-                    <DetailField label="Amount">
-                        <Money value={invoice.amount} />
-                    </DetailField>
-                    <DetailField label="Tax">
-                        <Money value={invoice.tax} />
-                    </DetailField>
-                    <DetailField label="Total">
-                        <Money value={invoice.total} strong />
-                    </DetailField>
                     <DetailField label="Description" className="md:col-span-2">
                         {invoice.description ? <span className="whitespace-pre-line">{invoice.description}</span> : null}
                     </DetailField>
                 </dl>
             </Card>
-            {/* Sections added by F-07 (one line each): MoneySummary, InvoicePaymentsSection. */}
+            <MoneySummary amount={invoice.amount} tax={invoice.tax} total={invoice.total} received={invoice.amountReceived} outstanding={invoice.outstanding} outstandingTone={look.tone} outstandingHint={look.hint} className="mt-4" />
+            <InvoicePaymentsSection invoice={invoice} />
         </>
     );
 }
 
-/** Invoice detail (F-06): all fields, displayed status, links to billed-to and related order. */
+/** Invoice detail (F-06, F-07): all fields, displayed status, links to billed-to and related order, money summary and payments. */
 export default function InvoiceDetailPage() {
     const { invoiceId } = useParams();
     const invoice = useInvoice(invoiceId);
