@@ -2,6 +2,6 @@
   "name": "ca-crm-billing",
   "version": "0.1.0",
   "private": true,
-  "description": "Billing service: invoices (POST/GET /billing/invoices, GET/PUT /billing/invoices/{id}); payments come in F-07",
+  "description": "Billing service: invoices (POST/GET /billing/invoices, GET/PUT /billing/invoices/{id}) and payments (POST /billing/invoices/{id}/payments, PUT /billing/invoices/{id}/payments/{paymentId})",
   "license": "UNLICENSED"
 }

@@ -118,6 +118,24 @@ functions:
           path: billing/invoices/{id}
           method: put
           cors: true
+  paymentsCreate:
+    handler: handlers/payments/create.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: billing/invoices/{id}/payments
+          method: post
+          cors: true
+  paymentsUpdate:
+    handler: handlers/payments/update.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: billing/invoices/{id}/payments/{paymentId}
+          method: put
+          cors: true
 
 resources:
   Resources:
