@@ -9,6 +9,7 @@ export const NAV_ITEMS = [
     { id: 'home', label: 'Home', to: '/', match: ['/'], icon: 'home', order: 10 },
 
     // P-02 Client directory
+    { id: 'clients', label: 'Clients', to: '/people', match: ['/people', '/companies'], icon: 'clients', order: 20, description: 'People and companies the firm works with.', quickAction: { label: 'Add person', to: '/people/new' } },
 
     // P-03 Workers
 

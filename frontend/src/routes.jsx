@@ -13,6 +13,10 @@ export const ROUTES = [
     { path: '/', Page: page(() => import('./pages/HomePage.jsx')) },
 
     // P-02 Client directory
+    { path: '/people', Page: page(() => import('./pages/PeopleListPage.jsx')) },
+    { path: '/people/new', Page: page(() => import('./pages/PersonFormPage.jsx')) },
+    { path: '/people/:personId', Page: page(() => import('./pages/PersonDetailPage.jsx')) },
+    { path: '/people/:personId/edit', Page: page(() => import('./pages/PersonFormPage.jsx')) },
 
     // P-03 Workers
 
