@@ -15,6 +15,10 @@ export const ROUTES = [
     // P-02 Client directory
 
     // P-03 Workers
+    { path: '/workers', Page: page(() => import('./pages/WorkersListPage.jsx')) },
+    { path: '/workers/new', Page: page(() => import('./pages/WorkerFormPage.jsx')) },
+    { path: '/workers/:workerId', Page: page(() => import('./pages/WorkerDetailPage.jsx')) },
+    { path: '/workers/:workerId/edit', Page: page(() => import('./pages/WorkerFormPage.jsx')) },
 
     // P-04 Orders
 
