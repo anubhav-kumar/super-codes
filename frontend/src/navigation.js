@@ -11,6 +11,7 @@ export const NAV_ITEMS = [
     // P-02 Client directory
 
     // P-03 Workers
+    { id: 'workers', label: 'Workers', to: '/workers', match: ['/workers'], icon: 'workers', order: 50, description: "The firm's team: who can be assigned to orders.", quickAction: { label: 'Add worker', to: '/workers/new' } },
 
     // P-04 Orders
 

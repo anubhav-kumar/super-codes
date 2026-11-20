@@ -1,0 +1,135 @@
+# Workers service. The firm's team directory (add, edit, list). No delete: INACTIVE retires a worker.
+# Owns the Workers table. Orders reads it by its deterministic name (GetItem, BatchGetItem).
+service: ca-crm-workers
+
+frameworkVersion: '3'
+
+custom:
+  workersTable: ca-crm-workers-${sls:stage}-workers
+  sessionsTable: ca-crm-auth-${sls:stage}-sessions
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  stage: ${opt:stage, 'prod'}
+  region: ${opt:region, 'ap-southeast-1'}
+  deploymentMethod: direct
+  memorySize: 256
+  timeout: 10
+  logRetentionInDays: 14
+  apiGateway:
+    restApiId: ${cf:ca-crm-api-gateway-${sls:stage}.RestApiId}
+    restApiRootResourceId: ${cf:ca-crm-api-gateway-${sls:stage}.RestApiRootResourceId}
+  environment:
+    WORKERS_TABLE: ${self:custom.workersTable}
+    SESSIONS_TABLE: ${self:custom.sessionsTable}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:Query
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.workersTable}
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.workersTable}/index/*
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.sessionsTable}
+
+package:
+  patterns:
+    - '!node_modules/**'
+    - '!tests/**'
+    - '!package-lock.json'
+
+layers:
+  common:
+    path: ../../libs/common
+    name: ${self:service}-${sls:stage}-common
+    description: ca-crm common layer (logger, http, errors, middleware, auth, database, validators)
+    compatibleRuntimes:
+      - nodejs20.x
+
+functions:
+  create:
+    handler: handlers/create.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: workers
+          method: post
+          cors: true
+  list:
+    handler: handlers/list.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: workers
+          method: get
+          cors: true
+  get:
+    handler: handlers/get.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: workers/{id}
+          method: get
+          cors: true
+  update:
+    handler: handlers/update.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: workers/{id}
+          method: put
+          cors: true
+
+resources:
+  Resources:
+    WorkersTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        TableName: ${self:custom.workersTable}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: entity
+            AttributeType: S
+          - AttributeName: nameSort
+            AttributeType: S
+          - AttributeName: status
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: byName
+            KeySchema:
+              - AttributeName: entity
+                KeyType: HASH
+              - AttributeName: nameSort
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+          - IndexName: byStatus
+            KeySchema:
+              - AttributeName: status
+                KeyType: HASH
+              - AttributeName: nameSort
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true

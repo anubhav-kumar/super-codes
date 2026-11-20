@@ -1,0 +1,7 @@
+{
+  "name": "ca-crm-workers",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Workers service: POST /workers, GET /workers, GET /workers/{id}, PUT /workers/{id}",
+  "license": "UNLICENSED"
+}
