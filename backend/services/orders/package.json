@@ -1,0 +1,7 @@
+{
+  "name": "ca-crm-orders",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Orders service: POST /orders, GET /orders, GET /orders/{id}, PUT /orders/{id}",
+  "license": "UNLICENSED"
+}
