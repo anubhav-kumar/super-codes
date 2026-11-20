@@ -1,0 +1,215 @@
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import Card from '../components/Card.jsx';
+import DataView from '../components/DataView.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import FormError from '../components/FormError.jsx';
+import FormFooter from '../components/FormFooter.jsx';
+import PageHeader from '../components/PageHeader.jsx';
+import Switch from '../components/Switch.jsx';
+import TextArea from '../components/TextArea.jsx';
+import TextField from '../components/TextField.jsx';
+import { createPerson, updatePerson } from '../api/people.js';
+import { PERSON_LIMITS } from '../constants/clients.js';
+import useOnlineStatus from '../hooks/useOnlineStatus.js';
+import { usePerson } from '../hooks/usePeople.js';
+import useSubmit from '../hooks/useSubmit.js';
+import { isValidEmail, isValidPan, isValidPhone, normalizePan } from '../utils/validation.js';
+
+const EMPTY = { name: '', isIndividualClient: false, pan: '', email: '', phone: '', address: '', notes: '' };
+
+const toValues = (p) => ({
+    name: p.name || '',
+    isIndividualClient: Boolean(p.isIndividualClient),
+    pan: p.pan || '',
+    email: p.email || '',
+    phone: p.phone || '',
+    address: p.address || '',
+    notes: p.notes || '',
+});
+
+const orNull = (v) => {
+    const t = v.trim();
+    return t === '' ? null : t;
+};
+
+/** Request body for create/update: the full editable field set, empty optional fields as null. */
+const toBody = (v) => ({
+    name: v.name.trim(),
+    isIndividualClient: v.isIndividualClient,
+    pan: normalizePan(v.pan) || null,
+    email: orNull(v.email),
+    phone: orNull(v.phone),
+    address: orNull(v.address),
+    notes: orNull(v.notes),
+});
+
+function validate(v) {
+    const errors = {};
+    const name = v.name.trim();
+    if (!name) errors.name = 'Enter a name';
+    else if (name.length > PERSON_LIMITS.name) errors.name = `Name can be at most ${PERSON_LIMITS.name} characters`;
+
+    const pan = normalizePan(v.pan);
+    if (!pan) {
+        if (v.isIndividualClient) errors.pan = 'PAN is required for individual clients';
+    } else if (!isValidPan(pan)) {
+        errors.pan = 'PAN must look like ABCDE1234F';
+    }
+
+    if (v.email.trim() && !isValidEmail(v.email)) errors.email = 'Enter a valid email';
+    if (v.phone.trim() && (!isValidPhone(v.phone) || v.phone.trim().length > PERSON_LIMITS.phone)) {
+        errors.phone = 'Enter a valid phone number';
+    }
+    if (v.address.trim().length > PERSON_LIMITS.address) errors.address = `Address can be at most ${PERSON_LIMITS.address} characters`;
+    if (v.notes.trim().length > PERSON_LIMITS.notes) errors.notes = `Notes can be at most ${PERSON_LIMITS.notes} characters`;
+    return errors;
+}
+
+function PersonForm({ person }) {
+    const navigate = useNavigate();
+    const isEdit = Boolean(person);
+    // Client-generated id, kept for the life of the form so a retried create is idempotent.
+    const [newId] = useState(() => crypto.randomUUID());
+    const [values, setValues] = useState(() => (person ? toValues(person) : EMPTY));
+    const [localErrors, setLocalErrors] = useState({});
+    const [panTaken, setPanTaken] = useState(null);
+    const { submit, submitting, formError, fieldErrors } = useSubmit();
+
+    const set = (field) => (value) => {
+        setValues((v) => ({ ...v, [field]: value }));
+        if (localErrors[field]) setLocalErrors((e) => ({ ...e, [field]: undefined }));
+        if (field === 'isIndividualClient' && localErrors.pan) setLocalErrors((e) => ({ ...e, pan: undefined }));
+        if (field === 'pan' && panTaken) setPanTaken(null);
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        const errors = validate(values);
+        setLocalErrors(errors);
+        setPanTaken(null);
+        if (Object.keys(errors).length) return;
+
+        const body = toBody(values);
+        const result = await submit(() => (isEdit ? updatePerson(person.id, body) : createPerson({ id: newId, ...body })));
+        if (result.ok) {
+            const id = (result.data && result.data.id) || (isEdit ? person.id : newId);
+            navigate(`/people/${id}`, { replace: true });
+        } else if (result.error && result.error.code === 'PAN_TAKEN') {
+            setPanTaken(result.error.message || 'A person with this PAN already exists');
+        }
+    };
+
+    const errorFor = (field) => localErrors[field] || fieldErrors[field];
+    const panError = localErrors.pan || panTaken || fieldErrors.pan;
+    const banner = panTaken ? null : formError;
+
+    return (
+        <>
+            <PageHeader title={isEdit ? 'Edit person' : 'Add person'} subtitle={isEdit ? person.name : undefined} />
+            <form noValidate onSubmit={handleSubmit} className="flex max-w-xl flex-col gap-4">
+                <FormError message={banner} />
+                <Card>
+                    <TextField
+                        label="Name"
+                        required
+                        autoComplete="off"
+                        maxLength={PERSON_LIMITS.name}
+                        value={values.name}
+                        onChange={set('name')}
+                        error={errorFor('name')}
+                    />
+                    <Switch
+                        label="Individual client"
+                        hint="The firm does work for this person directly."
+                        checked={values.isIndividualClient}
+                        onChange={set('isIndividualClient')}
+                    />
+                    <TextField
+                        label="PAN"
+                        required={values.isIndividualClient}
+                        transform="uppercase"
+                        autoCapitalize="characters"
+                        autoComplete="off"
+                        spellCheck={false}
+                        maxLength={10}
+                        className="[&_input]:font-mono"
+                        value={values.pan}
+                        onChange={set('pan')}
+                        error={panError}
+                        hint={values.isIndividualClient ? undefined : 'Optional for company contacts.'}
+                    />
+                </Card>
+                <Card>
+                    <TextField
+                        label="Email"
+                        type="email"
+                        inputMode="email"
+                        autoCapitalize="none"
+                        spellCheck={false}
+                        maxLength={PERSON_LIMITS.email}
+                        value={values.email}
+                        onChange={set('email')}
+                        error={errorFor('email')}
+                    />
+                    <TextField
+                        label="Phone"
+                        type="tel"
+                        inputMode="tel"
+                        maxLength={PERSON_LIMITS.phone}
+                        value={values.phone}
+                        onChange={set('phone')}
+                        error={errorFor('phone')}
+                    />
+                    <TextArea
+                        label="Address"
+                        maxLength={PERSON_LIMITS.address}
+                        value={values.address}
+                        onChange={set('address')}
+                        error={errorFor('address')}
+                    />
+                    <TextArea
+                        label="Notes"
+                        rows={4}
+                        maxLength={PERSON_LIMITS.notes}
+                        value={values.notes}
+                        onChange={set('notes')}
+                        error={errorFor('notes')}
+                    />
+                </Card>
+                <FormFooter submitLabel="Save" submitting={submitting} cancelTo={isEdit ? `/people/${person.id}` : '/people'} />
+            </form>
+        </>
+    );
+}
+
+function NeedsConnection() {
+    const navigate = useNavigate();
+    return (
+        <EmptyState
+            icon="offline"
+            title="Adding and editing need a connection"
+            text="Connect to the internet and try again."
+            action={{ label: 'Go back', onClick: () => navigate(-1) }}
+        />
+    );
+}
+
+function EditPerson({ personId }) {
+    const person = usePerson(personId);
+    return <DataView resource={person}>{(p) => <PersonForm key={p.id} person={p} />}</DataView>;
+}
+
+/** Add person (/people/new) and Edit person (/people/:personId/edit), F-02. Online only. */
+export default function PersonFormPage() {
+    const { personId } = useParams();
+    const { online } = useOnlineStatus();
+    // Opened offline -> unavailable. Once the form has been shown it stays mounted if the connection
+    // drops, so typed values are kept (FormFooter disables Save while offline).
+    const [hadConnection, setHadConnection] = useState(online);
+    useEffect(() => {
+        if (online) setHadConnection(true);
+    }, [online]);
+    if (!online && !hadConnection) return <NeedsConnection />;
+    return personId ? <EditPerson personId={personId} /> : <PersonForm />;
+}

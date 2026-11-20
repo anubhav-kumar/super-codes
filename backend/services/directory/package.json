@@ -1,0 +1,7 @@
+{
+  "name": "ca-crm-directory",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Directory service: people, companies and person-company associations under /directory",
+  "license": "UNLICENSED"
+}
