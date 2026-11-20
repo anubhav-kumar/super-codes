@@ -5,15 +5,22 @@ export default function UpdatePrompt() {
     const { needRefresh, applyUpdate, dismissUpdate } = useServiceWorkerUpdate();
     if (!needRefresh) return null;
     return (
-        <div className="fixed inset-x-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-50 mx-auto flex max-w-md items-center gap-3 rounded-2xl bg-slate-800 px-4 py-3 shadow-2xl ring-1 ring-white/10">
-            <p className="flex-1 text-sm text-slate-100">A new version is available.</p>
-            <button type="button" onClick={dismissUpdate} className="rounded-lg px-3 py-1.5 text-sm text-slate-300 hover:bg-white/5">
+        <div
+            role="status"
+            className="fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-50 mx-auto flex max-w-md items-center gap-3 rounded-card border border-line bg-surface px-4 py-3 shadow-xl md:bottom-6"
+        >
+            <p className="flex-1 text-sm text-ink">A new version is available.</p>
+            <button
+                type="button"
+                onClick={dismissUpdate}
+                className="min-h-9 rounded-control px-3 text-sm font-medium text-ink-muted hover:bg-page"
+            >
                 Later
             </button>
             <button
                 type="button"
                 onClick={applyUpdate}
-                className="rounded-lg bg-brand-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-600"
+                className="min-h-9 rounded-control bg-primary-600 px-3 text-sm font-semibold text-white hover:bg-primary-700"
             >
                 Reload
             </button>

@@ -4,19 +4,37 @@
  * request(path, options) -> { data, status, fromCache, fetchedAt }
  *   fromCache: true when the service worker served a cached copy (network failed or timed out)
  *   fetchedAt: ISO time the data was fetched from the server
- * Throws ApiError { status, offline, body }. `offline: true` means the network was unreachable.
+ * Throws ApiError { status, code, details, offline, body }. `offline: true` means the network was unreachable.
+ *
+ * Auth: every request sends `Authorization: Bearer <token>` from the stored session, unless
+ * `auth: false` (sign-in, health). A 401 on an authenticated request calls the handler registered
+ * with setUnauthorizedHandler (clears the session and returns to the sign-in screen), unless
+ * `skipUnauthorized: true` (sign-out).
  */
 import { API_BASE_URL } from '../config.js';
+import { getToken } from '../auth/session.js';
 import { reportNetworkFailure, reportNetworkSuccess } from '../offline/network.js';
 
 export class ApiError extends Error {
-    constructor(message, { status = 0, offline = false, body = null } = {}) {
+    constructor(message, { status = 0, code = null, details = [], offline = false, body = null } = {}) {
         super(message);
         this.name = 'ApiError';
         this.status = status;
+        this.code = code;
+        this.details = details;
         this.offline = offline;
         this.body = body;
     }
+}
+
+let unauthorizedHandler = null;
+
+/** Registers the function called on a 401 from an authenticated request. Returns an unregister function. */
+export function setUnauthorizedHandler(handler) {
+    unauthorizedHandler = handler;
+    return () => {
+        if (unauthorizedHandler === handler) unauthorizedHandler = null;
+    };
 }
 
 async function parseBody(res) {
@@ -29,9 +47,35 @@ async function parseBody(res) {
     }
 }
 
+// Lambda errors: { error: { code, message, details } }. API Gateway errors: { message }.
+function toApiError(res, data) {
+    const err = data && typeof data === 'object' && data.error && typeof data.error === 'object' ? data.error : null;
+    const message =
+        (err && err.message) ||
+        (data && typeof data === 'object' && data.message) ||
+        `Request failed with status ${res.status}`;
+    return new ApiError(message, {
+        status: res.status,
+        code: (err && err.code) || null,
+        details: (err && Array.isArray(err.details) && err.details) || [],
+        body: data,
+    });
+}
+
 export async function request(
     path,
-    { method = 'GET', body, headers, cache, signal, idempotencyKey, trackConnectivity = true } = {}
+    {
+        method = 'GET',
+        body,
+        headers,
+        cache,
+        signal,
+        idempotencyKey,
+        trackConnectivity = true,
+        auth = true,
+        token,
+        skipUnauthorized = false,
+    } = {}
 ) {
     if (!API_BASE_URL) {
         throw new ApiError('API base URL is not configured (VITE_API_BASE_URL)', { status: 0 });
@@ -48,6 +92,8 @@ export async function request(
         init.body = JSON.stringify(body);
     }
     if (idempotencyKey) init.headers['Idempotency-Key'] = idempotencyKey;
+    const bearer = auth ? token || getToken() : null;
+    if (bearer) init.headers.Authorization = `Bearer ${bearer}`;
 
     let res;
     try {
@@ -66,8 +112,9 @@ export async function request(
 
     const data = await parseBody(res);
     if (!res.ok) {
-        const message = (data && data.message) || `Request failed with status ${res.status}`;
-        throw new ApiError(message, { status: res.status, body: data });
+        const error = toApiError(res, data);
+        if (res.status === 401 && auth && !skipUnauthorized && unauthorizedHandler) unauthorizedHandler(error);
+        throw error;
     }
 
     const dateHeader = res.headers.get('date');
