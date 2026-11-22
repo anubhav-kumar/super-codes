@@ -1,18 +1,40 @@
 import AppMark from '../components/AppMark.jsx';
-import Button from '../components/Button.jsx';
-import Card from '../components/Card.jsx';
-import Icon from '../components/Icon.jsx';
-import OfflineActionHint from '../components/OfflineActionHint.jsx';
+import DataView from '../components/DataView.jsx';
+import HomeFigures from '../components/home/HomeFigures.jsx';
+import NeedsAttention from '../components/home/NeedsAttention.jsx';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
-import useOnlineStatus from '../hooks/useOnlineStatus.js';
-import { sortedNavItems } from '../navigation.js';
+import QuickActions from '../components/home/QuickActions.jsx';
+import RecentlyOpened from '../components/home/RecentlyOpened.jsx';
+import useFirmSummary from '../hooks/useFirmSummary.js';
 
-/** Signed-in Home: one card per navigation section (read from NAV_ITEMS). The signed-in email lives in the account menu. */
+/**
+ * Lays out Home. Phones: one column in the order figures, quick actions, needs attention, recently
+ * opened. lg+: figures in one row, then `main` (2/3) beside quick actions + recently opened (1/3).
+ * The aside uses `display: contents` on phones so its two blocks can be ordered around `main`.
+ */
+function HomeLayout({ figures, main }) {
+    return (
+        <div className="flex flex-col gap-4 lg:grid lg:grid-cols-3 lg:items-start lg:gap-6">
+            {figures && <div className="order-1 lg:col-span-3">{figures}</div>}
+            <div className="order-3 lg:order-2 lg:col-span-2">{main}</div>
+            <div className="contents lg:order-3 lg:flex lg:flex-col lg:gap-6">
+                <QuickActions className="order-2" />
+                <RecentlyOpened className="order-4" />
+            </div>
+        </div>
+    );
+}
+
+/**
+ * Home: the firm summary (F-20) with quick actions and recently opened (F-21). Key figures open
+ * the filtered lists; "Needs attention" lists the most urgent overdue invoices and orders.
+ * Readable offline from the last load (stale notice). When the summary is not available offline
+ * (or fails), the message takes the main column and quick actions (disabled offline) and recently
+ * opened stay visible.
+ */
 export default function HomePage() {
-    const { online } = useOnlineStatus();
-    const sections = sortedNavItems().filter((item) => item.id !== 'home');
-    const hasQuickActions = sections.some((item) => item.quickAction);
+    const summary = useFirmSummary();
 
     return (
         <PageBody width="detail">
@@ -28,39 +50,13 @@ export default function HomePage() {
                 }
             />
 
-            {sections.length === 0 ? (
-                <Card>
-                    <p className="text-sm text-ink-muted">Sections such as Clients, Orders and Invoices appear here as they are added.</p>
-                </Card>
+            {summary.status === 'loading' || summary.status === 'loaded' ? (
+                <DataView resource={summary} skeleton="home">
+                    {(data) => <HomeLayout figures={<HomeFigures summary={data} />} main={<NeedsAttention summary={data} />} />}
+                </DataView>
             ) : (
-                <div className="grid gap-4 sm:grid-cols-2">
-                    {sections.map((item) => (
-                        <Card
-                            key={item.id}
-                            title={
-                                <span className="flex items-center gap-2">
-                                    <Icon name={item.icon} size="md" className="text-ink-subtle" />
-                                    {item.label}
-                                </span>
-                            }
-                        >
-                            {item.description && <p className="text-sm text-ink-muted">{item.description}</p>}
-                            <div className="flex flex-wrap gap-2">
-                                <Button variant="secondary" size="sm" to={item.to}>
-                                    Open {item.label}
-                                </Button>
-                                {item.quickAction && (
-                                    <Button size="sm" icon="plus" to={item.quickAction.to} disabled={!online}>
-                                        {item.quickAction.label}
-                                    </Button>
-                                )}
-                            </div>
-                        </Card>
-                    ))}
-                </div>
+                <HomeLayout main={<DataView resource={summary} skeleton="home" />} />
             )}
-
-            {hasQuickActions && !online && <OfflineActionHint className="mt-4" />}
         </PageBody>
     );
 }

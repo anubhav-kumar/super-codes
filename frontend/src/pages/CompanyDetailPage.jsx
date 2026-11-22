@@ -19,6 +19,7 @@ import { useBillingEntityInvoices } from '../hooks/useInvoices.js';
 import useMediaQuery from '../hooks/useMediaQuery.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useClientOrders } from '../hooks/useOrders.js';
+import useRecordVisit from '../hooks/useRecordVisit.js';
 
 /** Company facts; empty ones are hidden and offered as "Add …" links instead. PAN stays in the header. */
 function CompanyDetails({ company: c }) {
@@ -54,6 +55,7 @@ export default function CompanyDetailPage() {
     const { companyId } = useParams();
     const { online } = useOnlineStatus();
     const company = useCompany(companyId);
+    useRecordVisit('company', companyId, company);
     const orders = useClientOrders(companyId);
     const invoices = useBillingEntityInvoices(companyId);
     const wide = useMediaQuery('(min-width: 1024px)');

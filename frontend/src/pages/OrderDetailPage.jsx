@@ -21,6 +21,7 @@ import { clientPath, orderStatusLabel } from '../constants/orders.js';
 import useInlineSave from '../hooks/useInlineSave.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useOrder } from '../hooks/useOrders.js';
+import useRecordVisit from '../hooks/useRecordVisit.js';
 import { isOrderOpen } from '../utils/due.js';
 import { formatDate } from '../utils/format.js';
 
@@ -172,6 +173,7 @@ function OrderDetail({ order, reload }) {
 export default function OrderDetailPage() {
     const { orderId } = useParams();
     const order = useOrder(orderId);
+    useRecordVisit('order', orderId, order);
     return (
         <PageBody width="detail">
             <PageHeader backTo="/orders" backLabel="Orders" />

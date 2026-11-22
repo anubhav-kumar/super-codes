@@ -1,0 +1,7 @@
+{
+  "name": "ca-crm-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Dashboard service: GET /dashboard/summary (firm summary for Home)",
+  "license": "UNLICENSED"
+}

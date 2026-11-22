@@ -19,6 +19,7 @@ import { INVOICE_STATUS_TONE, invoiceStatusLabel } from '../constants/invoices.j
 import { clientPath } from '../constants/orders.js';
 import { useInvoice } from '../hooks/useInvoices.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
+import useRecordVisit from '../hooks/useRecordVisit.js';
 import { useOrder } from '../hooks/useOrders.js';
 import useSubmit from '../hooks/useSubmit.js';
 import useToast from '../hooks/useToast.js';
@@ -168,6 +169,7 @@ function InvoiceDetail({ invoice, reload }) {
 export default function InvoiceDetailPage() {
     const { invoiceId } = useParams();
     const invoice = useInvoice(invoiceId);
+    useRecordVisit('invoice', invoiceId, invoice);
     return (
         <PageBody width="detail">
             <PageHeader backTo="/invoices" backLabel="Invoices" />
