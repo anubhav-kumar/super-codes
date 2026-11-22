@@ -14,8 +14,8 @@ const { toInvoiceDetail } = require('../../utils/enrich');
 
 /**
  * POST /billing/invoices
- * 201 Invoice detail (baseStatus DRAFT, invoiceNumber assigned, payments [])
- * 200 Invoice detail when an invoice with this id already exists (nothing written)
+ * 201 Invoice detail (baseStatus DRAFT or ISSUED as requested, invoiceNumber assigned, payments [])
+ * 200 Invoice detail when an invoice with this id already exists (nothing written, stored baseStatus kept)
  * 400 VALIDATION_FAILED, 400 REFERENCE_NOT_FOUND
  *
  * Flow: validate -> GetItem id -> check references -> increment counter -> PutItem with
