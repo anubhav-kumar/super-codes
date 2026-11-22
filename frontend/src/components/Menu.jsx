@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import useMediaQuery from '../hooks/useMediaQuery.js';
 import Icon from './Icon.jsx';
+import Sheet from './Sheet.jsx';
 
 const ITEM_TONES = {
     default: 'text-ink hover:bg-surface-subtle focus-visible:bg-surface-subtle',
@@ -15,9 +17,25 @@ const ITEM_TONES = {
  * Keyboard: Enter / Space / ArrowDown open on the first item, ArrowUp on the last; arrows move,
  * Home / End jump, Escape closes and returns focus to the trigger, Tab closes.
  * Closes on select and on a click outside. `align` = 'end' (default) or 'start'.
+ * `checked: true | false` on items marks a single choice (sort, status) with a check mark.
+ * `sheetOnPhone` opens the items in a bottom Sheet below md (title = `sheetTitle` or `label`).
  */
-export default function Menu({ label, icon, trigger, header, items, align = 'end', triggerClassName = '', className = '' }) {
+export default function Menu({
+    label,
+    icon,
+    trigger,
+    header,
+    items,
+    align = 'end',
+    triggerClassName = '',
+    className = '',
+    sheetOnPhone = false,
+    sheetTitle,
+    disabled = false,
+}) {
     const navigate = useNavigate();
+    const desktop = useMediaQuery('(min-width: 768px)');
+    const asSheet = sheetOnPhone && !desktop;
     const menuId = useId();
     const triggerId = useId();
     const rootRef = useRef(null);
@@ -45,7 +63,8 @@ export default function Menu({ label, icon, trigger, header, items, align = 'end
     }, [open, focusIndex]);
 
     useEffect(() => {
-        if (!open) return undefined;
+        // The sheet has its own backdrop and lives in a portal, so it needs no outside-click check.
+        if (!open || asSheet) return undefined;
         const onPointer = (e) => {
             if (rootRef.current && !rootRef.current.contains(e.target)) close(false);
         };
@@ -55,7 +74,7 @@ export default function Menu({ label, icon, trigger, header, items, align = 'end
             document.removeEventListener('mousedown', onPointer);
             document.removeEventListener('touchstart', onPointer);
         };
-    }, [open]);
+    }, [open, asSheet]);
 
     const move = (step) => {
         if (enabled.length === 0) return;
@@ -97,7 +116,9 @@ export default function Menu({ label, icon, trigger, header, items, align = 'end
 
     const select = (item) => {
         if (item.disabled) return;
-        close();
+        // The sheet returns focus to the trigger itself when it closes.
+        if (asSheet) setOpen(false);
+        else close();
         if (item.onSelect) item.onSelect();
         else if (item.to) navigate(item.to);
     };
@@ -112,17 +133,43 @@ export default function Menu({ label, icon, trigger, header, items, align = 'end
                 ref={triggerRef}
                 id={triggerId}
                 type="button"
-                aria-haspopup="menu"
+                aria-haspopup={asSheet ? 'dialog' : 'menu'}
                 aria-expanded={open}
-                aria-controls={open ? menuId : undefined}
+                aria-controls={open && !asSheet ? menuId : undefined}
                 aria-label={label}
-                onClick={() => (open ? close() : openAt('first'))}
-                onKeyDown={onTriggerKey}
+                disabled={disabled}
+                onClick={() => (open ? close() : asSheet ? setOpen(true) : openAt('first'))}
+                onKeyDown={asSheet ? undefined : onTriggerKey}
                 className={triggerClasses}
             >
                 {trigger || <Icon name={icon} />}
             </button>
-            {open && (
+            {asSheet && (
+                <Sheet open={open} title={sheetTitle || label} onClose={() => setOpen(false)}>
+                    {header}
+                    <ul className="-mx-4 md:-mx-5">
+                        {list.map((item) => (
+                            <li key={item.label}>
+                                <button
+                                    type="button"
+                                    disabled={item.disabled}
+                                    aria-pressed={typeof item.checked === 'boolean' ? item.checked : undefined}
+                                    onClick={() => select(item)}
+                                    className={`flex min-h-12 w-full items-center gap-3 px-4 py-2 text-left text-[15px] outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:text-ink-subtle md:px-5 ${ITEM_TONES[item.tone] || ITEM_TONES.default}`}
+                                >
+                                    {item.icon && <Icon name={item.icon} size="sm" className={item.tone === 'danger' ? '' : 'text-ink-subtle'} />}
+                                    <span className="min-w-0 flex-1">
+                                        <span className={`block ${item.checked ? 'font-semibold' : ''}`}>{item.label}</span>
+                                        {item.hint && <span className="block text-xs text-ink-subtle">{item.hint}</span>}
+                                    </span>
+                                    {item.checked && <Icon name="check" size="sm" />}
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                </Sheet>
+            )}
+            {open && !asSheet && (
                 <div
                     className={`absolute top-full z-50 mt-1 w-64 overflow-hidden rounded-card border border-line bg-surface py-1 shadow-overlay ${align === 'start' ? 'left-0' : 'right-0'}`}
                     onKeyDown={onMenuKey}
@@ -136,7 +183,8 @@ export default function Menu({ label, icon, trigger, header, items, align = 'end
                                     itemRefs.current[i] = el;
                                 }}
                                 type="button"
-                                role="menuitem"
+                                role={typeof item.checked === 'boolean' ? 'menuitemradio' : 'menuitem'}
+                                aria-checked={typeof item.checked === 'boolean' ? item.checked : undefined}
                                 tabIndex={focusIndex === i ? 0 : -1}
                                 aria-disabled={item.disabled || undefined}
                                 onClick={() => select(item)}
@@ -147,6 +195,7 @@ export default function Menu({ label, icon, trigger, header, items, align = 'end
                                     <span className="block">{item.label}</span>
                                     {item.hint && <span className="block text-xs text-ink-subtle">{item.hint}</span>}
                                 </span>
+                                {item.checked && <Icon name="check" size="sm" />}
                             </button>
                         ))}
                     </div>

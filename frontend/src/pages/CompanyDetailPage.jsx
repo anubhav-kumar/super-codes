@@ -11,8 +11,10 @@ import Icon from '../components/Icon.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
-import PageTitle from '../components/PageTitle.jsx';
+import RecordHeader from '../components/RecordHeader.jsx';
 import RelatedSection from '../components/RelatedSection.jsx';
+import SectionAction from '../components/SectionAction.jsx';
+import Tag from '../components/Tag.jsx';
 import SelectField from '../components/SelectField.jsx';
 import { removeAssociation, updateAssociation } from '../api/companies.js';
 import { entityTypeLabel, RELATIONSHIP_TYPES, relationshipLabel } from '../constants/clients.js';
@@ -119,9 +121,9 @@ function CompanyPeopleSection({ company, online, reload }) {
                 title="People"
                 count={associations.length}
                 action={
-                    <Button variant="ghost" size="sm" icon="link" to={`/companies/${company.id}/people/new`} disabled={!online}>
+                    <SectionAction icon="link" to={`/companies/${company.id}/people/new`} disabled={!online}>
                         Link person
-                    </Button>
+                    </SectionAction>
                 }
             >
                 {associations.length === 0 ? (
@@ -174,22 +176,23 @@ export default function CompanyDetailPage() {
             <DataView resource={company} skeleton="detail">
                 {(c) => (
                     <>
-                        <PageTitle
+                        <RecordHeader
+                            eyebrow={<Tag>{entityTypeLabel(c.entityType) || 'Company'}</Tag>}
+                            icon="COMPANY"
                             title={c.name}
-                            subtitle={entityTypeLabel(c.entityType)}
+                            meta={c.pan ? <span className="font-mono text-[13px] text-ink-muted">PAN {c.pan}</span> : null}
                             actions={
                                 <Button variant="secondary" icon="edit" to={`/companies/${c.id}/edit`} disabled={!online}>
                                     Edit
                                 </Button>
                             }
-                        />
-                        {!online && <OfflineActionHint className="-mt-2 mb-4" />}
+                        >
+                            {!online && <OfflineActionHint />}
+                        </RecordHeader>
 
                         <div className="flex flex-col gap-4">
                             <Card>
                                 <dl className="grid gap-4 md:grid-cols-2">
-                                    <DetailField label="PAN" value={c.pan ? <span className="font-mono text-[13px]">{c.pan}</span> : null} />
-                                    <DetailField label="Entity type" value={entityTypeLabel(c.entityType) || null} />
                                     <DetailField label="GSTIN" value={c.gstin ? <span className="font-mono text-[13px]">{c.gstin}</span> : null} />
                                     <DetailField
                                         label="Email"

@@ -1,12 +1,12 @@
 import { useOrderInvoices } from '../hooks/useInvoices.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { formatMoney } from '../utils/format.js';
-import Button from './Button.jsx';
 import DataView from './DataView.jsx';
 import InvoiceStatusBadges from './InvoiceStatusBadges.jsx';
 import ListItem from './ListItem.jsx';
 import StaleDataNotice from './offline/StaleDataNotice.jsx';
 import RelatedSection from './RelatedSection.jsx';
+import SectionAction from './SectionAction.jsx';
 
 /**
  * "Invoices" section on the order detail screen (F-06): number, billed to, total and status of each
@@ -25,9 +25,9 @@ export default function OrderInvoicesSection({ orderId }) {
             count={loaded ? items.length : ''}
             className="mt-4"
             action={
-                <Button size="sm" variant="secondary" icon="plus" to={`/invoices/new?orderId=${orderId}`} disabled={!online}>
+                <SectionAction icon="raise-invoice" to={`/invoices/new?orderId=${orderId}`} disabled={!online}>
                     Raise invoice
-                </Button>
+                </SectionAction>
             }
         >
             {!loaded ? (

@@ -7,7 +7,8 @@ import DetailField from '../components/DetailField.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
-import PageTitle from '../components/PageTitle.jsx';
+import RecordHeader from '../components/RecordHeader.jsx';
+import Tag from '../components/Tag.jsx';
 import { designationLabel, WORKER_STATUS_TONE, workerStatusLabel } from '../constants/workers.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useWorker } from '../hooks/useWorkers.js';
@@ -25,22 +26,30 @@ export default function WorkerDetailPage() {
             <DataView resource={worker} skeleton="detail">
                 {(w) => (
                     <>
-                        <PageTitle
+                        <RecordHeader
+                            eyebrow={<Tag>Worker</Tag>}
+                            icon="workers"
                             title={w.name}
-                            subtitle={designationLabel(w.designation)}
+                            meta={[
+                                designationLabel(w.designation) ? (
+                                    <span key="designation" className="text-ink-muted">
+                                        {designationLabel(w.designation)}
+                                    </span>
+                                ) : null,
+                                <Badge key="status" tone={WORKER_STATUS_TONE[w.status]}>
+                                    {workerStatusLabel(w.status)}
+                                </Badge>,
+                            ]}
                             actions={
                                 <Button variant="secondary" icon="edit" to={`/workers/${w.id}/edit`} disabled={!online}>
                                     Edit
                                 </Button>
                             }
-                        />
-                        {!online && <OfflineActionHint className="-mt-2 mb-4" />}
+                        >
+                            {!online && <OfflineActionHint />}
+                        </RecordHeader>
                         <Card>
                             <dl className="grid gap-4 md:grid-cols-2">
-                                <DetailField label="Status">
-                                    <Badge tone={WORKER_STATUS_TONE[w.status]}>{workerStatusLabel(w.status)}</Badge>
-                                </DetailField>
-                                <DetailField label="Designation" value={designationLabel(w.designation)} />
                                 <DetailField label="Email">
                                     {w.email ? (
                                         <a href={`mailto:${w.email}`} className="text-ink underline-offset-2 hover:underline focus-visible:underline">
