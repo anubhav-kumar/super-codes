@@ -229,8 +229,8 @@ export default function CompanyDetailPage() {
                             <CompanyPeopleSection company={c} online={online} reload={company.reload} />
 
                             {/* Sections added by later features, one line each */}
-                            <ClientOrdersSection clientId={c.id} />
-                            <BilledInvoicesSection billedToId={c.id} />
+                            <ClientOrdersSection clientId={c.id} showReceivedFrom />
+                            <BilledInvoicesSection billedToId={c.id} showTotals />
                         </div>
                     </>
                 )}

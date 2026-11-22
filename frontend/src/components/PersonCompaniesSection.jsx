@@ -1,14 +1,28 @@
 import { entityTypeLabel, relationshipLabel } from '../constants/clients.js';
-import RelatedSection from './RelatedSection.jsx';
+import ClientIcon from './ClientIcon.jsx';
+import ListRow from './ListRow.jsx';
+import Section from './Section.jsx';
 
-/** "Companies" section on the person detail screen (F-03): company name + relationship type. */
+/** "Companies" section on the person profile (F-03), anchored at #companies: company name, relationship, entity type. */
 export default function PersonCompaniesSection({ companies = [] }) {
-    const items = companies.map((c) => ({
-        key: c.companyId,
-        to: `/companies/${c.companyId}`,
-        title: c.companyName || 'Unknown company',
-        subtitle: relationshipLabel(c.relationshipType),
-        meta: c.entityType ? entityTypeLabel(c.entityType) : undefined,
-    }));
-    return <RelatedSection title="Companies" items={items} emptyText="Not linked to any company. Link people from the company screen." />;
+    return (
+        <Section id="companies" title="Companies" count={companies.length}>
+            {companies.length === 0 ? (
+                <p className="px-4 pb-4 text-sm text-ink-muted">Not linked to any company. Link people from the company screen.</p>
+            ) : (
+                <ul className="divide-y divide-line border-t border-line">
+                    {companies.map((c) => (
+                        <li key={c.companyId}>
+                            <ListRow
+                                to={`/companies/${c.companyId}`}
+                                leading={<ClientIcon type="COMPANY" />}
+                                title={c.companyName || 'Unknown company'}
+                                meta={[relationshipLabel(c.relationshipType), c.entityType ? entityTypeLabel(c.entityType) : null]}
+                            />
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </Section>
+    );
 }
