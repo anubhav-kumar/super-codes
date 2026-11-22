@@ -1,32 +1,47 @@
-import Tag from '../components/Tag.jsx';
+import { useMemo } from 'react';
 import Button from '../components/Button.jsx';
 import ClientsTabs from '../components/ClientsTabs.jsx';
 import DataView from '../components/DataView.jsx';
 import EmptyState from '../components/EmptyState.jsx';
-import ListItem from '../components/ListItem.jsx';
+import ListToolbar from '../components/ListToolbar.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
+import ResponsiveList from '../components/ResponsiveList.jsx';
+import PersonRow from '../components/directory/PersonRow.jsx';
+import { ADD_BUTTON_CLASS, CLIENTS_TABS_CLASS } from '../components/directory/clientsHeader.js';
+import { PEOPLE_COLUMNS } from '../components/directory/directoryColumns.jsx';
+import { CLIENT_LIST_SORTS } from '../constants/clients.js';
 import useListFilter from '../hooks/useListFilter.js';
+import useListSort from '../hooks/useListSort.js';
+import useMediaQuery from '../hooks/useMediaQuery.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { usePeople } from '../hooks/usePeople.js';
 
-const SEARCH_FIELDS = ['name', 'pan', 'phone'];
+const companyNames = (person) => person.companies.map((c) => c.companyName || '').join(' ');
+const SEARCH_FIELDS = ['name', 'pan', 'phone', companyNames];
 
-/** People list (F-02): search by name, PAN or phone; rows sorted by name. */
+/**
+ * People list (F-02, F-29): two-line rows with company link or PAN and phone, and outstanding money
+ * (red only when an invoice is overdue); a sortable table from 1024 px. Search by name, PAN, phone
+ * (and company name) on the device.
+ */
 export default function PeopleListPage() {
     const { online } = useOnlineStatus();
+    const wide = useMediaQuery('(min-width: 1024px)');
     const people = usePeople();
+    const list = useListSort(CLIENT_LIST_SORTS, 'name');
     const { query, setQuery, filtered } = useListFilter(people.data, SEARCH_FIELDS);
+    const rows = useMemo(() => filtered.slice().sort(list.compare), [filtered, list.compare]);
 
     return (
         <PageBody width="list">
             <PageHeader
                 title="People"
-                titleSlot={<ClientsTabs value="/people" />}
+                titleSlot={<ClientsTabs value="/people" className={CLIENTS_TABS_CLASS} />}
                 search={people.data && people.data.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Search name, PAN or phone' } : undefined}
                 actions={
-                    <Button icon="plus" to="/people/new" disabled={!online} aria-label="Add person">
+                    <Button icon="plus" to="/people/new" disabled={!online} aria-label="Add person" className={ADD_BUTTON_CLASS}>
                         <span className="md:hidden">Add</span>
                         <span className="hidden md:inline">Add person</span>
                     </Button>
@@ -34,7 +49,7 @@ export default function PeopleListPage() {
             />
             {!online && <OfflineActionHint className="mb-4" />}
 
-            <DataView resource={people} skeleton="rows">
+            <DataView resource={people} skeleton={wide ? 'table' : 'rows'}>
                 {(items) =>
                     !items || items.length === 0 ? (
                         <EmptyState
@@ -43,28 +58,27 @@ export default function PeopleListPage() {
                             text="Add the individual clients and company contacts the firm works with."
                             action={online ? { label: 'Add person', to: '/people/new', icon: 'plus' } : undefined}
                         />
+                    ) : rows.length === 0 ? (
+                        <EmptyState
+                            icon="search"
+                            title={`No matches for “${query.trim()}”`}
+                            action={{ label: 'Clear search', onClick: () => setQuery('') }}
+                        />
                     ) : (
                         <>
-                            {filtered.length === 0 ? (
-                                <EmptyState
-                                    icon="search"
-                                    title={`No matches for “${query.trim()}”`}
-                                    action={{ label: 'Clear search', onClick: () => setQuery('') }}
-                                />
-                            ) : (
-                                <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">
-                                    {filtered.map((person) => (
-                                        <li key={person.id}>
-                                            <ListItem
-                                                to={`/people/${person.id}`}
-                                                title={person.name}
-                                                subtitle={person.phone || undefined}
-                                                badges={person.isIndividualClient ? <Tag>Individual client</Tag> : undefined}
-                                            />
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
+                            <ListToolbar sort={list} className="lg:hidden" />
+                            <ResponsiveList
+                                rows={rows}
+                                rowKey={(p) => p.id}
+                                table={{
+                                    columns: PEOPLE_COLUMNS,
+                                    rowHref: (p) => `/people/${p.id}`,
+                                    sort: list.sort,
+                                    onSortChange: list.setSort,
+                                    caption: 'People',
+                                }}
+                                renderRow={(p) => <PersonRow person={p} />}
+                            />
                         </>
                     )
                 }
