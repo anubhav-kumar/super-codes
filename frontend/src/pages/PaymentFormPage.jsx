@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import ClientIcon from '../components/ClientIcon.jsx';
+import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import DataView from '../components/DataView.jsx';
 import DateField from '../components/DateField.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -41,6 +42,19 @@ const MODES = [
 const text = (v) => (v === null || v === undefined ? '' : String(v));
 const orNull = (v) => (v.trim() === '' ? null : v.trim());
 const isNegative = (v) => String(v ?? '').trim().startsWith('-');
+
+/**
+ * How much a received payment is above the invoice's outstanding (0 when it is not, or the amount is
+ * not valid). Overpayments are allowed but need a confirm.
+ */
+function overpaidBy(form, mode, invoice) {
+    if (mode !== RECEIVED) return 0;
+    const amount = parseMoney(form.amount);
+    if (amount === null || Number.isNaN(amount) || isNegative(form.amount)) return 0;
+    const outstanding = Math.max(Number(invoice.outstanding) || 0, 0);
+    const over = Math.round((amount - outstanding) * 100) / 100;
+    return over > 0 ? over : 0;
+}
 
 /** The invoice's outstanding as the amount to prefill; empty when nothing is owed. */
 function outstandingAmount(invoice) {
@@ -197,6 +211,7 @@ function PaymentForm({ invoice, payment }) {
     const [form, setForm] = useState(() => toForm(payment, invoice));
     const [localErrors, setLocalErrors] = useState({});
     const [finishing, setFinishing] = useState(false);
+    const [confirmOver, setConfirmOver] = useState(false);
     const { submit, submitting, formError, fieldErrors, clearErrors } = useSubmit({ errorToast: true });
     const toast = useToast();
 
@@ -222,11 +237,25 @@ function PaymentForm({ invoice, payment }) {
         setSearchParams(params, { replace: true });
     };
 
-    const handleSubmit = async (e) => {
+    const outstanding = Math.max(Number(invoice.outstanding) || 0, 0);
+    const overBy = overpaidBy(form, mode, invoice);
+    const amountWarning = overBy > 0 ? `This is more than the ${formatMoney(outstanding, { paise: 'auto' })} outstanding.` : undefined;
+
+    const handleSubmit = (e) => {
         e.preventDefault();
         const errors = validate(form, mode);
         setLocalErrors(errors);
         if (Object.keys(errors).length) return;
+        // A received payment above the outstanding is saved only after an explicit confirm.
+        if (overBy > 0) {
+            setConfirmOver(true);
+            return;
+        }
+        save();
+    };
+
+    const save = async () => {
+        setConfirmOver(false);
         const body = toBody(form, mode);
         const result = await submit(() =>
             isEdit ? updatePayment(invoice.id, payment.id, body) : createPayment(invoice.id, { id: newId.current, ...body })
@@ -267,7 +296,15 @@ function PaymentForm({ invoice, payment }) {
             {mode === RECEIVED && (
                 <FormSection title="Payment received">
                     <FormRow>
-                        <MoneyField label="Amount" required placeholder="0.00" value={form.amount} onChange={set('amount')} error={errorOf('amount')} />
+                        <MoneyField
+                            label="Amount"
+                            required
+                            placeholder="0.00"
+                            value={form.amount}
+                            onChange={set('amount')}
+                            error={errorOf('amount')}
+                            warning={amountWarning}
+                        />
                         <DateField label="Payment date" required value={form.paymentDate} onChange={set('paymentDate')} error={errorOf('paymentDate')} />
                     </FormRow>
                     <TextField
@@ -330,6 +367,16 @@ function PaymentForm({ invoice, payment }) {
                     />
                 </FormSection>
             )}
+            <ConfirmDialog
+                open={confirmOver}
+                title={`Record ${formatMoney(parseMoney(form.amount), { paise: 'auto' })}?`}
+                text={`That is ${formatMoney(overBy, { paise: 'auto' })} more than the outstanding amount.`}
+                confirmLabel="Record payment"
+                cancelLabel="Change amount"
+                busy={submitting}
+                onConfirm={save}
+                onCancel={() => setConfirmOver(false)}
+            />
         </FormLayout>
     );
 }
