@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { APP_NAME } from '../config.js';
 import { activeNavItem, sortedNavItems } from '../navigation.js';
 import AccountMenu from './AccountMenu.jsx';
+import AppMark from './AppMark.jsx';
 import Icon from './Icon.jsx';
 import PageLoader from './PageLoader.jsx';
 
@@ -21,7 +22,7 @@ function NavItemLink({ item, active, layout }) {
               : 'text-ink-muted hover:text-ink';
     return (
         <NavLink to={item.to} end={item.to === '/'} aria-current={active ? 'page' : undefined} className={`${base} ${tone}`}>
-            <Icon name={item.icon} className={layout === 'sidebar' ? 'h-5 w-5' : 'h-6 w-6'} />
+            <Icon name={item.icon} />
             <span>{item.label}</span>
         </NavLink>
     );
@@ -50,7 +51,9 @@ export default function AppShell() {
     return (
         <div className="flex h-full min-h-0">
             <aside className="hidden w-60 shrink-0 flex-col border-r border-line bg-surface md:flex">
-                <div className="flex h-14 items-center px-5 text-base font-semibold text-ink">{APP_NAME}</div>
+                <div className="flex h-14 items-center px-5">
+                    <AppMark size={32} withWordmark />
+                </div>
                 <nav aria-label="Main" className="flex flex-col gap-1 px-3 py-2">
                     {items.map((item) => (
                         <NavItemLink key={item.id} item={item} active={active?.id === item.id} layout="sidebar" />
@@ -72,6 +75,7 @@ export default function AppShell() {
                     ) : (
                         <span className="w-2" />
                     )}
+                    {active?.id === 'home' && isTopLevel && <AppMark size={24} className="mr-2 md:hidden" />}
                     <p className="min-w-0 flex-1 truncate text-base font-semibold text-ink">
                         <span className="md:hidden">{active && active.id !== 'home' ? active.label : APP_NAME}</span>
                         <span className="hidden md:inline">{active ? active.label : ''}</span>

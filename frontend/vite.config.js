@@ -63,6 +63,7 @@ export default defineConfig(({ mode }) => {
             VitePWA({
                 registerType: 'prompt',
                 injectRegister: false, // registered from src/offline/serviceWorker.js
+                includeAssets: ['favicon.svg', 'favicon.ico', 'icons/apple-touch-icon.png', 'icons/app-mark.svg'],
                 manifest: {
                     name: appName,
                     short_name: appName,

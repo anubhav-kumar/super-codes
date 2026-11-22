@@ -47,7 +47,7 @@ export default function Button({
             {loading ? (
                 <span aria-hidden="true" className="h-4 w-4 animate-spin rounded-full border-2 border-current border-r-transparent" />
             ) : (
-                icon && <Icon name={icon} className="h-4 w-4" />
+                icon && <Icon name={icon} size="sm" />
             )}
             {!iconOnly && children}
         </>

@@ -140,7 +140,7 @@ function AssociationRows({ rows, setRows, rowErrors, fieldErrors, blockError }) 
                                         aria-label={`Remove person ${index + 1}`}
                                         className="flex h-9 w-9 items-center justify-center rounded-control text-ink-muted hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-accent"
                                     >
-                                        <Icon name="close" className="h-4 w-4" />
+                                        <Icon name="close" size="sm" />
                                     </button>
                                 )}
                             </div>

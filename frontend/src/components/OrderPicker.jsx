@@ -84,7 +84,7 @@ function OrderSheet({ title, hasValue, onPick, onClear, onClose }) {
                         aria-label="Close"
                         className="flex h-9 w-9 items-center justify-center rounded-control text-ink-muted hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-accent"
                     >
-                        <Icon name="close" className="h-5 w-5" />
+                        <Icon name="close" />
                     </button>
                 </div>
                 <div className="flex flex-col gap-2 px-4 pt-3 pb-2">
@@ -151,7 +151,7 @@ export default function OrderPicker({
                         'No related order'
                     )}
                 </span>
-                <Icon name="chevron-right" className="h-4 w-4 shrink-0 text-ink-muted" />
+                <Icon name="chevron-right" size="sm" className="shrink-0 text-ink-muted" />
             </button>
             <FieldMessage id={messageId} error={error} hint={hint} />
             {open && (

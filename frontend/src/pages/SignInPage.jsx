@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import Button from '../components/Button.jsx';
+import AppMark from '../components/AppMark.jsx';
 import FormError from '../components/FormError.jsx';
 import Icon from '../components/Icon.jsx';
 import TextField from '../components/TextField.jsx';
@@ -56,9 +57,7 @@ export default function SignInPage() {
         <main className="flex h-full overflow-y-auto">
             <div className="m-auto w-full max-w-sm px-4 py-10">
                 <div className="mb-8 text-center">
-                    <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-card bg-accent text-on-accent">
-                        <Icon name="invoices" className="h-6 w-6" />
-                    </span>
+                    <AppMark size={40} className="mb-4" />
                     <h1 className="text-2xl font-semibold text-ink">{APP_NAME}</h1>
                     <p className="mt-1 text-sm text-ink-muted">Sign in to continue</p>
                 </div>
@@ -71,7 +70,7 @@ export default function SignInPage() {
                     )}
                     {!online && (
                         <p role="status" className="flex items-start gap-2 rounded-control bg-surface-muted px-3 py-2.5 text-sm text-ink-muted">
-                            <Icon name="offline" className="mt-0.5 h-4 w-4 shrink-0" />
+                            <Icon name="offline" size="sm" className="mt-0.5 shrink-0" />
                             Sign in needs a connection. Connect and try again.
                         </p>
                     )}
@@ -109,7 +108,7 @@ export default function SignInPage() {
                                 aria-pressed={showPassword}
                                 className="flex h-10 w-10 items-center justify-center rounded-control text-ink-muted hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-accent"
                             >
-                                <Icon name={showPassword ? 'eye-off' : 'eye'} className="h-5 w-5" />
+                                <Icon name={showPassword ? 'eye-off' : 'eye'} />
                             </button>
                         }
                     />

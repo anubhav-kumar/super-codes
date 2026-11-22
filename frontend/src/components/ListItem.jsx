@@ -18,7 +18,7 @@ export default function ListItem({ to, title, subtitle, meta, badges, className 
                     {badges && <div className="flex flex-wrap justify-end gap-1">{badges}</div>}
                 </div>
             )}
-            <Icon name="chevron-right" className="h-4 w-4 shrink-0 text-ink-subtle" />
+            <Icon name="chevron-right" size="sm" className="shrink-0 text-ink-subtle" />
         </Link>
     );
 }

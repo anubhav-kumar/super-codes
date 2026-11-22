@@ -60,7 +60,7 @@ export default function AccountMenu() {
                             }}
                             className="flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-danger hover:bg-danger-bg focus-visible:bg-danger-bg focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
                         >
-                            <Icon name="sign-out" className="h-4 w-4" />
+                            <Icon name="sign-out" size="sm" />
                             Sign out
                         </button>
                     </div>

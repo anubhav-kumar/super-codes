@@ -4,7 +4,7 @@ import Icon from './Icon.jsx';
 export default function SearchInput({ value, onChange, placeholder = 'Search', className = '', label }) {
     return (
         <div className={`relative ${className}`}>
-            <Icon name="search" className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-ink-subtle" />
+            <Icon name="search" size="sm" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-ink-subtle" />
             <input
                 type="search"
                 value={value}
@@ -20,7 +20,7 @@ export default function SearchInput({ value, onChange, placeholder = 'Search', c
                     aria-label="Clear search"
                     className="absolute top-1/2 right-1 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-control text-ink-subtle hover:bg-surface-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
                 >
-                    <Icon name="close" className="h-4 w-4" />
+                    <Icon name="close" size="sm" />
                 </button>
             )}
         </div>

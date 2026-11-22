@@ -45,7 +45,7 @@ function AssociationRow({ association, isLast, online, open, onToggle, onChangeT
                     aria-label={`Actions for ${a.personName || 'this person'}`}
                     className="flex h-11 w-11 shrink-0 items-center justify-center rounded-control text-ink-muted hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-accent"
                 >
-                    <Icon name={open ? 'close' : 'more'} className="h-5 w-5" />
+                    <Icon name={open ? 'close' : 'more'} />
                 </button>
             </div>
             {open && (

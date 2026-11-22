@@ -18,7 +18,7 @@ export default function InstallButton({ className = '', variant = 'button', onIn
             : 'inline-flex min-h-11 items-center gap-2 rounded-control border border-line bg-surface px-4 text-sm font-medium text-ink shadow-raised hover:bg-surface-subtle';
     return (
         <button type="button" onClick={handleClick} className={`${classes} ${className}`}>
-            <Icon name="download" className="h-4 w-4 text-ink-subtle" />
+            <Icon name="download" size="sm" className="text-ink-subtle" />
             Install app
         </button>
     );
