@@ -15,6 +15,7 @@ import { createWorker, updateWorker } from '../api/workers.js';
 import { DESIGNATIONS, WORKER_STATUSES } from '../constants/workers.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import useSubmit from '../hooks/useSubmit.js';
+import useToast from '../hooks/useToast.js';
 import { useWorker } from '../hooks/useWorkers.js';
 import { isValidEmail, isValidPhone } from '../utils/validation.js';
 
@@ -60,7 +61,8 @@ function WorkerForm({ worker }) {
     const newId = useRef(isEdit ? null : crypto.randomUUID());
     const [form, setForm] = useState(() => toForm(worker));
     const [localErrors, setLocalErrors] = useState({});
-    const { submit, submitting, formError, fieldErrors } = useSubmit();
+    const { submit, submitting, formError, fieldErrors } = useSubmit({ errorToast: true });
+    const toast = useToast();
 
     const set = (field) => (value) => {
         setForm((f) => ({ ...f, [field]: value }));
@@ -77,7 +79,10 @@ function WorkerForm({ worker }) {
         const result = await submit(() =>
             isEdit ? updateWorker(worker.id, body) : createWorker({ id: newId.current, ...body })
         );
-        if (result.ok) navigate(`/workers/${isEdit ? worker.id : newId.current}`, { replace: true });
+        if (!result.ok) return;
+        const name = (result.data && result.data.name) || body.name;
+        toast.success(isEdit ? 'Changes saved' : name ? `${name} added` : 'Worker added');
+        navigate(`/workers/${isEdit ? worker.id : newId.current}`, { replace: true });
     };
 
     const cancelTo = isEdit ? `/workers/${worker.id}` : '/workers';
@@ -123,7 +128,7 @@ function WorkerForm({ worker }) {
 
 function EditWorker({ workerId }) {
     const worker = useWorker(workerId);
-    return <DataView resource={worker}>{(w) => <WorkerForm worker={w} />}</DataView>;
+    return <DataView resource={worker} skeleton="form">{(w) => <WorkerForm worker={w} />}</DataView>;
 }
 
 /** Add worker (/workers/new) and Edit worker (/workers/:workerId/edit), F-04. Online only. */

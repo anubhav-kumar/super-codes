@@ -6,7 +6,7 @@ import AccountMenu from './AccountMenu.jsx';
 import AppMark from './AppMark.jsx';
 import Icon from './Icon.jsx';
 import PageBody from './PageBody.jsx';
-import PageLoader from './PageLoader.jsx';
+import PageSkeleton from './PageSkeleton.jsx';
 import ShellHeaderContext from './ShellHeaderContext.js';
 import Tooltip from './Tooltip.jsx';
 
@@ -127,7 +127,7 @@ export default function AppShell() {
                         <Suspense
                             fallback={
                                 <PageBody>
-                                    <PageLoader />
+                                    <PageSkeleton variant="list" />
                                 </PageBody>
                             }
                         >

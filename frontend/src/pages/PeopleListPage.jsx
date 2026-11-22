@@ -34,7 +34,7 @@ export default function PeopleListPage() {
             />
             {!online && <OfflineActionHint className="mb-4" />}
 
-            <DataView resource={people}>
+            <DataView resource={people} skeleton="rows">
                 {(items) =>
                     !items || items.length === 0 ? (
                         <EmptyState

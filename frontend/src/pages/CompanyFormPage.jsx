@@ -19,6 +19,7 @@ import { COMPANY_LIMITS, ENTITY_TYPES, RELATIONSHIP_TYPES } from '../constants/c
 import { useCompany } from '../hooks/useCompanies.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import useSubmit from '../hooks/useSubmit.js';
+import useToast from '../hooks/useToast.js';
 import { isValidEmail, isValidPan, isValidPhone, normalizePan } from '../utils/validation.js';
 
 const GSTIN_RE = /^[0-9A-Z]{15}$/;
@@ -187,7 +188,8 @@ function CompanyForm({ company }) {
     const [localErrors, setLocalErrors] = useState({});
     const [rowErrors, setRowErrors] = useState({ rows: {}, block: null });
     const [panTaken, setPanTaken] = useState(null);
-    const { submit, submitting, formError, fieldErrors } = useSubmit();
+    const { submit, submitting, formError, fieldErrors } = useSubmit({ errorToast: true });
+    const toast = useToast();
 
     const set = (field) => (value) => {
         setValues((v) => ({ ...v, [field]: value }));
@@ -221,6 +223,8 @@ function CompanyForm({ company }) {
         );
         if (result.ok) {
             const id = (result.data && result.data.id) || (isEdit ? company.id : newId);
+            const name = (result.data && result.data.name) || body.name;
+            toast.success(isEdit ? 'Changes saved' : name ? `${name} added` : 'Company added');
             navigate(`/companies/${id}`, { replace: true });
         } else if (result.error && result.error.code === 'PAN_TAKEN') {
             setPanTaken(result.error.message || 'A company with this PAN already exists');
@@ -347,7 +351,7 @@ function NeedsConnection() {
 
 function EditCompany({ companyId }) {
     const company = useCompany(companyId);
-    return <DataView resource={company}>{(c) => <CompanyForm key={c.id} company={c} />}</DataView>;
+    return <DataView resource={company} skeleton="form">{(c) => <CompanyForm key={c.id} company={c} />}</DataView>;
 }
 
 /** Add company (/companies/new) and Edit company (/companies/:companyId/edit), F-03. Online only. */

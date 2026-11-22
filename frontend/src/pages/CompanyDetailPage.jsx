@@ -7,7 +7,6 @@ import ClientOrdersSection from '../components/ClientOrdersSection.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import DataView from '../components/DataView.jsx';
 import DetailField from '../components/DetailField.jsx';
-import FormError from '../components/FormError.jsx';
 import Icon from '../components/Icon.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
 import PageBody from '../components/PageBody.jsx';
@@ -19,12 +18,27 @@ import { removeAssociation, updateAssociation } from '../api/companies.js';
 import { entityTypeLabel, RELATIONSHIP_TYPES, relationshipLabel } from '../constants/clients.js';
 import { useCompany } from '../hooks/useCompanies.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
-import useSubmit from '../hooks/useSubmit.js';
+import useInlineSave from '../hooks/useInlineSave.js';
+import useSubmit, { OFFLINE_SAVE_MESSAGE } from '../hooks/useSubmit.js';
+import useToast from '../hooks/useToast.js';
 
 const LAST_LINK_HINT = 'A company needs at least one person.';
 
-function AssociationRow({ association, isLast, online, open, onToggle, onChangeType, onRemove, saving }) {
+function AssociationRow({ association, companyId, isLast, online, open, onToggle, onChanged, onRemove, removing }) {
     const a = association;
+    const name = a.personName || 'This person';
+    const relationship = useInlineSave(a.relationshipType);
+    const saving = relationship.saving || removing;
+
+    // Optimistic: the row shows the new relationship at once and rolls back with an error toast on failure.
+    const changeType = async (value) => {
+        if (!value || value === relationship.value) return;
+        const result = await relationship.save(value, () => updateAssociation(companyId, a.personId, value), {
+            success: `${name} is now ${relationshipLabel(value)}`,
+        });
+        if (result.ok) onChanged();
+    };
+
     return (
         <li>
             <div className="flex min-h-14 items-center gap-2 pr-2">
@@ -35,7 +49,7 @@ function AssociationRow({ association, isLast, online, open, onToggle, onChangeT
                     <span className="min-w-0 flex-1">
                         <span className="block truncate font-medium text-ink">{a.personName || 'Unknown person'}</span>
                         <span className="block truncate text-sm text-ink-muted">
-                            {relationshipLabel(a.relationshipType)}
+                            {relationshipLabel(relationship.value)}
                             {a.personPhone ? ` · ${a.personPhone}` : ''}
                         </span>
                     </span>
@@ -55,12 +69,13 @@ function AssociationRow({ association, isLast, online, open, onToggle, onChangeT
                     <SelectField
                         label="Change relationship"
                         options={RELATIONSHIP_TYPES}
-                        value={a.relationshipType}
+                        value={relationship.value}
                         disabled={!online || saving}
-                        onChange={(value) => value && value !== a.relationshipType && onChangeType(value)}
+                        hint={relationship.saving ? 'Saving…' : undefined}
+                        onChange={changeType}
                     />
                     <div className="flex flex-wrap items-center gap-3">
-                        <Button variant="secondary" size="sm" disabled={!online || isLast || saving} onClick={onRemove}>
+                        <Button variant="secondary" size="sm" disabled={!online || isLast || saving} loading={removing} onClick={onRemove}>
                             Remove link
                         </Button>
                         {isLast && <span className="text-sm text-ink-muted">{LAST_LINK_HINT}</span>}
@@ -76,25 +91,26 @@ function CompanyPeopleSection({ company, online, reload }) {
     const associations = company.associations || [];
     const [openId, setOpenId] = useState(null);
     const [confirm, setConfirm] = useState(null);
-    const change = useSubmit();
     const remove = useSubmit();
+    const toast = useToast();
     const isLast = associations.length <= 1;
-
-    const onChangeType = async (personId, relationshipType) => {
-        const result = await change.submit(() => updateAssociation(company.id, personId, relationshipType));
-        if (result.ok) reload();
-    };
 
     const onConfirmRemove = async () => {
         const target = confirm;
+        const name = target.personName || 'This person';
         const result = await remove.submit(() => removeAssociation(company.id, target.personId));
         setConfirm(null);
-        // 404: already removed (e.g. a retry after a dropped connection) -> just refresh.
+        // 404: already removed (e.g. a retry after a dropped connection) -> treat as done and refresh.
         if (result.ok || (result.error && result.error.status === 404)) {
             remove.clearErrors();
+            toast.success(`${name} unlinked from ${company.name}`);
             setOpenId(null);
             reload();
+            return;
         }
+        // The row stays as it was; one error toast says why.
+        const error = result.error;
+        toast.error(!error || error.offline ? OFFLINE_SAVE_MESSAGE : error.message || "Couldn't remove the link");
     };
 
     return (
@@ -108,11 +124,6 @@ function CompanyPeopleSection({ company, online, reload }) {
                     </Button>
                 }
             >
-                {(change.formError || remove.formError) && (
-                    <div className="px-4 pb-3">
-                        <FormError message={remove.formError || change.formError} />
-                    </div>
-                )}
                 {associations.length === 0 ? (
                     <p className="px-4 pb-4 text-sm text-ink-muted">No people linked yet.</p>
                 ) : (
@@ -121,12 +132,13 @@ function CompanyPeopleSection({ company, online, reload }) {
                             <AssociationRow
                                 key={a.personId}
                                 association={a}
+                                companyId={company.id}
                                 isLast={isLast}
                                 online={online}
                                 open={openId === a.personId}
-                                saving={change.submitting || remove.submitting}
+                                removing={remove.submitting && confirm?.personId === a.personId}
                                 onToggle={() => setOpenId((id) => (id === a.personId ? null : a.personId))}
-                                onChangeType={(type) => onChangeType(a.personId, type)}
+                                onChanged={reload}
                                 onRemove={() => setConfirm(a)}
                             />
                         ))}
@@ -159,7 +171,7 @@ export default function CompanyDetailPage() {
     return (
         <PageBody width="detail">
             <PageHeader backTo="/companies" backLabel="Companies" />
-            <DataView resource={company}>
+            <DataView resource={company} skeleton="detail">
                 {(c) => (
                     <>
                         <PageTitle

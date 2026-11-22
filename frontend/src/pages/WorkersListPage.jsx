@@ -91,7 +91,7 @@ export default function WorkersListPage() {
             />
             {!online && <OfflineActionHint className="mb-4" />}
             <SegmentedControl label="Status" options={WORKER_FILTERS} value={filter} onChange={setFilter} className="mb-3" />
-            <DataView resource={workers}>
+            <DataView resource={workers} skeleton="rows">
                 {(data) => (
                     <WorkerRows workers={data || []} filtered={filtered} query={query} setQuery={setQuery} filter={filter} addDisabled={!online} />
                 )}

@@ -106,7 +106,7 @@ export default function OrdersListPage() {
             />
             {!online && <OfflineActionHint className="mb-4" />}
             <SegmentedControl label="Status" options={ORDER_FILTERS} value={filter} onChange={setFilter} className="mb-3" />
-            <DataView resource={orders}>
+            <DataView resource={orders} skeleton="rows">
                 {(data) => (
                     <OrderRows orders={data || []} filtered={filtered} query={query} setQuery={setQuery} filter={filter} addDisabled={!online} />
                 )}

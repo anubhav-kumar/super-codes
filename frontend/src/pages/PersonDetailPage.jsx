@@ -27,7 +27,7 @@ export default function PersonDetailPage() {
     return (
         <PageBody width="detail">
             <PageHeader backTo="/people" backLabel="People" />
-            <DataView resource={person}>
+            <DataView resource={person} skeleton="detail">
                 {(p) => (
                     <>
                         <PageTitle

@@ -116,7 +116,7 @@ export default function InvoicesListPage() {
             />
             {!online && <OfflineActionHint className="mb-4" />}
             <SegmentedControl label="Filter" options={FILTER_OPTIONS} value={filter} onChange={setFilter} className="mb-3" />
-            <DataView resource={invoices}>
+            <DataView resource={invoices} skeleton="rows">
                 {(data) => (
                     <InvoiceRows invoices={data || []} filtered={filtered} query={query} setQuery={setQuery} filter={filter} addDisabled={!online} />
                 )}

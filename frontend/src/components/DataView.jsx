@@ -1,20 +1,24 @@
 import StaleDataNotice from './offline/StaleDataNotice.jsx';
 import EmptyState from './EmptyState.jsx';
-import PageLoader from './PageLoader.jsx';
+import PageSkeleton from './PageSkeleton.jsx';
 
 /**
  * Renders the four data-screen states for a useResource() result:
- *   loading      -> PageLoader
+ *   loading      -> PageSkeleton shaped like the screen (`skeleton`: list, rows, table, detail, form, home)
  *   loaded       -> children (a node, or a function of data)
  *   stale        -> StaleDataNotice above the children
  *   unavailable  -> "Not available offline" with Try again
  *   error        -> the error message with Try again
  * `compact` renders smaller states for a section inside a page.
  */
-export default function DataView({ resource, children, compact = false, loaderRows }) {
+export default function DataView({ resource, children, compact = false, loaderRows, skeleton }) {
     const { status, data, fromCache, fetchedAt, error, reload } = resource;
 
-    if (status === 'loading') return <PageLoader rows={loaderRows ?? (compact ? 2 : 4)} />;
+    if (status === 'loading') {
+        if (compact) return <PageSkeleton variant="rows" rows={loaderRows ?? 2} framed={false} />;
+        if (!skeleton) return <PageSkeleton variant="rows" rows={loaderRows ?? 4} />;
+        return <PageSkeleton variant={skeleton} rows={loaderRows} />;
+    }
 
     if (status === 'unavailable') {
         return (

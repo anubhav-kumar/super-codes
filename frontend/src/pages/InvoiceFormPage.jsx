@@ -21,6 +21,7 @@ import { useInvoice } from '../hooks/useInvoices.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useOrder } from '../hooks/useOrders.js';
 import useSubmit from '../hooks/useSubmit.js';
+import useToast from '../hooks/useToast.js';
 import { formatDate, formatMoney } from '../utils/format.js';
 import { parseMoney } from '../utils/validation.js';
 
@@ -140,7 +141,8 @@ function InvoiceForm({ invoice, prefillOrderId }) {
     const [form, setForm] = useState(() => toForm(invoice));
     const [localErrors, setLocalErrors] = useState({});
     const [confirmCancel, setConfirmCancel] = useState(false);
-    const { submit, submitting, formError, fieldErrors } = useSubmit();
+    const { submit, submitting, formError, fieldErrors } = useSubmit({ errorToast: true });
+    const toast = useToast();
     const prefill = useOrderPrefill(isEdit ? null : prefillOrderId, setForm);
 
     const clearError = (field) => {
@@ -157,7 +159,14 @@ function InvoiceForm({ invoice, prefillOrderId }) {
         setConfirmCancel(false);
         const body = toBody(form, isEdit);
         const result = await submit(() => (isEdit ? updateInvoice(invoice.id, body) : createInvoice({ id: newId.current, ...body })));
-        if (result.ok) navigate(`/invoices/${isEdit ? invoice.id : newId.current}`, { replace: true });
+        if (!result.ok) return;
+        if (isEdit) {
+            toast.success('Changes saved');
+        } else {
+            const number = result.data && result.data.invoiceNumber;
+            toast.success(number ? `Invoice ${number} saved as draft` : 'Invoice saved as draft');
+        }
+        navigate(`/invoices/${isEdit ? invoice.id : newId.current}`, { replace: true });
     };
 
     const handleSubmit = (e) => {
@@ -242,7 +251,7 @@ function InvoiceForm({ invoice, prefillOrderId }) {
 
 function EditInvoice({ invoiceId }) {
     const invoice = useInvoice(invoiceId);
-    return <DataView resource={invoice}>{(i) => <InvoiceForm invoice={i} />}</DataView>;
+    return <DataView resource={invoice} skeleton="form">{(i) => <InvoiceForm invoice={i} />}</DataView>;
 }
 
 /** New invoice (/invoices/new, ?orderId= prefill) and Edit invoice (/invoices/:invoiceId/edit), F-06. Online only. */

@@ -16,6 +16,7 @@ import { PERSON_LIMITS } from '../constants/clients.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { usePerson } from '../hooks/usePeople.js';
 import useSubmit from '../hooks/useSubmit.js';
+import useToast from '../hooks/useToast.js';
 import { isValidEmail, isValidPan, isValidPhone, normalizePan } from '../utils/validation.js';
 
 const EMPTY = { name: '', isIndividualClient: false, pan: '', email: '', phone: '', address: '', notes: '' };
@@ -76,7 +77,8 @@ function PersonForm({ person }) {
     const [values, setValues] = useState(() => (person ? toValues(person) : EMPTY));
     const [localErrors, setLocalErrors] = useState({});
     const [panTaken, setPanTaken] = useState(null);
-    const { submit, submitting, formError, fieldErrors } = useSubmit();
+    const { submit, submitting, formError, fieldErrors } = useSubmit({ errorToast: true });
+    const toast = useToast();
 
     const set = (field) => (value) => {
         setValues((v) => ({ ...v, [field]: value }));
@@ -96,6 +98,8 @@ function PersonForm({ person }) {
         const result = await submit(() => (isEdit ? updatePerson(person.id, body) : createPerson({ id: newId, ...body })));
         if (result.ok) {
             const id = (result.data && result.data.id) || (isEdit ? person.id : newId);
+            const name = (result.data && result.data.name) || body.name;
+            toast.success(isEdit ? 'Changes saved' : name ? `${name} added` : 'Person added');
             navigate(`/people/${id}`, { replace: true });
         } else if (result.error && result.error.code === 'PAN_TAKEN') {
             setPanTaken(result.error.message || 'A person with this PAN already exists');
@@ -199,7 +203,7 @@ function NeedsConnection() {
 
 function EditPerson({ personId }) {
     const person = usePerson(personId);
-    return <DataView resource={person}>{(p) => <PersonForm key={p.id} person={p} />}</DataView>;
+    return <DataView resource={person} skeleton="form">{(p) => <PersonForm key={p.id} person={p} />}</DataView>;
 }
 
 /** Add person (/people/new) and Edit person (/people/:personId/edit), F-02. Online only. */

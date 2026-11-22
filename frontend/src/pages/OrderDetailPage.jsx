@@ -4,7 +4,6 @@ import Button from '../components/Button.jsx';
 import Card from '../components/Card.jsx';
 import DataView from '../components/DataView.jsx';
 import DetailField from '../components/DetailField.jsx';
-import FormError from '../components/FormError.jsx';
 import OrderInvoicesSection from '../components/OrderInvoicesSection.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
 import PageBody from '../components/PageBody.jsx';
@@ -16,7 +15,7 @@ import { orderUpdateBody, updateOrder } from '../api/orders.js';
 import { clientPath, ORDER_STATUSES, ORDER_STATUS_TONE, orderStatusLabel } from '../constants/orders.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useOrder } from '../hooks/useOrders.js';
-import useSubmit from '../hooks/useSubmit.js';
+import useInlineSave from '../hooks/useInlineSave.js';
 import { formatDate, formatMoney } from '../utils/format.js';
 import Tag from '../components/Tag.jsx';
 
@@ -24,27 +23,27 @@ const linkClass = 'text-ink underline-offset-2 hover:underline focus-visible:und
 
 function StatusChanger({ order, onSaved }) {
     const { online } = useOnlineStatus();
-    const { submit, submitting, formError } = useSubmit();
+    const status = useInlineSave(order.status);
 
+    // Optimistic: the select shows the new status at once and rolls back with an error toast on failure.
     // PUT needs the full field set; everything except status is sent back as loaded.
-    const change = async (status) => {
-        if (!status || status === order.status) return;
-        const result = await submit(() => updateOrder(order.id, orderUpdateBody(order, { status })));
+    const change = async (next) => {
+        if (!next || next === status.value) return;
+        const result = await status.save(next, () => updateOrder(order.id, orderUpdateBody(order, { status: next })), {
+            success: `Status changed to ${orderStatusLabel(next)}`,
+        });
         if (result.ok) onSaved();
     };
 
     return (
-        <div className="flex flex-col gap-2">
-            <SelectField
-                label="Change status"
-                options={ORDER_STATUSES}
-                value={order.status}
-                onChange={change}
-                disabled={!online || submitting}
-                hint={submitting ? 'Saving…' : undefined}
-            />
-            <FormError message={formError} />
-        </div>
+        <SelectField
+            label="Change status"
+            options={ORDER_STATUSES}
+            value={status.value}
+            onChange={change}
+            disabled={!online || status.saving}
+            hint={status.saving ? 'Saving…' : undefined}
+        />
     );
 }
 
@@ -152,7 +151,7 @@ export default function OrderDetailPage() {
     return (
         <PageBody width="detail">
             <PageHeader backTo="/orders" backLabel="Orders" />
-            <DataView resource={order}>{(o) => <OrderDetail order={o} reload={order.reload} />}</DataView>
+            <DataView resource={order} skeleton="detail">{(o) => <OrderDetail order={o} reload={order.reload} />}</DataView>
         </PageBody>
     );
 }

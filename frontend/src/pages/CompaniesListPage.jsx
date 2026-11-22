@@ -34,7 +34,7 @@ export default function CompaniesListPage() {
             />
             {!online && <OfflineActionHint className="mb-4" />}
 
-            <DataView resource={companies}>
+            <DataView resource={companies} skeleton="rows">
                 {(items) =>
                     !items || items.length === 0 ? (
                         <EmptyState

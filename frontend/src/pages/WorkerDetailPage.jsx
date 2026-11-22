@@ -22,7 +22,7 @@ export default function WorkerDetailPage() {
     return (
         <PageBody width="detail">
             <PageHeader backTo="/workers" backLabel="Workers" />
-            <DataView resource={worker}>
+            <DataView resource={worker} skeleton="detail">
                 {(w) => (
                     <>
                         <PageTitle

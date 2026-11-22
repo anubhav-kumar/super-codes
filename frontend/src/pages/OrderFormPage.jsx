@@ -22,6 +22,7 @@ import { useCompanyPeople } from '../hooks/useCompanies.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useOrder } from '../hooks/useOrders.js';
 import useSubmit from '../hooks/useSubmit.js';
+import useToast from '../hooks/useToast.js';
 import { formatDate } from '../utils/format.js';
 import { parseMoney } from '../utils/validation.js';
 
@@ -127,7 +128,8 @@ function OrderForm({ order }) {
     const newId = useRef(isEdit ? null : crypto.randomUUID());
     const [form, setForm] = useState(() => toForm(order));
     const [localErrors, setLocalErrors] = useState({});
-    const { submit, submitting, formError, fieldErrors } = useSubmit();
+    const { submit, submitting, formError, fieldErrors } = useSubmit({ errorToast: true });
+    const toast = useToast();
 
     const companyId = form.client && form.client.type === 'COMPANY' ? form.client.id : null;
     const companyPeople = useCompanyPeople(companyId);
@@ -176,7 +178,17 @@ function OrderForm({ order }) {
         if (Object.keys(errors).length) return;
         const body = toBody(form, isEdit);
         const result = await submit(() => (isEdit ? updateOrder(order.id, body) : createOrder({ id: newId.current, ...body })));
-        if (result.ok) navigate(`/orders/${isEdit ? order.id : newId.current}`, { replace: true });
+        if (!result.ok) return;
+        const id = isEdit ? order.id : newId.current;
+        if (isEdit) {
+            toast.success('Changes saved');
+        } else {
+            const number = result.data && result.data.orderNumber;
+            toast.success(number ? `Order ${number} created` : 'Order created', {
+                action: { label: 'Raise invoice', to: `/invoices/new?orderId=${encodeURIComponent(id)}` },
+            });
+        }
+        navigate(`/orders/${id}`, { replace: true });
     };
 
     const cancelTo = isEdit ? `/orders/${order.id}` : '/orders';
@@ -235,7 +247,7 @@ function OrderForm({ order }) {
 
 function EditOrder({ orderId }) {
     const order = useOrder(orderId);
-    return <DataView resource={order}>{(o) => <OrderForm order={o} />}</DataView>;
+    return <DataView resource={order} skeleton="form">{(o) => <OrderForm order={o} />}</DataView>;
 }
 
 /** New order (/orders/new) and Edit order (/orders/:orderId/edit), F-05. Online only. */

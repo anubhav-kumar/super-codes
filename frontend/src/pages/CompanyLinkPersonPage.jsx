@@ -8,13 +8,14 @@ import FormFooter from '../components/FormFooter.jsx';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import PageTitle from '../components/PageTitle.jsx';
-import PersonPicker, { pickedPersonId, toAssociationInput } from '../components/PersonPicker.jsx';
+import PersonPicker, { pickedPersonId, pickedPersonName, toAssociationInput } from '../components/PersonPicker.jsx';
 import SelectField from '../components/SelectField.jsx';
 import { addAssociation } from '../api/companies.js';
 import { RELATIONSHIP_TYPES } from '../constants/clients.js';
 import { useCompany } from '../hooks/useCompanies.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
-import useSubmit from '../hooks/useSubmit.js';
+import useSubmit, { OFFLINE_SAVE_MESSAGE } from '../hooks/useSubmit.js';
+import useToast from '../hooks/useToast.js';
 
 const ALREADY_LINKED = 'This person is already linked to this company';
 
@@ -24,6 +25,7 @@ function LinkPersonForm({ company }) {
     const [relationshipType, setRelationshipType] = useState('');
     const [errors, setErrors] = useState({});
     const { submit, submitting, formError, fieldErrors, clearErrors } = useSubmit();
+    const toast = useToast();
     // Set when a save failed because the connection dropped; the server may have written it anyway.
     const retrying = useRef(false);
     const linkedIds = (company.associations || []).map((a) => a.personId);
@@ -38,9 +40,14 @@ function LinkPersonForm({ company }) {
         setErrors(next);
         if (Object.keys(next).length) return;
 
+        const name = pickedPersonName(person);
+        const succeeded = () => {
+            toast.success(name ? `${name} linked to ${company.name}` : 'Person linked');
+            navigate(detailPath, { replace: true });
+        };
         const result = await submit(() => addAssociation(company.id, toAssociationInput(person, relationshipType)));
         if (result.ok) {
-            navigate(detailPath, { replace: true });
+            succeeded();
             return;
         }
         const error = result.error;
@@ -48,11 +55,13 @@ function LinkPersonForm({ company }) {
             // A retried save whose first attempt reached the server: treat as success (contract F-03).
             if (retrying.current) {
                 clearErrors();
-                navigate(detailPath, { replace: true });
+                succeeded();
                 return;
             }
             setErrors({ person: error.message || ALREADY_LINKED });
         }
+        // One error toast per failed save (the message is also in the banner or under the person field).
+        toast.error(!error || error.offline ? OFFLINE_SAVE_MESSAGE : error.message || 'Something went wrong');
         if (!error || error.offline) retrying.current = true;
     };
 
@@ -119,7 +128,7 @@ export default function CompanyLinkPersonPage() {
                     action={{ label: 'Go back', onClick: () => navigate(-1) }}
                 />
             ) : (
-                <DataView resource={company}>{(c) => <LinkPersonForm key={c.id} company={c} />}</DataView>
+                <DataView resource={company} skeleton="form">{(c) => <LinkPersonForm key={c.id} company={c} />}</DataView>
             )}
         </PageBody>
     );

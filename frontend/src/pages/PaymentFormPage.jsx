@@ -16,6 +16,7 @@ import { PAYMENT_LIMITS, PAYMENT_STATUSES } from '../constants/payments.js';
 import { useInvoice } from '../hooks/useInvoices.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import useSubmit from '../hooks/useSubmit.js';
+import useToast from '../hooks/useToast.js';
 import { formatDate, formatMoney } from '../utils/format.js';
 import { parseMoney } from '../utils/validation.js';
 
@@ -74,7 +75,8 @@ function PaymentForm({ invoice, payment }) {
     const newId = useRef(isEdit ? null : crypto.randomUUID());
     const [form, setForm] = useState(() => toForm(payment));
     const [localErrors, setLocalErrors] = useState({});
-    const { submit, submitting, formError, fieldErrors } = useSubmit();
+    const { submit, submitting, formError, fieldErrors } = useSubmit({ errorToast: true });
+    const toast = useToast();
 
     const set = (field) => (value) => {
         setForm((f) => {
@@ -99,7 +101,9 @@ function PaymentForm({ invoice, payment }) {
             isEdit ? updatePayment(invoice.id, payment.id, body) : createPayment(invoice.id, { id: newId.current, ...body })
         );
         // The invoice detail remounts and refetches, so received, outstanding and status update.
-        if (result.ok) navigate(`/invoices/${invoice.id}`, { replace: true });
+        if (!result.ok) return;
+        toast.success(isEdit ? 'Changes saved' : 'Payment saved');
+        navigate(`/invoices/${invoice.id}`, { replace: true });
     };
 
     return (
@@ -214,7 +218,7 @@ export default function PaymentFormPage() {
         <PageBody width="form">
             <PageHeader backTo={`/invoices/${invoiceId}`} backLabel="Invoice" />
             <PageTitle title={title} />
-            <DataView resource={invoice}>{(i) => <PaymentFormContent invoice={i} paymentId={paymentId} />}</DataView>
+            <DataView resource={invoice} skeleton="form">{(i) => <PaymentFormContent invoice={i} paymentId={paymentId} />}</DataView>
         </PageBody>
     );
 }

@@ -87,7 +87,7 @@ export default function InvoiceDetailPage() {
     return (
         <PageBody width="detail">
             <PageHeader backTo="/invoices" backLabel="Invoices" />
-            <DataView resource={invoice}>{(i) => <InvoiceDetail invoice={i} reload={invoice.reload} />}</DataView>
+            <DataView resource={invoice} skeleton="detail">{(i) => <InvoiceDetail invoice={i} reload={invoice.reload} />}</DataView>
         </PageBody>
     );
 }
