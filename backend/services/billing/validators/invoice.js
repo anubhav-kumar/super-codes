@@ -5,11 +5,19 @@ const { validators, errors } = require('common');
 const BASE_STATUSES = ['DRAFT', 'ISSUED', 'CANCELLED'];
 const DISPLAYED_STATUS_FILTERS = ['DRAFT', 'ISSUED', 'PARTIALLY_PAID', 'PAID', 'OVERDUE', 'CANCELLED', 'UNPAID'];
 const BILLED_TO_TYPES = ['PERSON', 'COMPANY'];
+const CREATE_BASE_STATUSES = ['DRAFT', 'ISSUED'];
+const DEFAULT_DUE_DAYS = 15;
 
 const { check, normalizeString, parseDate, parseMoney, parseEnum, isUuidV4, todayIst } = validators;
 
 function isBlank(value) {
     return value === undefined || value === null || (typeof value === 'string' && value.trim() === '');
+}
+
+/** Adds whole calendar days to a YYYY-MM-DD string using UTC date math. */
+function addDays(date, days) {
+    const [y, m, d] = date.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
 function parseReferenceId(details, field, value, { required, requiredMessage }) {
@@ -28,9 +36,10 @@ function parseReferenceId(details, field, value, { required, requiredMessage }) 
  * Validates a create (isCreate) or update body and returns normalized fields:
  * { id?, billedToType, billedToId, orderId, invoiceDate, dueDate, description, amountPaise,
  *   taxPaise, totalPaise, baseStatus }.
- * Create: baseStatus is ignored (always DRAFT), invoiceDate defaults to today IST.
- * Update: invoiceDate and baseStatus are required.
- * Both: dueDate required and >= invoiceDate; amount required and > 0; tax defaults to 0.
+ * Create: baseStatus DRAFT or ISSUED (default DRAFT); invoiceDate defaults to today IST;
+ *   dueDate defaults to invoiceDate + 15 days.
+ * Update: invoiceDate, dueDate and baseStatus are required.
+ * Both: dueDate (when given) >= invoiceDate; amount required and > 0; tax defaults to 0.
  * Any "total" in the body is ignored; totalPaise = amountPaise + taxPaise.
  * Throws 400 VALIDATION_FAILED listing every failing field.
  */
@@ -65,9 +74,12 @@ function parseInvoice(body, { isCreate }) {
     if (isCreate && out.invoiceDate === null) out.invoiceDate = todayIst();
 
     out.dueDate = check(details, 'dueDate', () => parseDate(body.dueDate), {
-        required: true,
+        required: !isCreate,
         requiredMessage: 'Due date is required',
     });
+    if (isCreate && out.dueDate === null && typeof out.invoiceDate === 'string') {
+        out.dueDate = addDays(out.invoiceDate, DEFAULT_DUE_DAYS);
+    }
     if (typeof out.invoiceDate === 'string' && typeof out.dueDate === 'string' && out.dueDate < out.invoiceDate) {
         details.push({ field: 'dueDate', message: 'Due date cannot be before the invoice date' });
     }
@@ -88,7 +100,10 @@ function parseInvoice(body, { isCreate }) {
     if (out.taxPaise === null) out.taxPaise = 0;
 
     if (isCreate) {
-        out.baseStatus = 'DRAFT';
+        out.baseStatus = check(details, 'baseStatus', () =>
+            parseEnum(body.baseStatus, CREATE_BASE_STATUSES, 'Status')
+        );
+        if (out.baseStatus === null) out.baseStatus = 'DRAFT';
     } else {
         out.baseStatus = check(details, 'baseStatus', () => parseEnum(body.baseStatus, BASE_STATUSES, 'Status'), {
             required: true,

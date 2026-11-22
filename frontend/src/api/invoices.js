@@ -39,7 +39,9 @@ export function getInvoice(id, { signal } = {}) {
 
 /**
  * POST /billing/invoices with a client-generated UUID in body.id -> 201 Invoice detail with
- * invoiceNumber and baseStatus DRAFT (200 with the existing invoice when that id already exists).
+ * invoiceNumber. body.baseStatus 'DRAFT' (default) or 'ISSUED' ("Save and issue", F-25);
+ * dueDate optional (server default: invoice date + 15 days). 200 with the existing invoice (its
+ * stored baseStatus) when that id already exists.
  */
 export function createInvoice(body) {
     return request('/billing/invoices', { method: 'POST', body });
@@ -48,6 +50,24 @@ export function createInvoice(body) {
 /** PUT /billing/invoices/{id} with the full editable field set, including baseStatus. */
 export function updateInvoice(id, body) {
     return request(`/billing/invoices/${enc(id)}`, { method: 'PUT', body });
+}
+
+/**
+ * Changes only the base status of an invoice (F-25 "Issue invoice", "Cancel invoice"): PUT with the
+ * invoice's current editable fields, since PUT clears omitted optional fields.
+ */
+export function setInvoiceBaseStatus(invoice, baseStatus) {
+    return updateInvoice(invoice.id, {
+        billedToType: invoice.billedTo ? invoice.billedTo.type : invoice.billedToType,
+        billedToId: invoice.billedTo ? invoice.billedTo.id : invoice.billedToId,
+        orderId: invoice.order && invoice.order.id ? invoice.order.id : null,
+        invoiceDate: invoice.invoiceDate,
+        dueDate: invoice.dueDate,
+        description: invoice.description || null,
+        amount: invoice.amount,
+        tax: invoice.tax === null || invoice.tax === undefined ? 0 : invoice.tax,
+        baseStatus,
+    });
 }
 
 /**

@@ -10,7 +10,15 @@ import Icon from './Icon.jsx';
 import SearchInput from './SearchInput.jsx';
 import RecordNo from './RecordNo.jsx';
 
-/** Value shape: { id, orderNumber, clientName } or null. */
+/** Value shape: { id, orderNumber, serviceName, clientName } or null (serviceName / clientName may be null). */
+
+/** Picker value for an Order (list item or detail). */
+export const orderPickerValue = (o) => ({
+    id: o.id,
+    orderNumber: o.orderNumber,
+    serviceName: o.serviceName || null,
+    clientName: (o.client && o.client.name) || null,
+});
 
 const SEARCH_FIELDS = ['orderNumber', 'serviceName', (o) => (o.client && o.client.name) || ''];
 
@@ -38,11 +46,11 @@ function OrderRows({ orders, query, setQuery, onPick }) {
                         className="flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-surface-subtle focus-visible:bg-surface-subtle focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
                     >
                         <span className="min-w-0 flex-1">
-                            <span className="block truncate font-medium text-ink">
-                                <span>{(o.client && o.client.name) || 'Unknown client'}</span>
-                                <RecordNo className="ml-2">{o.orderNumber}</RecordNo>
+                            <span className="flex min-w-0 items-baseline gap-2">
+                                <RecordNo className="shrink-0">{o.orderNumber}</RecordNo>
+                                <span className="min-w-0 font-medium break-words text-ink">{o.serviceName || 'Order'}</span>
                             </span>
-                            <span className="block truncate text-sm text-ink-muted">{o.serviceName}</span>
+                            <span className="block truncate text-sm text-ink-muted">{(o.client && o.client.name) || 'Unknown client'}</span>
                         </span>
                         <Badge tone={ORDER_STATUS_TONE[o.status]}>{orderStatusLabel(o.status)}</Badge>
                     </button>
@@ -107,7 +115,7 @@ function OrderSheet({ title, hasValue, onPick, onClear, onClose }) {
 
 /**
  * Optional field that opens a sheet to choose an order (related order on an invoice).
- * value / onChange use { id, orderNumber, clientName } (null when none). Picking an order passes
+ * value / onChange use { id, orderNumber, serviceName, clientName } (null when none). Picking an order passes
  * the full Order list item as the second argument.
  */
 export default function OrderPicker({
@@ -144,8 +152,8 @@ export default function OrderPicker({
                 <span className={`min-w-0 flex-1 truncate ${value ? 'text-ink' : 'text-ink-subtle'}`}>
                     {value ? (
                         <>
-                            {value.clientName && <span className="mr-2">{value.clientName}</span>}
-                            <RecordNo>{value.orderNumber || 'Order'}</RecordNo>
+                            <RecordNo className="mr-2">{value.orderNumber || 'Order'}</RecordNo>
+                            {value.serviceName || value.clientName ? <span>{[value.serviceName, value.clientName].filter(Boolean).join(' · ')}</span> : null}
                         </>
                     ) : (
                         'No related order'
@@ -160,7 +168,7 @@ export default function OrderPicker({
                     hasValue={Boolean(value)}
                     onClose={() => setOpen(false)}
                     onClear={() => pick(null, null)}
-                    onPick={(o) => pick({ id: o.id, orderNumber: o.orderNumber, clientName: (o.client && o.client.name) || null }, o)}
+                    onPick={(o) => pick(orderPickerValue(o), o)}
                 />
             )}
         </div>
