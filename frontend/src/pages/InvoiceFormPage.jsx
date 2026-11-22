@@ -16,6 +16,7 @@ import SelectField from '../components/SelectField.jsx';
 import TextArea from '../components/TextArea.jsx';
 import { createInvoice, updateInvoice } from '../api/invoices.js';
 import { INVOICE_BASE_STATUSES, INVOICE_LIMITS } from '../constants/invoices.js';
+import useClientPreselect, { readClientPreselect } from '../hooks/useClientPreselect.js';
 import { useInvoice } from '../hooks/useInvoices.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useOrder } from '../hooks/useOrders.js';
@@ -133,7 +134,7 @@ function useOrderPrefill(orderId, setForm) {
     return order;
 }
 
-function InvoiceForm({ invoice, prefillOrderId }) {
+function InvoiceForm({ invoice, prefillOrderId, preselect }) {
     const navigate = useNavigate();
     const isEdit = Boolean(invoice);
     // One id per form: a retried create after a dropped connection returns the same invoice (200).
@@ -144,6 +145,10 @@ function InvoiceForm({ invoice, prefillOrderId }) {
     const { submit, submitting, formError, fieldErrors } = useSubmit({ errorToast: true });
     const toast = useToast();
     const prefill = useOrderPrefill(isEdit ? null : prefillOrderId, setForm);
+    // ?clientType=&clientId= on create (F-18): billed to may be any person or company.
+    const preselected = useClientPreselect(isEdit ? null : preselect, (client) => {
+        setForm((f) => (f.billedTo ? f : { ...f, billedTo: client }));
+    });
 
     const clearError = (field) => {
         if (localErrors[field]) setLocalErrors((e) => ({ ...e, [field]: undefined }));
@@ -202,6 +207,7 @@ function InvoiceForm({ invoice, prefillOrderId }) {
                     sheetTitle="Who are you billing?"
                     value={form.billedTo}
                     onChange={set('billedTo')}
+                    loading={preselected.loading}
                     error={errorOf('billedTo')}
                     hint="A person or a company."
                 />
@@ -263,7 +269,7 @@ function EditInvoice({ invoiceId }) {
     return <DataView resource={invoice} skeleton="form">{(i) => <InvoiceForm invoice={i} />}</DataView>;
 }
 
-/** New invoice (/invoices/new, ?orderId= prefill) and Edit invoice (/invoices/:invoiceId/edit), F-06. Online only. */
+/** New invoice (/invoices/new, ?orderId= prefill, ?clientType=&clientId= preselect) and Edit invoice (/invoices/:invoiceId/edit), F-06. Online only. */
 export default function InvoiceFormPage() {
     const { invoiceId } = useParams();
     const [params] = useSearchParams();
@@ -277,6 +283,8 @@ export default function InvoiceFormPage() {
 
     const isEdit = Boolean(invoiceId);
     const prefillOrderId = isEdit ? null : params.get('orderId');
+    const preselect = isEdit ? null : readClientPreselect(params);
+    const formKey = [prefillOrderId, preselect && `${preselect.type}:${preselect.id}`].filter(Boolean).join('|') || 'new';
     const title = isEdit ? 'Edit invoice' : 'New invoice';
 
     if (!everOnline) {
@@ -297,7 +305,7 @@ export default function InvoiceFormPage() {
     return (
         <PageBody width="form">
             <PageHeader backTo={isEdit ? `/invoices/${invoiceId}` : '/invoices'} backLabel={isEdit ? 'Invoice' : 'Invoices'} />
-            {isEdit ? <EditInvoice invoiceId={invoiceId} /> : <InvoiceForm key={prefillOrderId || 'new'} prefillOrderId={prefillOrderId} />}
+            {isEdit ? <EditInvoice invoiceId={invoiceId} /> : <InvoiceForm key={formKey} prefillOrderId={prefillOrderId} preselect={preselect} />}
         </PageBody>
     );
 }
