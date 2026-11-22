@@ -4,19 +4,37 @@ import HomeFigures from '../components/home/HomeFigures.jsx';
 import NeedsAttention from '../components/home/NeedsAttention.jsx';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
+import QuickActions from '../components/home/QuickActions.jsx';
+import RecentlyOpened from '../components/home/RecentlyOpened.jsx';
 import useFirmSummary from '../hooks/useFirmSummary.js';
 
 /**
- * Home: the firm summary (F-20). Key figures that open the filtered lists, then "Needs attention"
- * (most urgent overdue invoices and orders). Readable offline from the last load (stale notice).
- *
- * Layout: phones stack everything; lg+ puts the figures in one row, then Needs attention (2/3)
- * beside an aside column (1/3). F-21 adds Quick actions (phones: between the figures and Needs
- * attention; lg+: top of the aside) and Recently opened (phones: last; lg+: aside) via `aside`.
+ * Lays out Home. Phones: one column in the order figures, quick actions, needs attention, recently
+ * opened. lg+: figures in one row, then `main` (2/3) beside quick actions + recently opened (1/3).
+ * The aside uses `display: contents` on phones so its two blocks can be ordered around `main`.
+ */
+function HomeLayout({ figures, main }) {
+    return (
+        <div className="flex flex-col gap-4 lg:grid lg:grid-cols-3 lg:items-start lg:gap-6">
+            {figures && <div className="order-1 lg:col-span-3">{figures}</div>}
+            <div className="order-3 lg:order-2 lg:col-span-2">{main}</div>
+            <div className="contents lg:order-3 lg:flex lg:flex-col lg:gap-6">
+                <QuickActions className="order-2" />
+                <RecentlyOpened className="order-4" />
+            </div>
+        </div>
+    );
+}
+
+/**
+ * Home: the firm summary (F-20) with quick actions and recently opened (F-21). Key figures open
+ * the filtered lists; "Needs attention" lists the most urgent overdue invoices and orders.
+ * Readable offline from the last load (stale notice). When the summary is not available offline
+ * (or fails), the message takes the main column and quick actions (disabled offline) and recently
+ * opened stay visible.
  */
 export default function HomePage() {
     const summary = useFirmSummary();
-    const aside = null; // F-21: quick actions + recently opened
 
     return (
         <PageBody width="detail">
@@ -32,15 +50,13 @@ export default function HomePage() {
                 }
             />
 
-            <DataView resource={summary} skeleton="home">
-                {(data) => (
-                    <div className="flex flex-col gap-4 lg:grid lg:grid-cols-3 lg:items-start lg:gap-6">
-                        <HomeFigures summary={data} className="lg:col-span-3" />
-                        <NeedsAttention summary={data} className={aside ? 'lg:col-span-2' : 'lg:col-span-3'} />
-                        {aside && <div className="flex flex-col gap-4 lg:gap-6">{aside}</div>}
-                    </div>
-                )}
-            </DataView>
+            {summary.status === 'loading' || summary.status === 'loaded' ? (
+                <DataView resource={summary} skeleton="home">
+                    {(data) => <HomeLayout figures={<HomeFigures summary={data} />} main={<NeedsAttention summary={data} />} />}
+                </DataView>
+            ) : (
+                <HomeLayout main={<DataView resource={summary} skeleton="home" />} />
+            )}
         </PageBody>
     );
 }

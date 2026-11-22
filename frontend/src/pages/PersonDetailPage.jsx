@@ -19,6 +19,7 @@ import useMediaQuery from '../hooks/useMediaQuery.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useClientOrders } from '../hooks/useOrders.js';
 import { usePerson } from '../hooks/usePeople.js';
+import useRecordVisit from '../hooks/useRecordVisit.js';
 
 /** Contact facts; empty ones are hidden and offered as "Add …" links instead. PAN stays in the header. */
 function PersonDetails({ person: p }) {
@@ -52,6 +53,7 @@ export default function PersonDetailPage() {
     const { personId } = useParams();
     const { online } = useOnlineStatus();
     const person = usePerson(personId);
+    useRecordVisit('person', personId, person);
     const orders = useClientOrders(personId);
     const invoices = useBillingEntityInvoices(personId);
     const wide = useMediaQuery('(min-width: 1024px)');

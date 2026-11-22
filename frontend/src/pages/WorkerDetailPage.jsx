@@ -13,6 +13,7 @@ import WorkerOrdersSection from '../components/directory/WorkerOrdersSection.jsx
 import { designationLabel, WORKER_STATUS_TONE, workerStatusLabel } from '../constants/workers.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useWorker } from '../hooks/useWorkers.js';
+import useRecordVisit from '../hooks/useRecordVisit.js';
 import { formatDate } from '../utils/format.js';
 
 const telHref = (phone) => `tel:${String(phone).replace(/[^\d+]/g, '')}`;
@@ -26,6 +27,7 @@ export default function WorkerDetailPage() {
     const { workerId } = useParams();
     const { online } = useOnlineStatus();
     const worker = useWorker(workerId);
+    useRecordVisit('worker', workerId, worker);
 
     return (
         <PageBody width="detail">
