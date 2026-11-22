@@ -7,7 +7,9 @@ import InvoicePaymentsSection from '../components/InvoicePaymentsSection.jsx';
 import InvoiceStatusBadges from '../components/InvoiceStatusBadges.jsx';
 import MoneySummary from '../components/MoneySummary.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
+import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
+import PageTitle from '../components/PageTitle.jsx';
 import { clientPath } from '../constants/orders.js';
 import { useInvoice } from '../hooks/useInvoices.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
@@ -31,7 +33,7 @@ function InvoiceDetail({ invoice }) {
 
     return (
         <>
-            <PageHeader
+            <PageTitle
                 title={<span className="tabular-nums">{invoice.invoiceNumber}</span>}
                 subtitle={`Billed to ${billedToName}`}
                 actions={
@@ -82,5 +84,10 @@ function InvoiceDetail({ invoice }) {
 export default function InvoiceDetailPage() {
     const { invoiceId } = useParams();
     const invoice = useInvoice(invoiceId);
-    return <DataView resource={invoice}>{(i) => <InvoiceDetail invoice={i} reload={invoice.reload} />}</DataView>;
+    return (
+        <PageBody width="detail">
+            <PageHeader backTo="/invoices" backLabel="Invoices" />
+            <DataView resource={invoice}>{(i) => <InvoiceDetail invoice={i} reload={invoice.reload} />}</DataView>
+        </PageBody>
+    );
 }

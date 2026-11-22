@@ -5,7 +5,9 @@ import DateField from '../components/DateField.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import FormError from '../components/FormError.jsx';
 import FormFooter from '../components/FormFooter.jsx';
+import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
+import PageTitle from '../components/PageTitle.jsx';
 import SelectField from '../components/SelectField.jsx';
 import TextArea from '../components/TextArea.jsx';
 import TextField from '../components/TextField.jsx';
@@ -140,22 +142,24 @@ export default function WorkerFormPage() {
 
     if (!everOnline) {
         return (
-            <>
-                <PageHeader title={title} />
+            <PageBody width="form">
+                <PageHeader backTo={isEdit ? `/workers/${workerId}` : '/workers'} backLabel={isEdit ? 'Worker' : 'Workers'} />
+                <PageTitle title={title} />
                 <EmptyState
                     icon="offline"
                     title="Adding and editing need a connection"
                     text="Connect to the internet and try again."
                     action={{ label: 'Go back', onClick: () => navigate(isEdit ? `/workers/${workerId}` : '/workers') }}
                 />
-            </>
+            </PageBody>
         );
     }
 
     return (
-        <>
-            <PageHeader title={title} />
+        <PageBody width="form">
+            <PageHeader backTo={isEdit ? `/workers/${workerId}` : '/workers'} backLabel={isEdit ? 'Worker' : 'Workers'} />
+            <PageTitle title={title} />
             {isEdit ? <EditWorker workerId={workerId} /> : <WorkerForm />}
-        </>
+        </PageBody>
     );
 }

@@ -7,7 +7,9 @@ import DetailField from '../components/DetailField.jsx';
 import FormError from '../components/FormError.jsx';
 import OrderInvoicesSection from '../components/OrderInvoicesSection.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
+import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
+import PageTitle from '../components/PageTitle.jsx';
 import RelatedSection from '../components/RelatedSection.jsx';
 import SelectField from '../components/SelectField.jsx';
 import { orderUpdateBody, updateOrder } from '../api/orders.js';
@@ -86,7 +88,7 @@ function OrderDetail({ order, reload }) {
 
     return (
         <>
-            <PageHeader
+            <PageTitle
                 title={<span className="tabular-nums">{order.orderNumber}</span>}
                 subtitle={order.serviceName}
                 actions={
@@ -147,5 +149,10 @@ function OrderDetail({ order, reload }) {
 export default function OrderDetailPage() {
     const { orderId } = useParams();
     const order = useOrder(orderId);
-    return <DataView resource={order}>{(o) => <OrderDetail order={o} reload={order.reload} />}</DataView>;
+    return (
+        <PageBody width="detail">
+            <PageHeader backTo="/orders" backLabel="Orders" />
+            <DataView resource={order}>{(o) => <OrderDetail order={o} reload={order.reload} />}</DataView>
+        </PageBody>
+    );
 }

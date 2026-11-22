@@ -6,7 +6,9 @@ import EmptyState from '../components/EmptyState.jsx';
 import FormError from '../components/FormError.jsx';
 import FormFooter from '../components/FormFooter.jsx';
 import MoneyField from '../components/MoneyField.jsx';
+import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
+import PageTitle from '../components/PageTitle.jsx';
 import SelectField from '../components/SelectField.jsx';
 import TextField from '../components/TextField.jsx';
 import { createPayment, updatePayment } from '../api/payments.js';
@@ -195,22 +197,24 @@ export default function PaymentFormPage() {
 
     if (!everOnline) {
         return (
-            <>
-                <PageHeader title={title} />
+            <PageBody width="form">
+                <PageHeader backTo={`/invoices/${invoiceId}`} backLabel="Invoice" />
+                <PageTitle title={title} />
                 <EmptyState
                     icon="offline"
                     title="Adding and editing need a connection"
                     text="Connect to the internet and try again."
                     action={{ label: 'Go back', onClick: () => navigate(`/invoices/${invoiceId}`) }}
                 />
-            </>
+            </PageBody>
         );
     }
 
     return (
-        <>
-            <PageHeader title={title} />
+        <PageBody width="form">
+            <PageHeader backTo={`/invoices/${invoiceId}`} backLabel="Invoice" />
+            <PageTitle title={title} />
             <DataView resource={invoice}>{(i) => <PaymentFormContent invoice={i} paymentId={paymentId} />}</DataView>
-        </>
+        </PageBody>
     );
 }

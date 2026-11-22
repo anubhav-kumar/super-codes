@@ -8,7 +8,9 @@ import EmptyState from '../components/EmptyState.jsx';
 import FormError from '../components/FormError.jsx';
 import FormFooter from '../components/FormFooter.jsx';
 import MoneyField from '../components/MoneyField.jsx';
+import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
+import PageTitle from '../components/PageTitle.jsx';
 import PersonPicker, { pickedPersonId } from '../components/PersonPicker.jsx';
 import SelectField from '../components/SelectField.jsx';
 import TextArea from '../components/TextArea.jsx';
@@ -252,22 +254,24 @@ export default function OrderFormPage() {
 
     if (!everOnline) {
         return (
-            <>
-                <PageHeader title={title} />
+            <PageBody width="form">
+                <PageHeader backTo={isEdit ? `/orders/${orderId}` : '/orders'} backLabel={isEdit ? 'Order' : 'Orders'} />
+                <PageTitle title={title} />
                 <EmptyState
                     icon="offline"
                     title="Adding and editing need a connection"
                     text="Connect to the internet and try again."
                     action={{ label: 'Go back', onClick: () => navigate(isEdit ? `/orders/${orderId}` : '/orders') }}
                 />
-            </>
+            </PageBody>
         );
     }
 
     return (
-        <>
-            <PageHeader title={title} />
+        <PageBody width="form">
+            <PageHeader backTo={isEdit ? `/orders/${orderId}` : '/orders'} backLabel={isEdit ? 'Order' : 'Orders'} />
+            <PageTitle title={title} />
             {isEdit ? <EditOrder orderId={orderId} /> : <OrderForm />}
-        </>
+        </PageBody>
     );
 }

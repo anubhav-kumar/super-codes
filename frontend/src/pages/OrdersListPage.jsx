@@ -5,8 +5,8 @@ import DataView from '../components/DataView.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ListItem from '../components/ListItem.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
+import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
-import SearchInput from '../components/SearchInput.jsx';
 import SegmentedControl from '../components/SegmentedControl.jsx';
 import { ORDER_FILTERS, ORDER_STATUS_TONE, orderStatusLabel } from '../constants/orders.js';
 import useListFilter from '../hooks/useListFilter.js';
@@ -24,9 +24,7 @@ function subtitleOf(o) {
     return parts.filter(Boolean).join(' · ');
 }
 
-function OrderRows({ orders, filter, addDisabled }) {
-    const byStatus = filter === 'ALL' ? orders : orders.filter((o) => o.status === filter);
-    const { query, setQuery, filtered } = useListFilter(byStatus, SEARCH_FIELDS);
+function OrderRows({ orders, filtered, query, setQuery, filter, addDisabled }) {
 
     if (orders.length === 0) {
         return (
@@ -41,7 +39,6 @@ function OrderRows({ orders, filter, addDisabled }) {
 
     return (
         <>
-            <SearchInput value={query} onChange={setQuery} placeholder="Search order number or client" className="mb-4" />
             {filtered.length === 0 ? (
                 query.trim() ? (
                     <EmptyState
@@ -90,21 +87,30 @@ export default function OrdersListPage() {
         setParams(next, { replace: true });
     };
 
+    // Search lives in the top bar, so it is filtered here and passed to the rows.
+    const all = orders.data || [];
+    const byStatus = filter === 'ALL' ? all : all.filter((o) => o.status === filter);
+    const { query, setQuery, filtered } = useListFilter(byStatus, SEARCH_FIELDS);
+
     return (
-        <>
+        <PageBody width="list">
             <PageHeader
                 title="Orders"
+                search={all.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Search order number or client' } : undefined}
                 actions={
-                    <Button icon="plus" to="/orders/new" disabled={!online}>
-                        New order
+                    <Button icon="plus" to="/orders/new" disabled={!online} aria-label="New order">
+                        <span className="md:hidden">New</span>
+                        <span className="hidden md:inline">New order</span>
                     </Button>
                 }
             />
-            {!online && <OfflineActionHint className="-mt-2 mb-4" />}
+            {!online && <OfflineActionHint className="mb-4" />}
             <SegmentedControl label="Status" options={ORDER_FILTERS} value={filter} onChange={setFilter} className="mb-3" />
             <DataView resource={orders}>
-                {(data) => <OrderRows orders={data || []} filter={filter} addDisabled={!online} />}
+                {(data) => (
+                    <OrderRows orders={data || []} filtered={filtered} query={query} setQuery={setQuery} filter={filter} addDisabled={!online} />
+                )}
             </DataView>
-        </>
+        </PageBody>
     );
 }

@@ -7,7 +7,9 @@ import EmptyState from '../components/EmptyState.jsx';
 import FormError from '../components/FormError.jsx';
 import FormFooter from '../components/FormFooter.jsx';
 import Icon from '../components/Icon.jsx';
+import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
+import PageTitle from '../components/PageTitle.jsx';
 import PersonPicker, { pickedPersonId, toAssociationInput } from '../components/PersonPicker.jsx';
 import SelectField from '../components/SelectField.jsx';
 import TextArea from '../components/TextArea.jsx';
@@ -231,7 +233,7 @@ function CompanyForm({ company }) {
 
     return (
         <>
-            <PageHeader title={isEdit ? 'Edit company' : 'Add company'} subtitle={isEdit ? company.name : undefined} />
+            <PageTitle title={isEdit ? 'Edit company' : 'Add company'} subtitle={isEdit ? company.name : undefined} />
             <form noValidate onSubmit={handleSubmit} className="flex max-w-xl flex-col gap-4">
                 <FormError message={banner} />
                 <Card>
@@ -357,6 +359,10 @@ export default function CompanyFormPage() {
     useEffect(() => {
         if (online) setHadConnection(true);
     }, [online]);
-    if (!online && !hadConnection) return <NeedsConnection />;
-    return companyId ? <EditCompany companyId={companyId} /> : <CompanyForm />;
+    return (
+        <PageBody width="form">
+            <PageHeader backTo={companyId ? `/companies/${companyId}` : '/companies'} backLabel={companyId ? 'Company' : 'Companies'} />
+            {!online && !hadConnection ? <NeedsConnection /> : companyId ? <EditCompany companyId={companyId} /> : <CompanyForm />}
+        </PageBody>
+    );
 }

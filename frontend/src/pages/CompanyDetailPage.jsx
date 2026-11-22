@@ -10,7 +10,9 @@ import DetailField from '../components/DetailField.jsx';
 import FormError from '../components/FormError.jsx';
 import Icon from '../components/Icon.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
+import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
+import PageTitle from '../components/PageTitle.jsx';
 import RelatedSection from '../components/RelatedSection.jsx';
 import SelectField from '../components/SelectField.jsx';
 import { removeAssociation, updateAssociation } from '../api/companies.js';
@@ -155,66 +157,69 @@ export default function CompanyDetailPage() {
     const company = useCompany(companyId);
 
     return (
-        <DataView resource={company}>
-            {(c) => (
-                <>
-                    <PageHeader
-                        title={c.name}
-                        subtitle={entityTypeLabel(c.entityType)}
-                        actions={
-                            <Button variant="secondary" icon="edit" to={`/companies/${c.id}/edit`} disabled={!online}>
-                                Edit
-                            </Button>
-                        }
-                    />
-                    {!online && <OfflineActionHint className="-mt-2 mb-4" />}
+        <PageBody width="detail">
+            <PageHeader backTo="/companies" backLabel="Companies" />
+            <DataView resource={company}>
+                {(c) => (
+                    <>
+                        <PageTitle
+                            title={c.name}
+                            subtitle={entityTypeLabel(c.entityType)}
+                            actions={
+                                <Button variant="secondary" icon="edit" to={`/companies/${c.id}/edit`} disabled={!online}>
+                                    Edit
+                                </Button>
+                            }
+                        />
+                        {!online && <OfflineActionHint className="-mt-2 mb-4" />}
 
-                    <div className="flex flex-col gap-4">
-                        <Card>
-                            <dl className="grid gap-4 md:grid-cols-2">
-                                <DetailField label="PAN" value={c.pan ? <span className="font-mono text-[13px]">{c.pan}</span> : null} />
-                                <DetailField label="Entity type" value={entityTypeLabel(c.entityType) || null} />
-                                <DetailField label="GSTIN" value={c.gstin ? <span className="font-mono text-[13px]">{c.gstin}</span> : null} />
-                                <DetailField
-                                    label="Email"
-                                    value={
-                                        c.email ? (
-                                            <a href={`mailto:${c.email}`} className="text-ink underline-offset-2 hover:underline focus-visible:underline">
-                                                {c.email}
-                                            </a>
-                                        ) : null
-                                    }
-                                />
-                                <DetailField
-                                    label="Phone"
-                                    value={
-                                        c.phone ? (
-                                            <a href={`tel:${c.phone.replace(/[^\d+]/g, '')}`} className="text-ink underline-offset-2 hover:underline focus-visible:underline">
-                                                {c.phone}
-                                            </a>
-                                        ) : null
-                                    }
-                                />
-                                <DetailField
-                                    label="Registered address"
-                                    value={c.address ? <span className="whitespace-pre-line">{c.address}</span> : null}
-                                />
-                                <DetailField
-                                    label="Notes"
-                                    value={c.notes ? <span className="whitespace-pre-line">{c.notes}</span> : null}
-                                    className="md:col-span-2"
-                                />
-                            </dl>
-                        </Card>
+                        <div className="flex flex-col gap-4">
+                            <Card>
+                                <dl className="grid gap-4 md:grid-cols-2">
+                                    <DetailField label="PAN" value={c.pan ? <span className="font-mono text-[13px]">{c.pan}</span> : null} />
+                                    <DetailField label="Entity type" value={entityTypeLabel(c.entityType) || null} />
+                                    <DetailField label="GSTIN" value={c.gstin ? <span className="font-mono text-[13px]">{c.gstin}</span> : null} />
+                                    <DetailField
+                                        label="Email"
+                                        value={
+                                            c.email ? (
+                                                <a href={`mailto:${c.email}`} className="text-ink underline-offset-2 hover:underline focus-visible:underline">
+                                                    {c.email}
+                                                </a>
+                                            ) : null
+                                        }
+                                    />
+                                    <DetailField
+                                        label="Phone"
+                                        value={
+                                            c.phone ? (
+                                                <a href={`tel:${c.phone.replace(/[^\d+]/g, '')}`} className="text-ink underline-offset-2 hover:underline focus-visible:underline">
+                                                    {c.phone}
+                                                </a>
+                                            ) : null
+                                        }
+                                    />
+                                    <DetailField
+                                        label="Registered address"
+                                        value={c.address ? <span className="whitespace-pre-line">{c.address}</span> : null}
+                                    />
+                                    <DetailField
+                                        label="Notes"
+                                        value={c.notes ? <span className="whitespace-pre-line">{c.notes}</span> : null}
+                                        className="md:col-span-2"
+                                    />
+                                </dl>
+                            </Card>
 
-                        <CompanyPeopleSection company={c} online={online} reload={company.reload} />
+                            <CompanyPeopleSection company={c} online={online} reload={company.reload} />
 
-                        {/* Sections added by later features, one line each */}
-                        <ClientOrdersSection clientId={c.id} />
-                        <BilledInvoicesSection billedToId={c.id} />
-                    </div>
-                </>
-            )}
-        </DataView>
+                            {/* Sections added by later features, one line each */}
+                            <ClientOrdersSection clientId={c.id} />
+                            <BilledInvoicesSection billedToId={c.id} />
+                        </div>
+                    </>
+                )}
+            </DataView>
+        </PageBody>
     );
 }

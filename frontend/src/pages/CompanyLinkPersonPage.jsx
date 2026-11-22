@@ -5,7 +5,9 @@ import DataView from '../components/DataView.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import FormError from '../components/FormError.jsx';
 import FormFooter from '../components/FormFooter.jsx';
+import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
+import PageTitle from '../components/PageTitle.jsx';
 import PersonPicker, { pickedPersonId, toAssociationInput } from '../components/PersonPicker.jsx';
 import SelectField from '../components/SelectField.jsx';
 import { addAssociation } from '../api/companies.js';
@@ -60,7 +62,7 @@ function LinkPersonForm({ company }) {
 
     return (
         <>
-            <PageHeader title="Link person" subtitle={company.name} />
+            <PageTitle title="Link person" subtitle={company.name} />
             <form noValidate onSubmit={handleSubmit} className="flex max-w-xl flex-col gap-4">
                 <FormError message={banner} />
                 <Card>
@@ -106,15 +108,19 @@ export default function CompanyLinkPersonPage() {
         if (online) setHadConnection(true);
     }, [online]);
 
-    if (!online && !hadConnection) {
-        return (
-            <EmptyState
-                icon="offline"
-                title="Adding and editing need a connection"
-                text="Connect to the internet and try again."
-                action={{ label: 'Go back', onClick: () => navigate(-1) }}
-            />
-        );
-    }
-    return <DataView resource={company}>{(c) => <LinkPersonForm key={c.id} company={c} />}</DataView>;
+    return (
+        <PageBody width="form">
+            <PageHeader backTo={`/companies/${companyId}`} backLabel="Company" />
+            {!online && !hadConnection ? (
+                <EmptyState
+                    icon="offline"
+                    title="Adding and editing need a connection"
+                    text="Connect to the internet and try again."
+                    action={{ label: 'Go back', onClick: () => navigate(-1) }}
+                />
+            ) : (
+                <DataView resource={company}>{(c) => <LinkPersonForm key={c.id} company={c} />}</DataView>
+            )}
+        </PageBody>
+    );
 }

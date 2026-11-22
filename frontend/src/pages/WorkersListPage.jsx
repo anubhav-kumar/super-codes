@@ -5,8 +5,8 @@ import DataView from '../components/DataView.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ListItem from '../components/ListItem.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
+import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
-import SearchInput from '../components/SearchInput.jsx';
 import SegmentedControl from '../components/SegmentedControl.jsx';
 import { designationLabel, WORKER_FILTERS, WORKER_STATUS_TONE, workerStatusLabel } from '../constants/workers.js';
 import useListFilter from '../hooks/useListFilter.js';
@@ -15,9 +15,7 @@ import { useWorkers } from '../hooks/useWorkers.js';
 
 const EMPTY_FILTER_TEXT = { ACTIVE: 'No active workers.', INACTIVE: 'No inactive workers.' };
 
-function WorkerRows({ workers, filter, addDisabled }) {
-    const byStatus = filter === 'ALL' ? workers : workers.filter((w) => w.status === filter);
-    const { query, setQuery, filtered } = useListFilter(byStatus, ['name']);
+function WorkerRows({ workers, filtered, query, setQuery, filter, addDisabled }) {
 
     if (workers.length === 0) {
         return (
@@ -32,7 +30,6 @@ function WorkerRows({ workers, filter, addDisabled }) {
 
     return (
         <>
-            <SearchInput value={query} onChange={setQuery} placeholder="Search name" className="mb-4" />
             {filtered.length === 0 ? (
                 query ? (
                     <EmptyState
@@ -75,21 +72,30 @@ export default function WorkersListPage() {
         setParams(next, { replace: true });
     };
 
+    // Search lives in the top bar, so it is filtered here and passed to the rows.
+    const all = workers.data || [];
+    const byStatus = filter === 'ALL' ? all : all.filter((w) => w.status === filter);
+    const { query, setQuery, filtered } = useListFilter(byStatus, ['name']);
+
     return (
-        <>
+        <PageBody width="list">
             <PageHeader
                 title="Workers"
+                search={all.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Search name' } : undefined}
                 actions={
-                    <Button icon="plus" to="/workers/new" disabled={!online}>
-                        Add worker
+                    <Button icon="plus" to="/workers/new" disabled={!online} aria-label="Add worker">
+                        <span className="md:hidden">Add</span>
+                        <span className="hidden md:inline">Add worker</span>
                     </Button>
                 }
             />
-            {!online && <OfflineActionHint className="-mt-2 mb-4" />}
+            {!online && <OfflineActionHint className="mb-4" />}
             <SegmentedControl label="Status" options={WORKER_FILTERS} value={filter} onChange={setFilter} className="mb-3" />
             <DataView resource={workers}>
-                {(data) => <WorkerRows workers={data || []} filter={filter} addDisabled={!online} />}
+                {(data) => (
+                    <WorkerRows workers={data || []} filtered={filtered} query={query} setQuery={setQuery} filter={filter} addDisabled={!online} />
+                )}
             </DataView>
-        </>
+        </PageBody>
     );
 }

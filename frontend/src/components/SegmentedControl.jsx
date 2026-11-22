@@ -2,9 +2,11 @@
  * Two to six options as chips (People/Companies switch, status filters).
  * options: [{ value, label }]. Scrolls horizontally on small screens.
  */
-export default function SegmentedControl({ options, value, onChange, label, className = '' }) {
+export default function SegmentedControl({ options, value, onChange, label, className = '', bleed = true }) {
+    // bleed: on phones the chip row runs to the screen edges (off inside the top bar).
+    const edge = bleed ? '-mx-4 px-4 sm:mx-0 sm:px-0' : '';
     return (
-        <div role="radiogroup" aria-label={label} className={`-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0 ${className}`}>
+        <div role="radiogroup" aria-label={label} className={`flex gap-2 overflow-x-auto pb-1 ${edge} ${className}`}>
             {options.map((o) => {
                 const active = o.value === value;
                 return (

@@ -5,8 +5,8 @@ import DataView from '../components/DataView.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ListItem from '../components/ListItem.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
+import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
-import SearchInput from '../components/SearchInput.jsx';
 import useListFilter from '../hooks/useListFilter.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { usePeople } from '../hooks/usePeople.js';
@@ -20,17 +20,19 @@ export default function PeopleListPage() {
     const { query, setQuery, filtered } = useListFilter(people.data, SEARCH_FIELDS);
 
     return (
-        <>
-            <ClientsTabs value="/people" className="mb-4" />
+        <PageBody width="list">
             <PageHeader
                 title="People"
+                titleSlot={<ClientsTabs value="/people" />}
+                search={people.data && people.data.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Search name, PAN or phone' } : undefined}
                 actions={
-                    <Button icon="plus" to="/people/new" disabled={!online}>
-                        Add person
+                    <Button icon="plus" to="/people/new" disabled={!online} aria-label="Add person">
+                        <span className="md:hidden">Add</span>
+                        <span className="hidden md:inline">Add person</span>
                     </Button>
                 }
             />
-            {!online && <OfflineActionHint className="-mt-2 mb-4" />}
+            {!online && <OfflineActionHint className="mb-4" />}
 
             <DataView resource={people}>
                 {(items) =>
@@ -43,12 +45,6 @@ export default function PeopleListPage() {
                         />
                     ) : (
                         <>
-                            <SearchInput
-                                value={query}
-                                onChange={setQuery}
-                                placeholder="Search name, PAN or phone"
-                                className="mb-3"
-                            />
                             {filtered.length === 0 ? (
                                 <EmptyState
                                     icon="search"
@@ -73,6 +69,6 @@ export default function PeopleListPage() {
                     )
                 }
             </DataView>
-        </>
+        </PageBody>
     );
 }

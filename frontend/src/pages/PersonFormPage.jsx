@@ -5,7 +5,9 @@ import DataView from '../components/DataView.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import FormError from '../components/FormError.jsx';
 import FormFooter from '../components/FormFooter.jsx';
+import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
+import PageTitle from '../components/PageTitle.jsx';
 import Switch from '../components/Switch.jsx';
 import TextArea from '../components/TextArea.jsx';
 import TextField from '../components/TextField.jsx';
@@ -106,7 +108,7 @@ function PersonForm({ person }) {
 
     return (
         <>
-            <PageHeader title={isEdit ? 'Edit person' : 'Add person'} subtitle={isEdit ? person.name : undefined} />
+            <PageTitle title={isEdit ? 'Edit person' : 'Add person'} subtitle={isEdit ? person.name : undefined} />
             <form noValidate onSubmit={handleSubmit} className="flex max-w-xl flex-col gap-4">
                 <FormError message={banner} />
                 <Card>
@@ -210,6 +212,10 @@ export default function PersonFormPage() {
     useEffect(() => {
         if (online) setHadConnection(true);
     }, [online]);
-    if (!online && !hadConnection) return <NeedsConnection />;
-    return personId ? <EditPerson personId={personId} /> : <PersonForm />;
+    return (
+        <PageBody width="form">
+            <PageHeader backTo={personId ? `/people/${personId}` : '/people'} backLabel={personId ? 'Person' : 'People'} />
+            {!online && !hadConnection ? <NeedsConnection /> : personId ? <EditPerson personId={personId} /> : <PersonForm />}
+        </PageBody>
+    );
 }
