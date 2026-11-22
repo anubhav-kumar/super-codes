@@ -9,7 +9,7 @@ import FormFooter from '../components/FormFooter.jsx';
 import FormLayout, { FormHeading } from '../components/FormLayout.jsx';
 import FormSection, { FormRow } from '../components/FormSection.jsx';
 import MoneyField from '../components/MoneyField.jsx';
-import OrderPicker from '../components/OrderPicker.jsx';
+import OrderPicker, { orderPickerValue } from '../components/OrderPicker.jsx';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import SelectField from '../components/SelectField.jsx';
@@ -17,25 +17,29 @@ import TextArea from '../components/TextArea.jsx';
 import { createInvoice, updateInvoice } from '../api/invoices.js';
 import { INVOICE_BASE_STATUSES, INVOICE_LIMITS } from '../constants/invoices.js';
 import useClientPreselect, { readClientPreselect } from '../hooks/useClientPreselect.js';
-import { useInvoice } from '../hooks/useInvoices.js';
+import { useInvoice, useOrderInvoices } from '../hooks/useInvoices.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useOrder } from '../hooks/useOrders.js';
 import useSubmit from '../hooks/useSubmit.js';
 import useToast from '../hooks/useToast.js';
-import { todayLocal } from '../utils/dates.js';
+import { addDays, todayLocal } from '../utils/dates.js';
 import { formatMoney } from '../utils/format.js';
 import { parseMoney } from '../utils/validation.js';
 
 const today = () => todayLocal();
+/** Default due date of a new invoice (same rule as the server's create default, F-25). */
+const DUE_AFTER_DAYS = 15;
+const defaultDue = (invoiceDate) => addDays(invoiceDate, DUE_AFTER_DAYS);
 const party = (p) => (p && p.id ? { type: p.type, id: p.id, name: p.name } : null);
 
 function toForm(invoice) {
     if (!invoice) {
+        const invoiceDate = today();
         return {
             billedTo: null,
             order: null,
-            invoiceDate: today(),
-            dueDate: '',
+            invoiceDate,
+            dueDate: defaultDue(invoiceDate),
             description: '',
             amount: '',
             tax: '0',
@@ -44,7 +48,7 @@ function toForm(invoice) {
     }
     return {
         billedTo: party(invoice.billedTo),
-        order: invoice.order && invoice.order.id ? { id: invoice.order.id, orderNumber: invoice.order.orderNumber, clientName: null } : null,
+        order: invoice.order && invoice.order.id ? { id: invoice.order.id, orderNumber: invoice.order.orderNumber, serviceName: null, clientName: null } : null,
         invoiceDate: invoice.invoiceDate || '',
         dueDate: invoice.dueDate || '',
         description: invoice.description || '',
@@ -87,7 +91,8 @@ function validate(form, isEdit) {
 }
 
 // Full editable field set (PUT clears omitted optional fields, so every field is always sent).
-function toBody(form, isEdit) {
+// On create, baseStatus is 'DRAFT' ("Save as draft") or 'ISSUED' ("Save and issue"): one call (F-25).
+function toBody(form, isEdit, createStatus) {
     const body = {
         billedToType: form.billedTo.type,
         billedToId: form.billedTo.id,
@@ -98,7 +103,7 @@ function toBody(form, isEdit) {
         amount: parseMoney(form.amount),
         tax: parseTax(form.tax),
     };
-    if (isEdit) body.baseStatus = form.status;
+    body.baseStatus = isEdit ? form.status : createStatus;
     return body;
 }
 
@@ -113,25 +118,43 @@ function serverError(fieldErrors, field) {
     return undefined;
 }
 
+const paise = (v) => Math.round(Number(v || 0) * 100);
+
 /**
- * Prefills related order and billed to from ?orderId= once, when that order has loaded.
- * Billed to comes from the order's client, never from "received from".
+ * Not yet billed on an order = order amount - totals of its non-cancelled invoices, never below 0
+ * (product revision, order billing). null when the order has no amount.
+ */
+function notYetBilled(order, invoices) {
+    if (!order || order.amount === null || order.amount === undefined || order.amount === '') return null;
+    const billed = (invoices || []).filter((i) => i.baseStatus !== 'CANCELLED').reduce((sum, i) => sum + paise(i.total), 0);
+    return Math.max(0, paise(order.amount) - billed) / 100;
+}
+
+/**
+ * Prefills the form from ?orderId= once, when the order and its invoices have settled (F-25):
+ * related order, billed to (the order's client, never "received from"), description (the service)
+ * and amount (not yet billed, when the order has an amount and its invoices loaded). Fields the user
+ * already filled while loading are kept. Returns { order, unbilled } for the hints.
  */
 function useOrderPrefill(orderId, setForm) {
     const order = useOrder(orderId);
+    const invoices = useOrderInvoices(orderId);
     const applied = useRef(false);
+    const invoicesSettled = invoices.status !== 'loading';
+    const unbilled = order.data && invoices.status === 'loaded' ? notYetBilled(order.data, invoices.data) : null;
     useEffect(() => {
-        if (applied.current || order.status !== 'loaded' || !order.data) return;
+        if (applied.current || order.status !== 'loaded' || !order.data || !invoicesSettled) return;
         applied.current = true;
         const o = order.data;
         setForm((f) => ({
             ...f,
-            // Keep anything the user already picked while the order was loading.
-            order: f.order || { id: o.id, orderNumber: o.orderNumber, clientName: (o.client && o.client.name) || null },
+            order: f.order || orderPickerValue(o),
             billedTo: f.billedTo || party(o.client),
+            description: f.description.trim() === '' ? o.serviceName || '' : f.description,
+            amount: String(f.amount).trim() === '' && unbilled !== null && unbilled > 0 ? String(unbilled) : f.amount,
         }));
-    }, [order.status, order.data, setForm]);
-    return order;
+    }, [order.status, order.data, invoicesSettled, unbilled, setForm]);
+    return { status: order.status, order: order.data || null, unbilled };
 }
 
 function InvoiceForm({ invoice, prefillOrderId, preselect }) {
@@ -142,6 +165,10 @@ function InvoiceForm({ invoice, prefillOrderId, preselect }) {
     const [form, setForm] = useState(() => toForm(invoice));
     const [localErrors, setLocalErrors] = useState({});
     const [confirmCancel, setConfirmCancel] = useState(false);
+    // Which create button is saving ('ISSUED' primary, 'DRAFT' secondary), for its spinner.
+    const [saving, setSaving] = useState(null);
+    // A new invoice's due date follows the invoice date (+15 days) until the user sets it.
+    const dueTouched = useRef(isEdit);
     const { submit, submitting, formError, fieldErrors } = useSubmit({ errorToast: true });
     const toast = useToast();
     const prefill = useOrderPrefill(isEdit ? null : prefillOrderId, setForm);
@@ -158,46 +185,93 @@ function InvoiceForm({ invoice, prefillOrderId, preselect }) {
         clearError(field);
     };
 
+    const setInvoiceDate = (value) => {
+        setForm((f) => ({ ...f, invoiceDate: value, dueDate: dueTouched.current ? f.dueDate : defaultDue(value) || f.dueDate }));
+        clearError('invoiceDate');
+        if (!dueTouched.current) clearError('dueDate');
+    };
+    const setDueDate = (value) => {
+        dueTouched.current = true;
+        set('dueDate')(value);
+    };
+
     const errorOf = (field) => localErrors[field] || serverError(fieldErrors, field);
 
-    const save = async () => {
+    const save = async (createStatus) => {
         setConfirmCancel(false);
-        const body = toBody(form, isEdit);
+        setSaving(createStatus || null);
+        const body = toBody(form, isEdit, createStatus);
         const result = await submit(() => (isEdit ? updateInvoice(invoice.id, body) : createInvoice({ id: newId.current, ...body })));
+        setSaving(null);
         if (!result.ok) return;
+        const id = isEdit ? invoice.id : newId.current;
         if (isEdit) {
             toast.success('Changes saved');
         } else {
-            const number = result.data && result.data.invoiceNumber;
-            toast.success(number ? `Invoice ${number} saved as draft` : 'Invoice saved as draft');
+            const data = result.data || {};
+            const label = data.invoiceNumber ? `Invoice ${data.invoiceNumber}` : 'Invoice';
+            // A retried create returns the stored invoice, so the toast follows the server's status.
+            if ((data.baseStatus || createStatus) === 'ISSUED') {
+                toast.success(`${label} issued`, { action: { label: 'Record payment', to: `/invoices/${id}/payments/new` } });
+            } else {
+                toast.success(`${label} saved as draft`);
+            }
         }
-        navigate(`/invoices/${isEdit ? invoice.id : newId.current}`, { replace: true });
+        navigate(`/invoices/${id}`, { replace: true });
+    };
+
+    const validated = () => {
+        const errors = validate(form, isEdit);
+        setLocalErrors(errors);
+        return Object.keys(errors).length === 0;
     };
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        const errors = validate(form, isEdit);
-        setLocalErrors(errors);
-        if (Object.keys(errors).length) return;
+        if (submitting || !validated()) return;
         if (isEdit && form.status === 'CANCELLED' && invoice.baseStatus !== 'CANCELLED') {
             setConfirmCancel(true);
             return;
         }
-        save();
+        save(isEdit ? undefined : 'ISSUED');
+    };
+
+    const saveDraft = () => {
+        if (submitting || !validated()) return;
+        save('DRAFT');
     };
 
     const total = liveTotal(form);
     const cancelTo = isEdit ? `/invoices/${invoice.id}` : prefillOrderId ? `/orders/${prefillOrderId}` : '/invoices';
     const prefillFailed = !isEdit && prefillOrderId && (prefill.status === 'error' || prefill.status === 'unavailable');
+    const prefillOrder = !isEdit && prefill.order && form.order && form.order.id === prefill.order.id ? prefill.order : null;
+    let amountHint;
+    if (prefillOrder && prefill.unbilled !== null) {
+        amountHint =
+            prefill.unbilled > 0
+                ? `Not yet billed on ${prefillOrder.orderNumber}: ${formatMoney(prefill.unbilled)}`
+                : `${prefillOrder.orderNumber} is fully billed.`;
+    }
 
     return (
         <FormLayout
             title={isEdit ? 'Edit invoice' : 'New invoice'}
             meta={isEdit ? invoice.invoiceNumber : undefined}
-            description={isEdit ? undefined : 'Number is assigned when you save. New invoices start as Draft.'}
+            description={isEdit ? undefined : 'Number is assigned when you save. Save and issue to record payments at once.'}
             error={[formError, prefillFailed && "Couldn't load the order to fill in this invoice. Choose the details below."]}
             onSubmit={handleSubmit}
-            footer={<FormFooter submitLabel={isEdit ? 'Save' : 'Create invoice'} submitting={submitting} cancelTo={cancelTo} />}
+            footer={
+                isEdit ? (
+                    <FormFooter submitLabel="Save" submitting={submitting} cancelTo={cancelTo} />
+                ) : (
+                    <FormFooter
+                        submitLabel="Save and issue"
+                        submitting={submitting && saving === 'ISSUED'}
+                        cancelTo={cancelTo}
+                        secondarySubmit={{ label: 'Save as draft', onClick: saveDraft, loading: submitting && saving === 'DRAFT' }}
+                    />
+                )
+            }
         >
             <FormSection title="Billing">
                 <ClientPicker
@@ -220,14 +294,22 @@ function InvoiceForm({ invoice, prefillOrderId, preselect }) {
             </FormSection>
             <FormSection title="Dates">
                 <FormRow>
-                    <DateField label="Invoice date" required value={form.invoiceDate} onChange={set('invoiceDate')} error={errorOf('invoiceDate')} />
-                    <DateField label="Due date" required relative value={form.dueDate} onChange={set('dueDate')} error={errorOf('dueDate')} />
+                    <DateField label="Invoice date" required value={form.invoiceDate} onChange={setInvoiceDate} error={errorOf('invoiceDate')} />
+                    <DateField
+                        label="Due date"
+                        required
+                        relative
+                        value={form.dueDate}
+                        onChange={setDueDate}
+                        error={errorOf('dueDate')}
+                        hint={isEdit ? undefined : `${DUE_AFTER_DAYS} days after the invoice date unless you change it.`}
+                    />
                 </FormRow>
             </FormSection>
             <FormSection title="Amount">
                 <TextArea label="Description" rows={3} value={form.description} onChange={set('description')} error={errorOf('description')} />
                 <FormRow>
-                    <MoneyField label="Amount" required placeholder="0.00" value={form.amount} onChange={set('amount')} error={errorOf('amount')} />
+                    <MoneyField label="Amount" required placeholder="0.00" value={form.amount} onChange={set('amount')} error={errorOf('amount')} hint={amountHint} />
                     <MoneyField label="Tax" placeholder="0.00" value={form.tax} onChange={set('tax')} error={errorOf('tax')} />
                 </FormRow>
                 <div className="flex items-baseline justify-between rounded-control border border-line bg-surface-subtle px-3 py-2.5">
@@ -257,7 +339,7 @@ function InvoiceForm({ invoice, prefillOrderId, preselect }) {
                 cancelLabel="Keep it"
                 tone="danger"
                 busy={submitting}
-                onConfirm={save}
+                onConfirm={() => save()}
                 onCancel={() => setConfirmCancel(false)}
             />
         </FormLayout>
@@ -269,7 +351,10 @@ function EditInvoice({ invoiceId }) {
     return <DataView resource={invoice} skeleton="form" notFoundTitle="Invoice not found">{(i) => <InvoiceForm invoice={i} />}</DataView>;
 }
 
-/** New invoice (/invoices/new, ?orderId= prefill, ?clientType=&clientId= preselect) and Edit invoice (/invoices/:invoiceId/edit), F-06. Online only. */
+/**
+ * New invoice (/invoices/new, ?orderId= prefill, ?clientType=&clientId= preselect) and Edit invoice
+ * (/invoices/:invoiceId/edit), F-06 / F-25. New: "Save as draft" or "Save and issue" (one create call). Online only.
+ */
 export default function InvoiceFormPage() {
     const { invoiceId } = useParams();
     const [params] = useSearchParams();
