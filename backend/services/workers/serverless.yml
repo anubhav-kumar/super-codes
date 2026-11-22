@@ -1,5 +1,6 @@
 # Workers service. The firm's team directory (add, edit, list). No delete: INACTIVE retires a worker.
 # Owns the Workers table. Orders reads it by its deterministic name (GetItem, BatchGetItem).
+# Reads the orders service's Orders and OrderAssignments tables (Query only) for open order counts.
 service: ca-crm-workers
 
 frameworkVersion: '3'
@@ -7,6 +8,8 @@ frameworkVersion: '3'
 custom:
   workersTable: ca-crm-workers-${sls:stage}-workers
   sessionsTable: ca-crm-auth-${sls:stage}-sessions
+  ordersTable: ca-crm-orders-${sls:stage}-orders
+  assignmentsTable: ca-crm-orders-${sls:stage}-order-assignments
 
 provider:
   name: aws
@@ -23,6 +26,8 @@ provider:
   environment:
     WORKERS_TABLE: ${self:custom.workersTable}
     SESSIONS_TABLE: ${self:custom.sessionsTable}
+    ORDERS_TABLE: ${self:custom.ordersTable}
+    ASSIGNMENTS_TABLE: ${self:custom.assignmentsTable}
   iam:
     role:
       statements:
@@ -40,6 +45,13 @@ provider:
             - dynamodb:GetItem
           Resource:
             - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.sessionsTable}
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.ordersTable}
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.ordersTable}/index/*
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.assignmentsTable}
 
 package:
   patterns:
