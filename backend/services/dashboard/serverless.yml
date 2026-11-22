@@ -1,0 +1,82 @@
+# Dashboard service. Read-only firm summary for Home (F-20). Owns no tables.
+# Reads billing's Invoices and orders' Orders (Query on table and GSIs), and directory's People and
+# Companies and workers' Workers (BatchGetItem) by their deterministic names, read-only.
+service: ca-crm-dashboard
+
+frameworkVersion: '3'
+
+custom:
+  invoicesTable: ca-crm-billing-${sls:stage}-invoices
+  ordersTable: ca-crm-orders-${sls:stage}-orders
+  peopleTable: ca-crm-directory-${sls:stage}-people
+  companiesTable: ca-crm-directory-${sls:stage}-companies
+  workersTable: ca-crm-workers-${sls:stage}-workers
+  sessionsTable: ca-crm-auth-${sls:stage}-sessions
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  stage: ${opt:stage, 'prod'}
+  region: ${opt:region, 'ap-southeast-1'}
+  deploymentMethod: direct
+  memorySize: 256
+  timeout: 10
+  logRetentionInDays: 14
+  apiGateway:
+    restApiId: ${cf:ca-crm-api-gateway-${sls:stage}.RestApiId}
+    restApiRootResourceId: ${cf:ca-crm-api-gateway-${sls:stage}.RestApiRootResourceId}
+  environment:
+    INVOICES_TABLE: ${self:custom.invoicesTable}
+    ORDERS_TABLE: ${self:custom.ordersTable}
+    PEOPLE_TABLE: ${self:custom.peopleTable}
+    COMPANIES_TABLE: ${self:custom.companiesTable}
+    WORKERS_TABLE: ${self:custom.workersTable}
+    SESSIONS_TABLE: ${self:custom.sessionsTable}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.invoicesTable}
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.invoicesTable}/index/*
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.ordersTable}
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.ordersTable}/index/*
+        - Effect: Allow
+          Action:
+            - dynamodb:BatchGetItem
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.peopleTable}
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.companiesTable}
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.workersTable}
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.sessionsTable}
+
+package:
+  patterns:
+    - '!node_modules/**'
+    - '!tests/**'
+    - '!package-lock.json'
+
+layers:
+  common:
+    path: ../../libs/common
+    name: ${self:service}-${sls:stage}-common
+    description: ca-crm common layer (logger, http, errors, middleware, auth, database, validators)
+    compatibleRuntimes:
+      - nodejs20.x
+
+functions:
+  summary:
+    handler: handlers/summary.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: dashboard/summary
+          method: get
+          cors: true
