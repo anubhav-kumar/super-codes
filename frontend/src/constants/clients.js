@@ -1,4 +1,5 @@
 /** Client directory constants (P-02). */
+import { compareNumber, compareText } from '../hooks/useListSort.js';
 
 /** The People / Companies switch shown on both client list screens. */
 export const CLIENT_TABS = [
@@ -50,3 +51,12 @@ export const COMPANY_LIMITS = {
     notes: 2000,
     associations: 20,
 };
+
+/**
+ * Sort options of the People and Companies lists (F-29, useListSort). The lists arrive sorted by name,
+ * and the sort is stable, so ties in outstanding stay in name order.
+ */
+export const CLIENT_LIST_SORTS = [
+    { value: 'name', label: 'Name', compare: compareText((c) => c.name) },
+    { value: '-outstanding', label: 'Outstanding', compare: compareNumber((c) => c.outstanding) },
+];

@@ -1,4 +1,4 @@
-/** Workers service (backend contract P-03, F-04). */
+/** Workers service (backend contract P-03, F-04; F-30 adds open order counts and the worker's orders). */
 import { request } from './client.js';
 
 const enc = encodeURIComponent;
@@ -17,7 +17,8 @@ export async function listWorkers({ signal } = {}) {
         const path = nextToken ? `/workers?nextToken=${enc(nextToken)}` : '/workers';
         const res = await request(path, { signal });
         const page = res.data || {};
-        items.push(...(Array.isArray(page.items) ? page.items : []));
+        // F-30: each list item carries openOrderCount; default it for older cached responses.
+        if (Array.isArray(page.items)) items.push(...page.items.map((w) => ({ ...w, openOrderCount: Number(w.openOrderCount) || 0 })));
         nextToken = page.nextToken || null;
         fromCache = fromCache || res.fromCache;
         if (!fetchedAt || res.fetchedAt < fetchedAt) fetchedAt = res.fetchedAt;
@@ -38,4 +39,14 @@ export function createWorker(body) {
 /** PUT /workers/{id} with the full editable field set (status required) -> 200 Worker. */
 export function updateWorker(id, body) {
     return request(`/workers/${enc(id)}`, { method: 'PUT', body });
+}
+
+/**
+ * GET /orders?workerId= (F-30, orders service, unpaginated) -> data = Order[] the worker is assigned to
+ * (primary or not, any status), newest first. Each order carries `assignment { isPrimary, assignedDate }`.
+ */
+export async function listWorkerOrders(workerId, { signal } = {}) {
+    const res = await request(`/orders?workerId=${enc(workerId)}`, { signal });
+    const items = (res.data && Array.isArray(res.data.items) && res.data.items) || [];
+    return { ...res, data: items.map((o) => ({ ...o, assignment: o.assignment || { isPrimary: false, assignedDate: null } })) };
 }

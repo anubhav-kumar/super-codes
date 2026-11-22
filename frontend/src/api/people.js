@@ -5,8 +5,10 @@ const PAGE_LIMIT = 500;
 
 /**
  * GET /directory/people, following nextToken until every page is loaded (the list is filtered on the device).
- * Resolves to the client.js result shape with data = Person[] sorted by name.
+ * Resolves to the client.js result shape with data = Person list item[] sorted by name.
  * fromCache is true if any page came from the service worker cache; fetchedAt is the oldest page's time.
+ * Person list item (F-29) = Person + companies [{ companyId, companyName, entityType, relationshipType }]
+ * (first link first), outstanding (INR, 0 when none) and hasOverdueInvoice; defaults fill them if absent.
  */
 export async function listPeople({ signal } = {}) {
     const items = [];
@@ -17,7 +19,16 @@ export async function listPeople({ signal } = {}) {
         const query = `limit=${PAGE_LIMIT}${nextToken ? `&nextToken=${encodeURIComponent(nextToken)}` : ''}`;
         const res = await request(`/directory/people?${query}`, { signal });
         const page = res.data || {};
-        if (Array.isArray(page.items)) items.push(...page.items);
+        if (Array.isArray(page.items)) {
+            for (const item of page.items) {
+                items.push({
+                    ...item,
+                    companies: Array.isArray(item.companies) ? item.companies : [],
+                    outstanding: Number(item.outstanding) || 0,
+                    hasOverdueInvoice: item.hasOverdueInvoice === true,
+                });
+            }
+        }
         nextToken = page.nextToken || null;
         fromCache = fromCache || res.fromCache;
         if (!fetchedAt || (res.fetchedAt && res.fetchedAt < fetchedAt)) fetchedAt = res.fetchedAt;

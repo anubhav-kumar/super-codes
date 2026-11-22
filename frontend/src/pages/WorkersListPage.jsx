@@ -1,87 +1,73 @@
+import { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import Badge from '../components/Badge.jsx';
 import Button from '../components/Button.jsx';
 import DataView from '../components/DataView.jsx';
 import EmptyState from '../components/EmptyState.jsx';
-import ListItem from '../components/ListItem.jsx';
+import ListToolbar from '../components/ListToolbar.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
-import SegmentedControl from '../components/SegmentedControl.jsx';
-import { designationLabel, WORKER_FILTERS, WORKER_STATUS_TONE, workerStatusLabel } from '../constants/workers.js';
+import ResponsiveList from '../components/ResponsiveList.jsx';
+import WorkerRow from '../components/directory/WorkerRow.jsx';
+import { workerColumns } from '../components/directory/workerColumns.jsx';
+import { designationLabel, WORKER_FILTERS, WORKER_LIST_SORTS } from '../constants/workers.js';
 import useListFilter from '../hooks/useListFilter.js';
+import useListSort from '../hooks/useListSort.js';
+import useMediaQuery from '../hooks/useMediaQuery.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useWorkers } from '../hooks/useWorkers.js';
 
 const EMPTY_FILTER_TEXT = { ACTIVE: 'No active workers.', INACTIVE: 'No inactive workers.' };
+const SEARCH_FIELDS = ['name', 'phone', (w) => designationLabel(w.designation)];
 
-function WorkerRows({ workers, filtered, query, setQuery, filter, addDisabled }) {
-
-    if (workers.length === 0) {
-        return (
-            <EmptyState
-                icon="workers"
-                title="No workers yet"
-                text="Add the people in your firm so orders can be assigned to them."
-                action={addDisabled ? undefined : { label: 'Add worker', to: '/workers/new', icon: 'plus' }}
-            />
-        );
-    }
-
-    return (
-        <>
-            {filtered.length === 0 ? (
-                query ? (
-                    <EmptyState
-                        icon="search"
-                        title={`No matches for “${query}”`}
-                        action={{ label: 'Clear search', onClick: () => setQuery('') }}
-                    />
-                ) : (
-                    <EmptyState icon="workers" title={EMPTY_FILTER_TEXT[filter] || 'No workers.'} />
-                )
-            ) : (
-                <div className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">
-                    {filtered.map((w) => (
-                        <ListItem
-                            key={w.id}
-                            to={`/workers/${w.id}`}
-                            title={w.name}
-                            subtitle={designationLabel(w.designation)}
-                            badges={<Badge tone={WORKER_STATUS_TONE[w.status]}>{workerStatusLabel(w.status)}</Badge>}
-                        />
-                    ))}
-                </div>
-            )}
-        </>
-    );
-}
-
-/** Workers list (F-04): Active / Inactive / All filter (default Active) and name search, both on the device. */
+/**
+ * Workers list (F-04, F-30): Active / Inactive / All chips with counts (default Active), two-line rows
+ * with the open order count, a sortable table from 1024 px (Name, Open orders). Search by name,
+ * phone and designation on the device.
+ */
 export default function WorkersListPage() {
     const { online } = useOnlineStatus();
+    const wide = useMediaQuery('(min-width: 1024px)');
     const workers = useWorkers();
     const [params, setParams] = useSearchParams();
     const requested = params.get('status');
     const filter = WORKER_FILTERS.some((f) => f.value === requested) ? requested : 'ACTIVE';
+    const list = useListSort(WORKER_LIST_SORTS, 'name');
 
     const setFilter = (value) => {
-        const next = new URLSearchParams(params);
-        if (value === 'ACTIVE') next.delete('status');
-        else next.set('status', value);
-        setParams(next, { replace: true });
+        setParams(
+            (prev) => {
+                const next = new URLSearchParams(prev);
+                if (value === 'ACTIVE') next.delete('status');
+                else next.set('status', value);
+                return next;
+            },
+            { replace: true }
+        );
     };
 
+    const all = useMemo(() => workers.data || [], [workers.data]);
+    const filterOptions = useMemo(
+        () =>
+            WORKER_FILTERS.map((f) => ({
+                ...f,
+                count: f.value === 'ALL' ? all.length : all.filter((w) => w.status === f.value).length,
+            })),
+        [all]
+    );
+    const byStatus = useMemo(() => (filter === 'ALL' ? all : all.filter((w) => w.status === filter)), [all, filter]);
+
     // Search lives in the top bar, so it is filtered here and passed to the rows.
-    const all = workers.data || [];
-    const byStatus = filter === 'ALL' ? all : all.filter((w) => w.status === filter);
-    const { query, setQuery, filtered } = useListFilter(byStatus, ['name']);
+    const { query, setQuery, filtered } = useListFilter(byStatus, SEARCH_FIELDS);
+    const rows = useMemo(() => filtered.slice().sort(list.compare), [filtered, list.compare]);
+    const hideActive = filter === 'ACTIVE';
+    const columns = useMemo(() => workerColumns({ hideStatus: hideActive }), [hideActive]);
 
     return (
         <PageBody width="list">
             <PageHeader
                 title="Workers"
-                search={all.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Search name' } : undefined}
+                search={all.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Search name or phone' } : undefined}
                 actions={
                     <Button icon="plus" to="/workers/new" disabled={!online} aria-label="Add worker">
                         <span className="md:hidden">Add</span>
@@ -90,11 +76,45 @@ export default function WorkersListPage() {
                 }
             />
             {!online && <OfflineActionHint className="mb-4" />}
-            <SegmentedControl label="Status" options={WORKER_FILTERS} value={filter} onChange={setFilter} className="mb-3" />
-            <DataView resource={workers} skeleton="rows">
-                {(data) => (
-                    <WorkerRows workers={data || []} filtered={filtered} query={query} setQuery={setQuery} filter={filter} addDisabled={!online} />
-                )}
+            <DataView resource={workers} skeleton={wide ? 'table' : 'rows'}>
+                {(data) =>
+                    !data || data.length === 0 ? (
+                        <EmptyState
+                            icon="workers"
+                            title="No workers yet"
+                            text="Add the people in your firm so orders can be assigned to them."
+                            action={online ? { label: 'Add worker', to: '/workers/new', icon: 'plus' } : undefined}
+                        />
+                    ) : (
+                        <>
+                            <ListToolbar filter={{ label: 'Status', options: filterOptions, value: filter, onChange: setFilter }} sort={list} />
+                            {rows.length === 0 ? (
+                                query.trim() ? (
+                                    <EmptyState
+                                        icon="search"
+                                        title={`No matches for “${query.trim()}”`}
+                                        action={{ label: 'Clear search', onClick: () => setQuery('') }}
+                                    />
+                                ) : (
+                                    <EmptyState icon="workers" title={EMPTY_FILTER_TEXT[filter] || 'No workers.'} />
+                                )
+                            ) : (
+                                <ResponsiveList
+                                    rows={rows}
+                                    rowKey={(w) => w.id}
+                                    table={{
+                                        columns,
+                                        rowHref: (w) => `/workers/${w.id}`,
+                                        sort: list.sort,
+                                        onSortChange: list.setSort,
+                                        caption: 'Workers',
+                                    }}
+                                    renderRow={(w) => <WorkerRow worker={w} hideActive={hideActive} />}
+                                />
+                            )}
+                        </>
+                    )
+                }
             </DataView>
         </PageBody>
     );

@@ -6,7 +6,9 @@ const companyPath = (id) => `/directory/companies/${encodeURIComponent(id)}`;
 
 /**
  * GET /directory/companies, following nextToken until every page is loaded (filtered on the device).
- * Resolves to the client.js result shape with data = Company[] sorted by name.
+ * Resolves to the client.js result shape with data = Company list item[] sorted by name.
+ * Company list item (F-29) = Company + mainContact ({ personId, personName, personPhone, relationshipType }
+ * or null), outstanding (INR, 0 when none) and hasOverdueInvoice; defaults fill them if absent.
  */
 export async function listCompanies({ signal } = {}) {
     const items = [];
@@ -17,7 +19,16 @@ export async function listCompanies({ signal } = {}) {
         const query = `limit=${PAGE_LIMIT}${nextToken ? `&nextToken=${encodeURIComponent(nextToken)}` : ''}`;
         const res = await request(`/directory/companies?${query}`, { signal });
         const page = res.data || {};
-        if (Array.isArray(page.items)) items.push(...page.items);
+        if (Array.isArray(page.items)) {
+            for (const item of page.items) {
+                items.push({
+                    ...item,
+                    mainContact: item.mainContact || null,
+                    outstanding: Number(item.outstanding) || 0,
+                    hasOverdueInvoice: item.hasOverdueInvoice === true,
+                });
+            }
+        }
         nextToken = page.nextToken || null;
         fromCache = fromCache || res.fromCache;
         if (!fetchedAt || (res.fetchedAt && res.fetchedAt < fetchedAt)) fetchedAt = res.fetchedAt;

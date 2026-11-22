@@ -8,7 +8,7 @@ const { enrichOrders } = require('../utils/enrich');
 
 const DEFAULT_LIMIT = 200;
 const MAX_LIMIT = 500;
-const FILTERS = ['status', 'clientId', 'receivedFromId'];
+const FILTERS = ['status', 'clientId', 'receivedFromId', 'workerId'];
 const ID_FILTER_INDEX = { clientId: 'byClient', receivedFromId: 'byReceivedFrom' };
 
 function parseLimit(raw) {
@@ -30,11 +30,33 @@ async function sendListQuery(command, startKey) {
     }
 }
 
+/** Orders the worker has an assignment on, newest first, each with that assignment. */
+async function ordersOfWorker(workerId) {
+    const assignments = await database.queryAll({
+        TableName: process.env.ASSIGNMENTS_TABLE,
+        IndexName: 'byWorker',
+        KeyConditionExpression: '#workerId = :workerId',
+        ExpressionAttributeNames: { '#workerId': 'workerId' },
+        ExpressionAttributeValues: { ':workerId': workerId },
+    });
+    if (assignments.length === 0) return [];
+    const byOrder = new Map(assignments.map((a) => [a.orderId, a]));
+    const orders = await database.batchGetByIds(process.env.ORDERS_TABLE, 'id', [...byOrder.keys()]);
+    const items = [...orders.values()].sort((a, b) => (a.sortKey < b.sortKey ? 1 : a.sortKey > b.sortKey ? -1 : 0));
+    const enriched = await enrichOrders(items);
+    return enriched.map((order) => {
+        const a = byOrder.get(order.id);
+        return { ...order, assignment: { isPrimary: a.isPrimary === true, assignedDate: a.assignedDate } };
+    });
+}
+
 /**
  * GET /orders?limit=&nextToken=   all orders, paginated
  * GET /orders?status=<STATUS>     filtered by status, unpaginated
  * GET /orders?clientId=<uuid>     orders where this person/company is the client, unpaginated
  * GET /orders?receivedFromId=<uuid>  orders this person requested, unpaginated
+ * GET /orders?workerId=<uuid>     orders this worker is assigned to (primary or not, any status),
+ *                                 unpaginated; each item also carries assignment { isPrimary, assignedDate }
  * Only one filter per request.
  * Sorted newest order date first, then highest order number first.
  * 200 { items: [Order], nextToken: string | null }, 400 VALIDATION_FAILED
@@ -49,6 +71,14 @@ module.exports.handler = middleware.withHandler(async ({ event }) => {
             given.map((f) => ({ field: f, message: 'Use only one filter per request' })),
             'Use only one filter per request'
         );
+    }
+
+    if (query.workerId !== undefined) {
+        const workerId = query.workerId;
+        if (!validators.isUuidV4(workerId)) {
+            throw errors.validationFailed([{ field: 'workerId', message: 'workerId must be a lowercase UUID v4' }]);
+        }
+        return http.ok({ items: await ordersOfWorker(workerId), nextToken: null });
     }
 
     const idFilter = given.find((f) => ID_FILTER_INDEX[f]);
