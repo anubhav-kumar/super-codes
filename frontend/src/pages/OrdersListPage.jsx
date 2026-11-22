@@ -13,6 +13,7 @@ import useListFilter from '../hooks/useListFilter.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useOrders } from '../hooks/useOrders.js';
 import { formatDate } from '../utils/format.js';
+import RecordNo from '../components/RecordNo.jsx';
 
 const SEARCH_FIELDS = ['orderNumber', (o) => (o.client && o.client.name) || ''];
 
@@ -59,8 +60,8 @@ function OrderRows({ orders, filter, addDisabled }) {
                             to={`/orders/${o.id}`}
                             title={
                                 <>
-                                    <span className="font-mono text-sm">{o.orderNumber}</span>
-                                    <span className="ml-2">{(o.client && o.client.name) || 'Unknown client'}</span>
+                                    <span>{(o.client && o.client.name) || 'Unknown client'}</span>
+                                    <RecordNo className="ml-2">{o.orderNumber}</RecordNo>
                                 </>
                             }
                             subtitle={subtitleOf(o)}

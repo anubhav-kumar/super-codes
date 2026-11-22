@@ -28,7 +28,7 @@ function AssociationRow({ association, isLast, online, open, onToggle, onChangeT
             <div className="flex min-h-14 items-center gap-2 pr-2">
                 <Link
                     to={`/people/${a.personId}`}
-                    className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 transition hover:bg-page focus-visible:bg-page focus-visible:outline-none"
+                    className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 transition hover:bg-surface-subtle focus-visible:bg-surface-subtle focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
                 >
                     <span className="min-w-0 flex-1">
                         <span className="block truncate font-medium text-ink">{a.personName || 'Unknown person'}</span>
@@ -43,13 +43,13 @@ function AssociationRow({ association, isLast, online, open, onToggle, onChangeT
                     onClick={onToggle}
                     aria-expanded={open}
                     aria-label={`Actions for ${a.personName || 'this person'}`}
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-control text-ink-muted hover:bg-page"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-control text-ink-muted hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-accent"
                 >
                     <Icon name={open ? 'close' : 'more'} className="h-5 w-5" />
                 </button>
             </div>
             {open && (
-                <div className="flex flex-col gap-3 border-t border-line bg-page px-4 py-3">
+                <div className="flex flex-col gap-3 border-t border-line bg-surface-subtle px-4 py-3">
                     <SelectField
                         label="Change relationship"
                         options={RELATIONSHIP_TYPES}
@@ -172,14 +172,14 @@ export default function CompanyDetailPage() {
                     <div className="flex flex-col gap-4">
                         <Card>
                             <dl className="grid gap-4 md:grid-cols-2">
-                                <DetailField label="PAN" value={c.pan ? <span className="font-mono">{c.pan}</span> : null} />
+                                <DetailField label="PAN" value={c.pan ? <span className="font-mono text-[13px]">{c.pan}</span> : null} />
                                 <DetailField label="Entity type" value={entityTypeLabel(c.entityType) || null} />
-                                <DetailField label="GSTIN" value={c.gstin ? <span className="font-mono">{c.gstin}</span> : null} />
+                                <DetailField label="GSTIN" value={c.gstin ? <span className="font-mono text-[13px]">{c.gstin}</span> : null} />
                                 <DetailField
                                     label="Email"
                                     value={
                                         c.email ? (
-                                            <a href={`mailto:${c.email}`} className="text-primary-700 hover:underline">
+                                            <a href={`mailto:${c.email}`} className="text-ink underline-offset-2 hover:underline focus-visible:underline">
                                                 {c.email}
                                             </a>
                                         ) : null
@@ -189,7 +189,7 @@ export default function CompanyDetailPage() {
                                     label="Phone"
                                     value={
                                         c.phone ? (
-                                            <a href={`tel:${c.phone.replace(/[^\d+]/g, '')}`} className="text-primary-700 hover:underline">
+                                            <a href={`tel:${c.phone.replace(/[^\d+]/g, '')}`} className="text-ink underline-offset-2 hover:underline focus-visible:underline">
                                                 {c.phone}
                                             </a>
                                         ) : null

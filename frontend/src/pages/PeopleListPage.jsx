@@ -1,4 +1,4 @@
-import Badge from '../components/Badge.jsx';
+import Tag from '../components/Tag.jsx';
 import Button from '../components/Button.jsx';
 import ClientsTabs from '../components/ClientsTabs.jsx';
 import DataView from '../components/DataView.jsx';
@@ -63,7 +63,7 @@ export default function PeopleListPage() {
                                                 to={`/people/${person.id}`}
                                                 title={person.name}
                                                 subtitle={person.phone || undefined}
-                                                badges={person.isIndividualClient ? <Badge tone="info">Individual client</Badge> : undefined}
+                                                badges={person.isIndividualClient ? <Tag>Individual client</Tag> : undefined}
                                             />
                                         </li>
                                     ))}

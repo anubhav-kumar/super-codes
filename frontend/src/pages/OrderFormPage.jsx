@@ -183,7 +183,7 @@ function OrderForm({ order }) {
         <form noValidate onSubmit={handleSubmit} className="flex max-w-xl flex-col gap-4">
             <FormError message={formError} />
             {isEdit ? (
-                <TextField label="Order number" value={order.orderNumber} readOnly disabled className="font-mono" />
+                <TextField label="Order number" value={order.orderNumber} readOnly disabled className="tabular-nums" />
             ) : (
                 <p className="text-sm text-ink-muted">Number is assigned when you save.</p>
             )}

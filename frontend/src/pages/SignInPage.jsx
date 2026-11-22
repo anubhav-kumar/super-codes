@@ -56,7 +56,7 @@ export default function SignInPage() {
         <main className="flex h-full overflow-y-auto">
             <div className="m-auto w-full max-w-sm px-4 py-10">
                 <div className="mb-8 text-center">
-                    <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-card bg-primary-600 text-white">
+                    <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-card bg-accent text-on-accent">
                         <Icon name="invoices" className="h-6 w-6" />
                     </span>
                     <h1 className="text-2xl font-semibold text-ink">{APP_NAME}</h1>
@@ -65,12 +65,12 @@ export default function SignInPage() {
 
                 <form noValidate onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-card border border-line bg-surface p-5">
                     {expired && !formError && (
-                        <p role="status" className="rounded-control bg-info-bg px-3 py-2.5 text-sm text-info">
+                        <p role="status" className="rounded-control bg-surface-muted px-3 py-2.5 text-sm text-ink-muted">
                             Your session has ended. Sign in again.
                         </p>
                     )}
                     {!online && (
-                        <p role="status" className="flex items-start gap-2 rounded-control bg-warning-bg px-3 py-2.5 text-sm text-warning">
+                        <p role="status" className="flex items-start gap-2 rounded-control bg-surface-muted px-3 py-2.5 text-sm text-ink-muted">
                             <Icon name="offline" className="mt-0.5 h-4 w-4 shrink-0" />
                             Sign in needs a connection. Connect and try again.
                         </p>
@@ -107,7 +107,7 @@ export default function SignInPage() {
                                 onClick={() => setShowPassword((s) => !s)}
                                 aria-label={showPassword ? 'Hide password' : 'Show password'}
                                 aria-pressed={showPassword}
-                                className="flex h-10 w-10 items-center justify-center rounded-control text-ink-muted hover:bg-page"
+                                className="flex h-10 w-10 items-center justify-center rounded-control text-ink-muted hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-accent"
                             >
                                 <Icon name={showPassword ? 'eye-off' : 'eye'} className="h-5 w-5" />
                             </button>

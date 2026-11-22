@@ -34,13 +34,13 @@ export default function ConfirmDialog({
                 aria-label="Close"
                 tabIndex={-1}
                 onClick={busy ? undefined : onCancel}
-                className="absolute inset-0 bg-ink/40"
+                className="absolute inset-0 bg-ink/30"
             />
             <div
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby={titleId}
-                className="relative w-full max-w-sm rounded-card bg-surface p-5 shadow-xl"
+                className="relative w-full max-w-sm rounded-card border border-line bg-surface p-5 shadow-overlay"
             >
                 <h2 id={titleId} className="text-lg font-semibold text-ink">
                     {title}

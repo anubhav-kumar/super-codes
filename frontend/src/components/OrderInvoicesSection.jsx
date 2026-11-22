@@ -45,7 +45,7 @@ export default function OrderInvoicesSection({ orderId }) {
                                 <li key={i.id}>
                                     <ListItem
                                         to={`/invoices/${i.id}`}
-                                        title={<span className="font-mono text-sm">{i.invoiceNumber}</span>}
+                                        title={<span className="tabular-nums">{i.invoiceNumber}</span>}
                                         subtitle={[
                                             i.billedTo && i.billedTo.name ? `Billed to ${i.billedTo.name}` : null,
                                             `Received ${formatMoney(i.amountReceived ?? 0)}`,

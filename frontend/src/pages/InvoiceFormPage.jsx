@@ -179,7 +179,7 @@ function InvoiceForm({ invoice, prefillOrderId }) {
             <FormError message={formError} />
             {prefillFailed && <FormError message="Couldn't load the order to fill in this invoice. Choose the details below." />}
             {isEdit ? (
-                <TextField label="Invoice number" value={invoice.invoiceNumber} readOnly disabled className="font-mono" />
+                <TextField label="Invoice number" value={invoice.invoiceNumber} readOnly disabled className="tabular-nums" />
             ) : (
                 <p className="text-sm text-ink-muted">Number is assigned when you save. New invoices start as Draft.</p>
             )}
@@ -208,7 +208,7 @@ function InvoiceForm({ invoice, prefillOrderId }) {
                 <MoneyField label="Amount" required placeholder="0.00" value={form.amount} onChange={set('amount')} error={errorOf('amount')} />
                 <MoneyField label="Tax" placeholder="0.00" value={form.tax} onChange={set('tax')} error={errorOf('tax')} />
             </div>
-            <div className="flex items-baseline justify-between rounded-control border border-line bg-page px-3 py-2.5">
+            <div className="flex items-baseline justify-between rounded-control border border-line bg-surface-subtle px-3 py-2.5">
                 <span className="text-sm text-ink-muted">Total (amount + tax)</span>
                 <span className="font-semibold text-ink tabular-nums">{total === null ? '—' : formatMoney(total)}</span>
             </div>

@@ -14,10 +14,10 @@ function NavItemLink({ item, active, layout }) {
     const tone =
         layout === 'sidebar'
             ? active
-                ? 'bg-primary-50 text-primary-700'
-                : 'text-ink-muted hover:bg-page hover:text-ink'
+                ? 'bg-surface-muted text-ink'
+                : 'text-ink-muted hover:bg-surface-muted hover:text-ink'
             : active
-              ? 'text-primary-600'
+              ? 'text-ink'
               : 'text-ink-muted hover:text-ink';
     return (
         <NavLink to={item.to} end={item.to === '/'} aria-current={active ? 'page' : undefined} className={`${base} ${tone}`}>
@@ -65,7 +65,7 @@ export default function AppShell() {
                             type="button"
                             onClick={goBack}
                             aria-label="Back"
-                            className="flex h-11 w-11 items-center justify-center rounded-full text-ink hover:bg-page"
+                            className="flex h-11 w-11 items-center justify-center rounded-full text-ink hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-accent"
                         >
                             <Icon name="back" />
                         </button>

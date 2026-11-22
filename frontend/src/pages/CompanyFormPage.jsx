@@ -138,7 +138,7 @@ function AssociationRows({ rows, setRows, rowErrors, fieldErrors, blockError }) 
                                         type="button"
                                         onClick={() => remove(row.key)}
                                         aria-label={`Remove person ${index + 1}`}
-                                        className="flex h-9 w-9 items-center justify-center rounded-control text-ink-muted hover:bg-page"
+                                        className="flex h-9 w-9 items-center justify-center rounded-control text-ink-muted hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-accent"
                                     >
                                         <Icon name="close" className="h-4 w-4" />
                                     </button>

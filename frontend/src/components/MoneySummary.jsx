@@ -35,7 +35,7 @@ export default function MoneySummary({ amount, tax, total, received, outstanding
                 {amount !== undefined && <Row label="Amount" value={amount} />}
                 {tax !== undefined && <Row label="Tax" value={tax} />}
                 <Row label="Total" value={total} strong />
-                <Row label="Received" value={received} tone={Number(received) > 0 ? 'success' : 'neutral'} />
+                <Row label="Received" value={received} />
                 <Row label="Outstanding" value={outstanding} tone={outstandingTone} strong hint={outstandingHint} />
             </dl>
         </section>

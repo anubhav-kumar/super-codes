@@ -1,5 +1,4 @@
 import { useParams } from 'react-router-dom';
-import Badge from '../components/Badge.jsx';
 import BilledInvoicesSection from '../components/BilledInvoicesSection.jsx';
 import Button from '../components/Button.jsx';
 import Card from '../components/Card.jsx';
@@ -12,6 +11,7 @@ import PersonCompaniesSection from '../components/PersonCompaniesSection.jsx';
 import PersonRequestedOrdersSection from '../components/PersonRequestedOrdersSection.jsx';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { usePerson } from '../hooks/usePeople.js';
+import Tag from '../components/Tag.jsx';
 
 /**
  * Person detail (F-02). Later features add one line per section component below the details
@@ -28,7 +28,7 @@ export default function PersonDetailPage() {
                 <>
                     <PageHeader
                         title={p.name}
-                        subtitle={p.isIndividualClient ? <Badge tone="info">Individual client</Badge> : undefined}
+                        subtitle={p.isIndividualClient ? <Tag>Individual client</Tag> : undefined}
                         actions={
                             <Button variant="secondary" icon="edit" to={`/people/${p.id}/edit`} disabled={!online}>
                                 Edit
@@ -40,12 +40,12 @@ export default function PersonDetailPage() {
                     <div className="flex flex-col gap-4">
                         <Card>
                             <dl className="grid gap-4 md:grid-cols-2">
-                                <DetailField label="PAN" value={p.pan ? <span className="font-mono">{p.pan}</span> : null} />
+                                <DetailField label="PAN" value={p.pan ? <span className="font-mono text-[13px]">{p.pan}</span> : null} />
                                 <DetailField
                                     label="Email"
                                     value={
                                         p.email ? (
-                                            <a href={`mailto:${p.email}`} className="text-primary-700 hover:underline">
+                                            <a href={`mailto:${p.email}`} className="text-ink underline-offset-2 hover:underline focus-visible:underline">
                                                 {p.email}
                                             </a>
                                         ) : null
@@ -55,7 +55,7 @@ export default function PersonDetailPage() {
                                     label="Phone"
                                     value={
                                         p.phone ? (
-                                            <a href={`tel:${p.phone.replace(/[^\d+]/g, '')}`} className="text-primary-700 hover:underline">
+                                            <a href={`tel:${p.phone.replace(/[^\d+]/g, '')}`} className="text-ink underline-offset-2 hover:underline focus-visible:underline">
                                                 {p.phone}
                                             </a>
                                         ) : null

@@ -39,14 +39,14 @@ export default function WorkerDetailPage() {
                             <DetailField label="Designation" value={designationLabel(w.designation)} />
                             <DetailField label="Email">
                                 {w.email ? (
-                                    <a href={`mailto:${w.email}`} className="text-primary-700 hover:underline">
+                                    <a href={`mailto:${w.email}`} className="text-ink underline-offset-2 hover:underline focus-visible:underline">
                                         {w.email}
                                     </a>
                                 ) : null}
                             </DetailField>
                             <DetailField label="Phone">
                                 {w.phone ? (
-                                    <a href={`tel:${w.phone.replace(/[^\d+]/g, '')}`} className="text-primary-700 hover:underline">
+                                    <a href={`tel:${w.phone.replace(/[^\d+]/g, '')}`} className="text-ink underline-offset-2 hover:underline focus-visible:underline">
                                         {w.phone}
                                     </a>
                                 ) : null}

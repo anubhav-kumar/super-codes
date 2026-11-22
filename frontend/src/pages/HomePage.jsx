@@ -30,7 +30,7 @@ export default function HomePage() {
                             key={item.id}
                             title={
                                 <span className="flex items-center gap-2">
-                                    <Icon name={item.icon} className="h-5 w-5 text-primary-600" />
+                                    <Icon name={item.icon} className="h-5 w-5 text-ink-subtle" />
                                     {item.label}
                                 </span>
                             }

@@ -5,6 +5,7 @@ import App from './App.jsx';
 import AuthProvider from './auth/AuthProvider.jsx';
 import { initServiceWorker } from './offline/serviceWorker.js';
 import { startOutboxSync } from './offline/outbox.js';
+import '@fontsource-variable/inter/wght.css';
 import './index.css';
 
 initServiceWorker();

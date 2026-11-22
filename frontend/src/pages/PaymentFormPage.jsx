@@ -102,15 +102,15 @@ function PaymentForm({ invoice, payment }) {
 
     return (
         <form noValidate onSubmit={handleSubmit} className="flex max-w-xl flex-col gap-4">
-            <div className="flex items-baseline justify-between gap-3 rounded-control border border-line bg-page px-3 py-2.5">
+            <div className="flex items-baseline justify-between gap-3 rounded-control border border-line bg-surface-subtle px-3 py-2.5">
                 <span className="text-sm text-ink-muted">
-                    Invoice <span className="font-mono text-ink">{invoice.invoiceNumber}</span> outstanding
+                    Invoice <span className="text-ink tabular-nums">{invoice.invoiceNumber}</span> outstanding
                 </span>
                 <span className="font-semibold text-ink tabular-nums">{formatMoney(invoice.outstanding)}</span>
             </div>
             <FormError message={formError} />
             {isEdit ? (
-                <TextField label="Payment reference" value={payment.paymentNumber} readOnly disabled className="font-mono" />
+                <TextField label="Payment reference" value={payment.paymentNumber} readOnly disabled className="tabular-nums" />
             ) : (
                 <p className="text-sm text-ink-muted">Reference is assigned when you save. Only Paid payments count as received.</p>
             )}

@@ -14,8 +14,8 @@ export default function SegmentedControl({ options, value, onChange, label, clas
                         role="radio"
                         aria-checked={active}
                         onClick={() => onChange(o.value)}
-                        className={`min-h-9 shrink-0 rounded-full px-4 text-sm font-medium whitespace-nowrap ring-1 transition ring-inset ${
-                            active ? 'bg-primary-600 text-white ring-primary-600' : 'bg-surface text-ink ring-line hover:bg-page'
+                        className={`min-h-9 shrink-0 rounded-full px-4 text-sm font-medium whitespace-nowrap ring-1 transition ring-inset focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+                            active ? 'bg-accent text-on-accent ring-accent' : 'bg-surface text-ink ring-line hover:bg-surface-subtle'
                         }`}
                     >
                         {o.label}

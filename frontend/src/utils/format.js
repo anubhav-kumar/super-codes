@@ -23,10 +23,16 @@ export function formatDate(value) {
 }
 
 const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 });
+const inrWhole = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
-/** INR with Indian grouping, e.g. ₹1,23,456.00. Empty string for null/undefined. */
-export function formatMoney(value) {
+/**
+ * INR with Indian grouping, e.g. ₹1,23,456.00. Empty string for null/undefined.
+ * `{ paise: 'auto' }` drops ".00" for whole amounts (₹8,108, ₹1,628.50).
+ */
+export function formatMoney(value, { paise = 'always' } = {}) {
     if (value === null || value === undefined || value === '') return '';
     const n = Number(value);
-    return Number.isFinite(n) ? inr.format(n) : '';
+    if (!Number.isFinite(n)) return '';
+    if (paise === 'auto' && Math.round(n * 100) % 100 === 0) return inrWhole.format(n);
+    return inr.format(n);
 }

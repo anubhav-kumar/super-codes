@@ -10,9 +10,9 @@ export default function RelatedSection({ title, count, items = [], emptyText = '
     return (
         <section className={`rounded-card border border-line bg-surface ${className}`}>
             <div className="flex items-center justify-between gap-3 px-4 pt-4 pb-3">
-                <h2 className="text-base font-semibold text-ink">
+                <h2 className="text-sm font-semibold text-ink">
                     {title}
-                    <span className="ml-2 text-sm font-normal text-ink-muted tabular-nums">{total}</span>
+                    <span className="ml-2 font-normal text-ink-subtle tabular-nums">{total}</span>
                 </h2>
                 {action}
             </div>

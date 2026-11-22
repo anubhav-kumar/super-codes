@@ -8,7 +8,7 @@ export default function OfflineBanner() {
     return (
         <div
             role="status"
-            className="flex shrink-0 items-center justify-center gap-2 bg-warning-bg px-4 py-2 text-center text-sm font-medium text-warning"
+            className="flex shrink-0 items-center justify-center gap-2 bg-ink px-4 py-2 text-center text-sm font-medium text-white"
         >
             <Icon name="offline" className="h-4 w-4 shrink-0" />
             You are offline. Showing saved data.

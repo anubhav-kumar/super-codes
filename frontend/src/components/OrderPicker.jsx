@@ -8,6 +8,7 @@ import EmptyState from './EmptyState.jsx';
 import { controlClass, FieldLabel, FieldMessage } from './fieldStyles.jsx';
 import Icon from './Icon.jsx';
 import SearchInput from './SearchInput.jsx';
+import RecordNo from './RecordNo.jsx';
 
 /** Value shape: { id, orderNumber, clientName } or null. */
 
@@ -34,12 +35,12 @@ function OrderRows({ orders, query, setQuery, onPick }) {
                     <button
                         type="button"
                         onClick={() => onPick(o)}
-                        className="flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-page focus-visible:bg-page focus-visible:outline-none"
+                        className="flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-surface-subtle focus-visible:bg-surface-subtle focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
                     >
                         <span className="min-w-0 flex-1">
                             <span className="block truncate font-medium text-ink">
-                                <span className="font-mono text-sm">{o.orderNumber}</span>
-                                <span className="ml-2">{(o.client && o.client.name) || 'Unknown client'}</span>
+                                <span>{(o.client && o.client.name) || 'Unknown client'}</span>
+                                <RecordNo className="ml-2">{o.orderNumber}</RecordNo>
                             </span>
                             <span className="block truncate text-sm text-ink-muted">{o.serviceName}</span>
                         </span>
@@ -71,7 +72,7 @@ function OrderSheet({ title, hasValue, onPick, onClear, onClose }) {
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby={titleId}
-                className="relative flex max-h-[85vh] w-full max-w-lg flex-col rounded-t-card bg-surface pb-[env(safe-area-inset-bottom)] shadow-xl sm:rounded-card"
+                className="relative flex max-h-[85vh] w-full max-w-lg flex-col rounded-t-card bg-surface pb-[env(safe-area-inset-bottom)] shadow-overlay sm:rounded-card"
             >
                 <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
                     <h2 id={titleId} className="text-lg font-semibold text-ink">
@@ -81,7 +82,7 @@ function OrderSheet({ title, hasValue, onPick, onClear, onClose }) {
                         type="button"
                         onClick={onClose}
                         aria-label="Close"
-                        className="flex h-9 w-9 items-center justify-center rounded-control text-ink-muted hover:bg-page"
+                        className="flex h-9 w-9 items-center justify-center rounded-control text-ink-muted hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-accent"
                     >
                         <Icon name="close" className="h-5 w-5" />
                     </button>
@@ -89,7 +90,7 @@ function OrderSheet({ title, hasValue, onPick, onClear, onClose }) {
                 <div className="flex flex-col gap-2 px-4 pt-3 pb-2">
                     <SearchInput value={query} onChange={setQuery} placeholder="Search order number, client or service" />
                     {hasValue && (
-                        <button type="button" onClick={onClear} className="self-start text-sm font-medium text-primary-700 hover:underline">
+                        <button type="button" onClick={onClear} className="self-start text-sm font-medium text-ink underline-offset-2 hover:underline focus-visible:underline">
                             No related order
                         </button>
                     )}
@@ -140,11 +141,11 @@ export default function OrderPicker({
                 aria-describedby={error || hint ? messageId : undefined}
                 className={`flex min-h-11 items-center gap-2 text-left ${controlClass(Boolean(error))}`}
             >
-                <span className={`min-w-0 flex-1 truncate ${value ? 'text-ink' : 'text-ink-muted/70'}`}>
+                <span className={`min-w-0 flex-1 truncate ${value ? 'text-ink' : 'text-ink-subtle'}`}>
                     {value ? (
                         <>
-                            <span className="font-mono text-sm">{value.orderNumber || 'Order'}</span>
-                            {value.clientName && <span className="ml-2">{value.clientName}</span>}
+                            {value.clientName && <span className="mr-2">{value.clientName}</span>}
+                            <RecordNo>{value.orderNumber || 'Order'}</RecordNo>
                         </>
                     ) : (
                         'No related order'

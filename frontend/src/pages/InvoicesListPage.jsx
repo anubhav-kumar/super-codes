@@ -13,6 +13,7 @@ import { useInvoices } from '../hooks/useInvoices.js';
 import useListFilter from '../hooks/useListFilter.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { formatDate, formatMoney } from '../utils/format.js';
+import RecordNo from '../components/RecordNo.jsx';
 
 const SEARCH_FIELDS = ['invoiceNumber', (i) => (i.billedTo && i.billedTo.name) || ''];
 const FILTER_OPTIONS = INVOICE_FILTERS.map(({ value, label }) => ({ value, label }));
@@ -69,8 +70,8 @@ function InvoiceRows({ invoices, filter, addDisabled }) {
                             to={`/invoices/${i.id}`}
                             title={
                                 <>
-                                    <span className="font-mono text-sm">{i.invoiceNumber}</span>
-                                    <span className="ml-2">{(i.billedTo && i.billedTo.name) || 'Unknown'}</span>
+                                    <span>{(i.billedTo && i.billedTo.name) || 'Unknown'}</span>
+                                    <RecordNo className="ml-2">{i.invoiceNumber}</RecordNo>
                                 </>
                             }
                             subtitle={subtitleOf(i)}

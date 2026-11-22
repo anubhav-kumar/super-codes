@@ -16,8 +16,9 @@ import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useOrder } from '../hooks/useOrders.js';
 import useSubmit from '../hooks/useSubmit.js';
 import { formatDate, formatMoney } from '../utils/format.js';
+import Tag from '../components/Tag.jsx';
 
-const linkClass = 'text-primary-700 hover:underline';
+const linkClass = 'text-ink underline-offset-2 hover:underline focus-visible:underline';
 
 function StatusChanger({ order, onSaved }) {
     const { online } = useOnlineStatus();
@@ -56,7 +57,7 @@ function AssignmentsSection({ assignments }) {
                         <li key={a.workerId}>
                             <Link
                                 to={`/workers/${a.workerId}`}
-                                className="flex min-h-14 items-center gap-3 px-4 py-3 transition hover:bg-page focus-visible:bg-page focus-visible:outline-none"
+                                className="flex min-h-14 items-center gap-3 px-4 py-3 transition hover:bg-surface-subtle focus-visible:bg-surface-subtle focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
                             >
                                 <span className="min-w-0 flex-1">
                                     <span className="block truncate font-medium text-ink">{a.workerName || 'Unknown worker'}</span>
@@ -65,7 +66,7 @@ function AssignmentsSection({ assignments }) {
                                     )}
                                 </span>
                                 <span className="flex shrink-0 flex-wrap justify-end gap-1">
-                                    {a.isPrimary && <Badge tone="info">Primary owner</Badge>}
+                                    {a.isPrimary && <Tag>Primary owner</Tag>}
                                     {a.workerStatus === 'INACTIVE' && <Badge>Inactive</Badge>}
                                 </span>
                             </Link>
@@ -86,7 +87,7 @@ function OrderDetail({ order, reload }) {
     return (
         <>
             <PageHeader
-                title={<span className="font-mono">{order.orderNumber}</span>}
+                title={<span className="tabular-nums">{order.orderNumber}</span>}
                 subtitle={order.serviceName}
                 actions={
                     <Button variant="secondary" icon="edit" to={`/orders/${order.id}/edit`} disabled={!online}>

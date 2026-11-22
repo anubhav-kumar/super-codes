@@ -58,7 +58,7 @@ export default function CompaniesListPage() {
                                                 to={`/companies/${company.id}`}
                                                 title={company.name}
                                                 subtitle={entityTypeLabel(company.entityType)}
-                                                meta={company.pan ? <span className="font-mono">{company.pan}</span> : undefined}
+                                                meta={company.pan ? <span className="tabular-nums">{company.pan}</span> : undefined}
                                             />
                                         </li>
                                     ))}

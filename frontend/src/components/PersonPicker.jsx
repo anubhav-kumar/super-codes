@@ -104,7 +104,7 @@ function PersonRow({ person, disabledReason, onPick }) {
                 type="button"
                 disabled={Boolean(disabledReason)}
                 onClick={() => onPick(person)}
-                className="flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-page focus-visible:bg-page focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-surface-subtle focus-visible:bg-surface-subtle focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
                 <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium text-ink">{person.name}</span>
@@ -186,7 +186,7 @@ function PickerSheet({ title, excludeIds, suggested, allowQuickAdd, onPick, onCl
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby={titleId}
-                className="relative flex max-h-[85vh] w-full max-w-lg flex-col rounded-t-card bg-surface pb-[env(safe-area-inset-bottom)] shadow-xl sm:rounded-card"
+                className="relative flex max-h-[85vh] w-full max-w-lg flex-col rounded-t-card bg-surface pb-[env(safe-area-inset-bottom)] shadow-overlay sm:rounded-card"
             >
                 <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
                     <h2 id={titleId} className="text-lg font-semibold text-ink">
@@ -196,7 +196,7 @@ function PickerSheet({ title, excludeIds, suggested, allowQuickAdd, onPick, onCl
                         type="button"
                         onClick={onClose}
                         aria-label="Close"
-                        className="flex h-9 w-9 items-center justify-center rounded-control text-ink-muted hover:bg-page"
+                        className="flex h-9 w-9 items-center justify-center rounded-control text-ink-muted hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-accent"
                     >
                         <Icon name="close" className="h-5 w-5" />
                     </button>
@@ -281,7 +281,7 @@ export default function PersonPicker({
                 aria-describedby={error || hint ? messageId : undefined}
                 className={`flex min-h-11 items-center gap-2 text-left ${controlClass(Boolean(error))}`}
             >
-                <span className={`min-w-0 flex-1 truncate ${name ? 'text-ink' : 'text-ink-muted/70'}`}>{name || 'Choose a person'}</span>
+                <span className={`min-w-0 flex-1 truncate ${name ? 'text-ink' : 'text-ink-subtle'}`}>{name || 'Choose a person'}</span>
                 {value && value.type === 'new' && <span className="shrink-0 text-xs text-ink-muted">New</span>}
                 <Icon name="chevron-right" className="h-4 w-4 shrink-0 text-ink-muted" />
             </button>

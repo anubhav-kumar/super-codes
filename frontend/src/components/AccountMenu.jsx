@@ -32,7 +32,7 @@ export default function AccountMenu() {
                 aria-haspopup="menu"
                 aria-expanded={open}
                 aria-label="Account"
-                className="flex h-11 w-11 items-center justify-center rounded-full text-ink hover:bg-page"
+                className="flex h-11 w-11 items-center justify-center rounded-full text-ink hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-accent"
             >
                 <Icon name="user" />
             </button>
@@ -45,7 +45,7 @@ export default function AccountMenu() {
                         onClick={() => setOpen(false)}
                         className="fixed inset-0 z-40 cursor-default"
                     />
-                    <div role="menu" className="absolute top-12 right-0 z-50 w-64 overflow-hidden rounded-card border border-line bg-surface py-1 shadow-lg">
+                    <div role="menu" className="absolute top-12 right-0 z-50 w-64 overflow-hidden rounded-card border border-line bg-surface py-1 shadow-overlay">
                         <div className="border-b border-line px-4 py-3">
                             <p className="text-xs text-ink-muted">Signed in as</p>
                             <p className="truncate text-sm font-medium text-ink">{user?.email}</p>
@@ -58,7 +58,7 @@ export default function AccountMenu() {
                                 setOpen(false);
                                 setConfirming(true);
                             }}
-                            className="flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-danger hover:bg-page"
+                            className="flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-danger hover:bg-danger-bg focus-visible:bg-danger-bg focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
                         >
                             <Icon name="sign-out" className="h-4 w-4" />
                             Sign out
