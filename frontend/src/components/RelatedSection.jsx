@@ -1,21 +1,15 @@
 import ListItem from './ListItem.jsx';
+import Section from './Section.jsx';
 
 /**
- * Titled block on a detail screen: count, list of ListItems, empty text, optional action.
- * items: [{ key, to, title, subtitle, meta, badges }]. `children` replaces the default list
- * (e.g. rows with their own actions); `footer` renders below the list.
+ * Titled list block on a detail screen (a Section): count, list of ListItems, empty text and one
+ * `action` (use SectionAction). items: [{ key, to, title, subtitle, meta, badges }]. `children`
+ * replaces the default list (e.g. rows with their own actions); `footer` renders below the list.
  */
-export default function RelatedSection({ title, count, items = [], emptyText = 'None yet.', action, children, footer, className = '' }) {
+export default function RelatedSection({ id, title, count, items = [], emptyText = 'None yet.', action, children, footer, className = '' }) {
     const total = count ?? items.length;
     return (
-        <section className={`rounded-card border border-line bg-surface ${className}`}>
-            <div className="flex items-center justify-between gap-3 px-4 pt-4 pb-3">
-                <h2 className="text-sm font-semibold text-ink">
-                    {title}
-                    <span className="ml-2 font-normal text-ink-subtle tabular-nums">{total}</span>
-                </h2>
-                {action}
-            </div>
+        <Section id={id} title={title} count={total} action={action} className={className}>
             {children ??
                 (items.length === 0 ? (
                     <p className="px-4 pb-4 text-sm text-ink-muted">{emptyText}</p>
@@ -29,6 +23,6 @@ export default function RelatedSection({ title, count, items = [], emptyText = '
                     </ul>
                 ))}
             {footer}
-        </section>
+        </Section>
     );
 }

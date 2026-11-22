@@ -7,6 +7,7 @@ import FormFooter from '../components/FormFooter.jsx';
 import FormLayout, { FormHeading } from '../components/FormLayout.jsx';
 import FormSection, { FormRow } from '../components/FormSection.jsx';
 import MoneyField from '../components/MoneyField.jsx';
+import NotFoundState from '../components/NotFoundState.jsx';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import SelectField from '../components/SelectField.jsx';
@@ -163,16 +164,7 @@ function PaymentFormContent({ invoice, paymentId }) {
     if (paymentId) {
         const payment = (invoice.payments || []).find((p) => p.id === paymentId);
         if (!payment) {
-            return (
-                <>
-                    <FormHeading title="Edit payment" />
-                    <EmptyState
-                        title="Payment not found"
-                        text="This payment does not exist on this invoice."
-                        action={{ label: 'Back to invoice', to: `/invoices/${invoice.id}` }}
-                    />
-                </>
-            );
+            return <NotFoundState title="Payment not found" />;
         }
         return <PaymentForm invoice={invoice} payment={payment} />;
     }
@@ -228,7 +220,7 @@ export default function PaymentFormPage() {
     return (
         <PageBody width="form">
             <PageHeader backTo={`/invoices/${invoiceId}`} backLabel="Invoice" />
-            <DataView resource={invoice} skeleton="form">{(i) => <PaymentFormContent invoice={i} paymentId={paymentId} />}</DataView>
+            <DataView resource={invoice} skeleton="form" notFoundTitle="Invoice not found">{(i) => <PaymentFormContent invoice={i} paymentId={paymentId} />}</DataView>
         </PageBody>
     );
 }

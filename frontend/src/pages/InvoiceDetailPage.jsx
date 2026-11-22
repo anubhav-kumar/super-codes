@@ -1,18 +1,22 @@
 import { Link, useParams } from 'react-router-dom';
+import Badge from '../components/Badge.jsx';
 import Button from '../components/Button.jsx';
 import Card from '../components/Card.jsx';
 import DataView from '../components/DataView.jsx';
 import DetailField from '../components/DetailField.jsx';
+import DueLabel from '../components/DueLabel.jsx';
 import InvoicePaymentsSection from '../components/InvoicePaymentsSection.jsx';
-import InvoiceStatusBadges from '../components/InvoiceStatusBadges.jsx';
 import MoneySummary from '../components/MoneySummary.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
-import PageTitle from '../components/PageTitle.jsx';
+import RecordHeader from '../components/RecordHeader.jsx';
+import RecordNo from '../components/RecordNo.jsx';
+import { INVOICE_STATUS_TONE, invoiceStatusLabel } from '../constants/invoices.js';
 import { clientPath } from '../constants/orders.js';
 import { useInvoice } from '../hooks/useInvoices.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
+import { isInvoiceOpen } from '../utils/due.js';
 import { formatDate } from '../utils/format.js';
 
 const linkClass = 'text-ink underline-offset-2 hover:underline focus-visible:underline';
@@ -33,33 +37,42 @@ function InvoiceDetail({ invoice }) {
 
     return (
         <>
-            <PageTitle
-                title={<span className="tabular-nums">{invoice.invoiceNumber}</span>}
-                subtitle={`Billed to ${billedToName}`}
+            <RecordHeader
+                eyebrow={<RecordNo>{invoice.invoiceNumber}</RecordNo>}
+                icon={invoice.billedTo ? invoice.billedTo.type : undefined}
+                title={
+                    toBilledTo ? (
+                        <Link to={toBilledTo} className={linkClass}>
+                            {billedToName}
+                        </Link>
+                    ) : (
+                        billedToName
+                    )
+                }
+                meta={[
+                    // One status badge; for a partly paid invoice past due, the due label says "Overdue".
+                    <Badge key="status" tone={INVOICE_STATUS_TONE[invoice.displayedStatus]}>
+                        {invoiceStatusLabel(invoice.displayedStatus)}
+                    </Badge>,
+                    invoice.baseStatus === 'ISSUED' ? (
+                        <DueLabel
+                            key="due"
+                            dueDate={invoice.dueDate}
+                            open={isInvoiceOpen(invoice)}
+                            overdue={isInvoiceOpen(invoice) ? Boolean(invoice.isOverdue) : undefined}
+                        />
+                    ) : null,
+                ]}
                 actions={
                     <Button variant="secondary" icon="edit" to={`/invoices/${invoice.id}/edit`} disabled={!online}>
                         Edit
                     </Button>
                 }
-            />
-            {!online && <OfflineActionHint className="-mt-2 mb-4" />}
+            >
+                {!online && <OfflineActionHint />}
+            </RecordHeader>
             <Card>
                 <dl className="grid gap-4 md:grid-cols-2">
-                    <DetailField label="Status">
-                        <span className="flex flex-wrap gap-1">
-                            <InvoiceStatusBadges invoice={invoice} />
-                        </span>
-                    </DetailField>
-                    <DetailField label="Billed to">
-                        {toBilledTo ? (
-                            <Link to={toBilledTo} className={linkClass}>
-                                {billedToName}
-                            </Link>
-                        ) : null}
-                        {invoice.billedTo && (
-                            <span className="ml-2 text-sm text-ink-muted">{invoice.billedTo.type === 'COMPANY' ? 'Company' : 'Person'}</span>
-                        )}
-                    </DetailField>
                     <DetailField label="Related order">
                         {invoice.order && invoice.order.id ? (
                             <Link to={`/orders/${invoice.order.id}`} className={`${linkClass} tabular-nums`}>
@@ -87,7 +100,7 @@ export default function InvoiceDetailPage() {
     return (
         <PageBody width="detail">
             <PageHeader backTo="/invoices" backLabel="Invoices" />
-            <DataView resource={invoice} skeleton="detail">{(i) => <InvoiceDetail invoice={i} reload={invoice.reload} />}</DataView>
+            <DataView resource={invoice} skeleton="detail" notFoundTitle="Invoice not found">{(i) => <InvoiceDetail invoice={i} reload={invoice.reload} />}</DataView>
         </PageBody>
     );
 }

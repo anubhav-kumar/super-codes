@@ -8,7 +8,7 @@ import DetailField from '../components/DetailField.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
-import PageTitle from '../components/PageTitle.jsx';
+import RecordHeader from '../components/RecordHeader.jsx';
 import PersonCompaniesSection from '../components/PersonCompaniesSection.jsx';
 import PersonRequestedOrdersSection from '../components/PersonRequestedOrdersSection.jsx';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
@@ -27,24 +27,26 @@ export default function PersonDetailPage() {
     return (
         <PageBody width="detail">
             <PageHeader backTo="/people" backLabel="People" />
-            <DataView resource={person} skeleton="detail">
+            <DataView resource={person} skeleton="detail" notFoundTitle="Person not found">
                 {(p) => (
                     <>
-                        <PageTitle
+                        <RecordHeader
+                            eyebrow={<Tag>{p.isIndividualClient ? 'Individual client' : 'Person'}</Tag>}
+                            icon="PERSON"
                             title={p.name}
-                            subtitle={p.isIndividualClient ? <Tag>Individual client</Tag> : undefined}
+                            meta={p.pan ? <span className="font-mono text-[13px] text-ink-muted">PAN {p.pan}</span> : null}
                             actions={
                                 <Button variant="secondary" icon="edit" to={`/people/${p.id}/edit`} disabled={!online}>
                                     Edit
                                 </Button>
                             }
-                        />
-                        {!online && <OfflineActionHint className="-mt-2 mb-4" />}
+                        >
+                            {!online && <OfflineActionHint />}
+                        </RecordHeader>
 
                         <div className="flex flex-col gap-4">
                             <Card>
                                 <dl className="grid gap-4 md:grid-cols-2">
-                                    <DetailField label="PAN" value={p.pan ? <span className="font-mono text-[13px]">{p.pan}</span> : null} />
                                     <DetailField
                                         label="Email"
                                         value={

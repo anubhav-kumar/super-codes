@@ -4,11 +4,13 @@ import { usePeople } from '../hooks/usePeople.js';
 import { matchesSearch } from '../utils/search.js';
 import { isValidEmail, isValidPhone } from '../utils/validation.js';
 import Button from './Button.jsx';
+import ClientIcon from './ClientIcon.jsx';
 import DataView from './DataView.jsx';
 import EmptyState from './EmptyState.jsx';
 import { controlClass, FieldLabel, FieldMessage } from './fieldStyles.jsx';
 import Icon from './Icon.jsx';
 import SearchInput from './SearchInput.jsx';
+import Sheet from './Sheet.jsx';
 import TextField from './TextField.jsx';
 
 const SEARCH_FIELDS = ['name', 'pan', 'phone', 'email'];
@@ -104,12 +106,13 @@ function PersonRow({ person, disabledReason, onPick }) {
                 type="button"
                 disabled={Boolean(disabledReason)}
                 onClick={() => onPick(person)}
-                className="flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-surface-subtle focus-visible:bg-surface-subtle focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-surface-subtle focus-visible:bg-surface-subtle focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60 md:px-5"
             >
+                <ClientIcon type="PERSON" />
                 <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium text-ink">{person.name}</span>
-                    {(person.phone || person.email) && (
-                        <span className="block truncate text-sm text-ink-muted">{person.phone || person.email}</span>
+                    {(person.pan || person.phone || person.email) && (
+                        <span className="block truncate text-sm text-ink-muted">{person.pan || person.phone || person.email}</span>
                     )}
                 </span>
                 {disabledReason && <span className="shrink-0 text-xs text-ink-muted">{disabledReason}</span>}
@@ -148,7 +151,7 @@ function PeopleList({ people, query, excludeIds, suggested, onPick, onQuickAdd, 
             {top.length > 0 && (
                 <>
                     <p className="pt-2 pb-1 text-xs font-semibold tracking-wide text-ink-muted uppercase">{suggested.label}</p>
-                    <ul className="-mx-4 divide-y divide-line">
+                    <ul className="-mx-4 divide-y divide-line md:-mx-5">
                         {top.map((p) => (
                             <PersonRow key={p.id} person={p} disabledReason={reason(p)} onPick={onPick} />
                         ))}
@@ -156,7 +159,7 @@ function PeopleList({ people, query, excludeIds, suggested, onPick, onQuickAdd, 
                     {rest.length > 0 && <p className="pt-2 pb-1 text-xs font-semibold tracking-wide text-ink-muted uppercase">Everyone else</p>}
                 </>
             )}
-            <ul className="-mx-4 divide-y divide-line">
+            <ul className="-mx-4 divide-y divide-line md:-mx-5">
                 {rest.map((p) => (
                     <PersonRow key={p.id} person={p} disabledReason={reason(p)} onPick={onPick} />
                 ))}
@@ -166,80 +169,49 @@ function PeopleList({ people, query, excludeIds, suggested, onPick, onQuickAdd, 
 }
 
 function PickerSheet({ title, excludeIds, suggested, allowQuickAdd, onPick, onClose }) {
-    const titleId = useId();
     const people = usePeople();
     const [query, setQuery] = useState('');
     const [quickAdd, setQuickAdd] = useState(false);
 
-    useEffect(() => {
-        const onKey = (e) => {
-            if (e.key === 'Escape') onClose();
-        };
-        window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
-    }, [onClose]);
-
     return (
-        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
-            <button type="button" aria-label="Close" tabIndex={-1} onClick={onClose} className="absolute inset-0 bg-ink/40" />
-            <div
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby={titleId}
-                className="relative flex max-h-[85vh] w-full max-w-lg flex-col rounded-t-card bg-surface pb-[env(safe-area-inset-bottom)] shadow-overlay sm:rounded-card"
-            >
-                <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
-                    <h2 id={titleId} className="text-lg font-semibold text-ink">
-                        {quickAdd ? 'Quick add a person' : title}
-                    </h2>
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        aria-label="Close"
-                        className="flex h-9 w-9 items-center justify-center rounded-control text-ink-muted hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-accent"
-                    >
-                        <Icon name="close" />
-                    </button>
+        <Sheet open title={quickAdd ? 'Quick add a person' : title} onClose={onClose}>
+            {quickAdd ? (
+                <div className="pt-1">
+                    <QuickAddForm
+                        initialName={query.trim()}
+                        onCancel={() => setQuickAdd(false)}
+                        onAdd={(person) => onPick({ type: 'new', person })}
+                    />
                 </div>
-
-                {quickAdd ? (
-                    <div className="overflow-y-auto p-4">
-                        <QuickAddForm
-                            initialName={query.trim()}
-                            onCancel={() => setQuickAdd(false)}
-                            onAdd={(person) => onPick({ type: 'new', person })}
-                        />
+            ) : (
+                <>
+                    <div className="sticky top-0 z-10 -mx-4 flex flex-col gap-2 border-b border-line bg-surface px-4 pb-3 md:-mx-5 md:px-5">
+                        <SearchInput value={query} onChange={setQuery} placeholder="Search name, PAN or phone" />
+                        {allowQuickAdd && (
+                            <Button variant="ghost" size="sm" icon="add-person" className="self-start" onClick={() => setQuickAdd(true)}>
+                                Quick add a new person
+                            </Button>
+                        )}
                     </div>
-                ) : (
-                    <>
-                        <div className="flex flex-col gap-2 px-4 pt-3 pb-2">
-                            <SearchInput value={query} onChange={setQuery} placeholder="Search name, PAN or phone" />
-                            {allowQuickAdd && (
-                                <Button variant="ghost" size="sm" icon="plus" className="self-start" onClick={() => setQuickAdd(true)}>
-                                    Quick add a new person
-                                </Button>
+                    <div className="min-h-32 pt-1">
+                        <DataView resource={people} compact loaderRows={3}>
+                            {(data) => (
+                                <PeopleList
+                                    people={data}
+                                    query={query}
+                                    setQuery={setQuery}
+                                    excludeIds={excludeIds}
+                                    suggested={suggested}
+                                    allowQuickAdd={allowQuickAdd}
+                                    onQuickAdd={() => setQuickAdd(true)}
+                                    onPick={(p) => onPick({ type: 'existing', personId: p.id, name: p.name })}
+                                />
                             )}
-                        </div>
-                        <div className="min-h-32 overflow-y-auto border-t border-line px-4 pt-3 pb-2">
-                            <DataView resource={people} compact loaderRows={3}>
-                                {(data) => (
-                                    <PeopleList
-                                        people={data}
-                                        query={query}
-                                        setQuery={setQuery}
-                                        excludeIds={excludeIds}
-                                        suggested={suggested}
-                                        allowQuickAdd={allowQuickAdd}
-                                        onQuickAdd={() => setQuickAdd(true)}
-                                        onPick={(p) => onPick({ type: 'existing', personId: p.id, name: p.name })}
-                                    />
-                                )}
-                            </DataView>
-                        </div>
-                    </>
-                )}
-            </div>
-        </div>
+                        </DataView>
+                    </div>
+                </>
+            )}
+        </Sheet>
     );
 }
 
@@ -247,8 +219,11 @@ function PickerSheet({ title, excludeIds, suggested, allowQuickAdd, onPick, onCl
  * Field that opens a searchable sheet to choose one person (F-03; reused by orders in P-04).
  *   value / onChange   see the value shapes above (null when nothing is chosen)
  *   excludeIds         person ids shown but not selectable ("Already linked")
- *   suggested          { label, ids } shown first, e.g. people of the client company
+ *   suggested          { label, ids, people? } shown first, e.g. people of the client company;
+ *                      `people` ([{ id, name }]) is needed for autoPickSingle
  *   allowQuickAdd      adds "Quick add a new person" (name, phone, email)
+ *   autoPickSingle     when nothing is chosen and `suggested.people` has exactly one person, choose
+ *                      them automatically: onChange(value, { auto: true }) (F-18). Still changeable.
  */
 export default function PersonPicker({
     label = 'Person',
@@ -261,6 +236,7 @@ export default function PersonPicker({
     excludeIds,
     suggested,
     allowQuickAdd = false,
+    autoPickSingle = false,
     sheetTitle = 'Choose a person',
     className = '',
 }) {
@@ -268,6 +244,14 @@ export default function PersonPicker({
     const messageId = `${fieldId}-msg`;
     const [open, setOpen] = useState(false);
     const name = pickedPersonName(value);
+
+    const single = autoPickSingle && !value && suggested && Array.isArray(suggested.people) && suggested.people.length === 1
+        ? suggested.people[0]
+        : null;
+    useEffect(() => {
+        if (single && onChange) onChange({ type: 'existing', personId: single.id, name: single.name }, { auto: true });
+        // Fires when a single suggestion appears for an empty field; onChange identity is not a trigger.
+    }, [single && single.id]);
 
     return (
         <div className={`flex flex-col gap-1.5 ${className}`}>

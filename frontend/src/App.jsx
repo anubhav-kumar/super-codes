@@ -34,8 +34,8 @@ export default function App() {
                                 {privateRoutes.map(({ path, Page }) => (
                                     <Route key={path} path={path} element={<Page />} />
                                 ))}
+                                <Route path="*" element={<NotFoundPage />} />
                             </Route>
-                            <Route path="*" element={<NotFoundPage />} />
                         </Routes>
                     </Suspense>
                 </div>

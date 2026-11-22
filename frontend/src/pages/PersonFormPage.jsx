@@ -207,7 +207,7 @@ function NeedsConnection() {
 
 function EditPerson({ personId }) {
     const person = usePerson(personId);
-    return <DataView resource={person} skeleton="form">{(p) => <PersonForm key={p.id} person={p} />}</DataView>;
+    return <DataView resource={person} skeleton="form" notFoundTitle="Person not found">{(p) => <PersonForm key={p.id} person={p} />}</DataView>;
 }
 
 /** Add person (/people/new) and Edit person (/people/:personId/edit), F-02. Online only. */

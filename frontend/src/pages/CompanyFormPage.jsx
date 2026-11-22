@@ -356,7 +356,7 @@ function NeedsConnection() {
 
 function EditCompany({ companyId }) {
     const company = useCompany(companyId);
-    return <DataView resource={company} skeleton="form">{(c) => <CompanyForm key={c.id} company={c} />}</DataView>;
+    return <DataView resource={company} skeleton="form" notFoundTitle="Company not found">{(c) => <CompanyForm key={c.id} company={c} />}</DataView>;
 }
 
 /** Add company (/companies/new) and Edit company (/companies/:companyId/edit), F-03. Online only. */

@@ -2,9 +2,9 @@ import { PAYMENT_STATUS_TONE, paymentStatusLabel } from '../constants/payments.j
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { formatDate, formatMoney } from '../utils/format.js';
 import Badge from './Badge.jsx';
-import Button from './Button.jsx';
 import ListItem from './ListItem.jsx';
 import RelatedSection from './RelatedSection.jsx';
+import SectionAction from './SectionAction.jsx';
 
 function subtitleOf(p) {
     const parts = [];
@@ -32,9 +32,9 @@ export default function InvoicePaymentsSection({ invoice }) {
             count={payments.length}
             className="mt-4"
             action={
-                <Button size="sm" variant="secondary" icon="plus" to={`/invoices/${invoice.id}/payments/new`} disabled={!online || !issued}>
+                <SectionAction icon="payment" to={`/invoices/${invoice.id}/payments/new`} disabled={!online || !issued}>
                     Add payment
-                </Button>
+                </SectionAction>
             }
             footer={
                 !issued && (

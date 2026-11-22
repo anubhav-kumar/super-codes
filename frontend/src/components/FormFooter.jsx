@@ -7,7 +7,8 @@ import OfflineActionHint from './OfflineActionHint.jsx';
  * the <form>. Submit buttons are disabled while offline, with OfflineActionHint.
  *   secondarySubmit  { label, onClick, loading } — e.g. "Save as draft" next to "Issue invoice".
  *                    A plain button (type="button"); onClick runs the page's own save path.
- * The bar bleeds to the PageBody gutters (16 / 24 / 32 px), so it spans the content column.
+ * On phones the bar bleeds to the PageBody gutters (16 px); from md it is exactly the form width, so
+ * its edges line up with the FormSection cards.
  */
 export default function FormFooter({
     submitLabel = 'Save',
@@ -22,7 +23,7 @@ export default function FormFooter({
     const secondaryLoading = Boolean(secondarySubmit && secondarySubmit.loading);
     const blocked = disabled || !online;
     return (
-        <div className="sticky bottom-0 z-10 -mx-4 mt-2 border-t border-line bg-surface/95 px-4 py-3 backdrop-blur md:-mx-6 md:px-6 xl:-mx-8 xl:px-8">
+        <div className="sticky bottom-0 z-10 -mx-4 mt-2 border-t border-line bg-surface/95 px-4 py-3 backdrop-blur md:mx-0 md:px-0">
             {!online && <OfflineActionHint className="mb-2" />}
             <div className="flex flex-wrap items-center justify-end gap-3">
                 {(cancelTo || onCancel) && (

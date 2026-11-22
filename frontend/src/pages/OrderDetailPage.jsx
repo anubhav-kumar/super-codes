@@ -2,13 +2,16 @@ import { Link, useParams } from 'react-router-dom';
 import Badge from '../components/Badge.jsx';
 import Button from '../components/Button.jsx';
 import Card from '../components/Card.jsx';
+import ClientIcon from '../components/ClientIcon.jsx';
 import DataView from '../components/DataView.jsx';
 import DetailField from '../components/DetailField.jsx';
+import DueLabel from '../components/DueLabel.jsx';
 import OrderInvoicesSection from '../components/OrderInvoicesSection.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
-import PageTitle from '../components/PageTitle.jsx';
+import RecordHeader from '../components/RecordHeader.jsx';
+import RecordNo from '../components/RecordNo.jsx';
 import RelatedSection from '../components/RelatedSection.jsx';
 import SelectField from '../components/SelectField.jsx';
 import { orderUpdateBody, updateOrder } from '../api/orders.js';
@@ -16,6 +19,7 @@ import { clientPath, ORDER_STATUSES, ORDER_STATUS_TONE, orderStatusLabel } from 
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useOrder } from '../hooks/useOrders.js';
 import useInlineSave from '../hooks/useInlineSave.js';
+import { isOrderOpen } from '../utils/due.js';
 import { formatDate, formatMoney } from '../utils/format.js';
 import Tag from '../components/Tag.jsx';
 
@@ -87,30 +91,39 @@ function OrderDetail({ order, reload }) {
 
     return (
         <>
-            <PageTitle
-                title={<span className="tabular-nums">{order.orderNumber}</span>}
-                subtitle={order.serviceName}
+            <RecordHeader
+                eyebrow={<RecordNo>{order.orderNumber}</RecordNo>}
+                title={order.serviceName || order.orderNumber}
+                subtitle={
+                    order.client ? (
+                        <span className="inline-flex items-center gap-1.5">
+                            <ClientIcon type={order.client.type} size="inline" />
+                            {toClient ? (
+                                <Link to={toClient} className={linkClass}>
+                                    {clientName}
+                                </Link>
+                            ) : (
+                                clientName
+                            )}
+                        </span>
+                    ) : null
+                }
+                meta={[
+                    <Badge key="status" tone={ORDER_STATUS_TONE[order.status]}>
+                        {orderStatusLabel(order.status)}
+                    </Badge>,
+                    <DueLabel key="due" dueDate={order.dueDate} open={isOrderOpen(order)} />,
+                ]}
                 actions={
                     <Button variant="secondary" icon="edit" to={`/orders/${order.id}/edit`} disabled={!online}>
                         Edit
                     </Button>
                 }
-            />
-            {!online && <OfflineActionHint className="-mt-2 mb-4" />}
+            >
+                {!online && <OfflineActionHint />}
+            </RecordHeader>
             <Card>
                 <dl className="grid gap-4 md:grid-cols-2">
-                    <DetailField label="Status">
-                        <Badge tone={ORDER_STATUS_TONE[order.status]}>{orderStatusLabel(order.status)}</Badge>
-                    </DetailField>
-                    <DetailField label="Service" value={order.serviceName} />
-                    <DetailField label="Client">
-                        {toClient ? (
-                            <Link to={toClient} className={linkClass}>
-                                {clientName}
-                            </Link>
-                        ) : null}
-                        {order.client && <span className="ml-2 text-sm text-ink-muted">{order.client.type === 'COMPANY' ? 'Company' : 'Person'}</span>}
-                    </DetailField>
                     <DetailField label="Received from">
                         {order.receivedFrom && order.receivedFrom.id ? (
                             <Link to={`/people/${order.receivedFrom.id}`} className={linkClass}>
@@ -151,7 +164,7 @@ export default function OrderDetailPage() {
     return (
         <PageBody width="detail">
             <PageHeader backTo="/orders" backLabel="Orders" />
-            <DataView resource={order} skeleton="detail">{(o) => <OrderDetail order={o} reload={order.reload} />}</DataView>
+            <DataView resource={order} skeleton="detail" notFoundTitle="Order not found">{(o) => <OrderDetail order={o} reload={order.reload} />}</DataView>
         </PageBody>
     );
 }

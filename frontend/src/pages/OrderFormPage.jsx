@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import ClientPicker from '../components/ClientPicker.jsx';
 import ComboField from '../components/ComboField.jsx';
 import DataView from '../components/DataView.jsx';
@@ -17,7 +17,8 @@ import TextArea from '../components/TextArea.jsx';
 import WorkerAssignmentEditor from '../components/WorkerAssignmentEditor.jsx';
 import { createOrder, updateOrder } from '../api/orders.js';
 import { ORDER_LIMITS, ORDER_STATUSES, SERVICE_SUGGESTIONS } from '../constants/orders.js';
-import { useCompanyPeople } from '../hooks/useCompanies.js';
+import useClientPreselect, { readClientPreselect } from '../hooks/useClientPreselect.js';
+import { useCompany } from '../hooks/useCompanies.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useOrder } from '../hooks/useOrders.js';
 import useSubmit from '../hooks/useSubmit.js';
@@ -120,7 +121,26 @@ function serverError(fieldErrors, field) {
     return undefined;
 }
 
-function OrderForm({ order }) {
+/**
+ * Sets the client and keeps "received from" consistent: it is reset only when it was empty or
+ * auto-filled from the previous client. A person client fills it with that person; a company with
+ * exactly one linked person is filled by PersonPicker's autoPickSingle once the company loads.
+ */
+function withClient(f, client) {
+    let { receivedFrom, receivedFromAuto } = f;
+    if (!receivedFrom || receivedFromAuto) {
+        if (client.type === 'PERSON') {
+            receivedFrom = { type: 'existing', personId: client.id, name: client.name };
+            receivedFromAuto = true;
+        } else {
+            receivedFrom = null;
+            receivedFromAuto = false;
+        }
+    }
+    return { ...f, client, receivedFrom, receivedFromAuto };
+}
+
+function OrderForm({ order, preselect }) {
     const navigate = useNavigate();
     const isEdit = Boolean(order);
     // One id per form: a retried create after a dropped connection returns the same order (200).
@@ -131,11 +151,16 @@ function OrderForm({ order }) {
     const toast = useToast();
 
     const companyId = form.client && form.client.type === 'COMPANY' ? form.client.id : null;
-    const companyPeople = useCompanyPeople(companyId);
-    const suggested =
-        companyId && Array.isArray(companyPeople.data) && companyPeople.data.length
-            ? { label: `People at ${form.client.name || 'this company'}`, ids: companyPeople.data.map((a) => a.personId) }
-            : undefined;
+    const company = useCompany(companyId);
+    // Only the loaded company's own people: right after a client change the hook still holds the previous one.
+    const associations = companyId && company.data && company.data.id === companyId ? company.data.associations || [] : [];
+    const suggested = associations.length
+        ? {
+              label: `People at ${form.client.name || 'this company'}`,
+              ids: associations.map((a) => a.personId),
+              people: associations.map((a) => ({ id: a.personId, name: a.personName })),
+          }
+        : undefined;
 
     const clearError = (field) => {
         if (localErrors[field]) setLocalErrors((e) => ({ ...e, [field]: undefined }));
@@ -146,27 +171,21 @@ function OrderForm({ order }) {
     };
 
     const setClient = (client) => {
-        setForm((f) => {
-            let { receivedFrom, receivedFromAuto } = f;
-            // Reset "received from" only when it was empty or auto-filled from the previous client.
-            if (!receivedFrom || receivedFromAuto) {
-                if (client.type === 'PERSON') {
-                    receivedFrom = { type: 'existing', personId: client.id, name: client.name };
-                    receivedFromAuto = true;
-                } else {
-                    receivedFrom = null;
-                    receivedFromAuto = false;
-                }
-            }
-            return { ...f, client, receivedFrom, receivedFromAuto };
-        });
+        setForm((f) => withClient(f, client));
         clearError('client');
         if (client.type === 'PERSON') clearError('receivedFrom');
     };
-    const setReceivedFrom = (receivedFrom) => {
-        setForm((f) => ({ ...f, receivedFrom, receivedFromAuto: false }));
+    // meta.auto: filled by autoPickSingle (a company's only person), so a later client change may replace it.
+    const setReceivedFrom = (receivedFrom, meta) => {
+        setForm((f) => ({ ...f, receivedFrom, receivedFromAuto: Boolean(meta && meta.auto) }));
         clearError('receivedFrom');
     };
+
+    // ?clientType=&clientId= on create (F-18). Order clients are individual-client people or companies.
+    const preselected = useClientPreselect(isEdit ? null : preselect, (client, record) => {
+        if (client.type === 'PERSON' && !record.isIndividualClient) return;
+        setForm((f) => (f.client ? f : withClient(f, client)));
+    });
 
     const errorOf = (field) => localErrors[field] || serverError(fieldErrors, field);
 
@@ -207,6 +226,7 @@ function OrderForm({ order }) {
                     required
                     value={form.client}
                     onChange={setClient}
+                    loading={preselected.loading}
                     error={errorOf('client')}
                     hint="An individual client or a company."
                 />
@@ -217,6 +237,7 @@ function OrderForm({ order }) {
                     value={form.receivedFrom}
                     onChange={setReceivedFrom}
                     suggested={suggested}
+                    autoPickSingle
                     error={errorOf('receivedFrom')}
                     hint={form.client && form.client.type === 'COMPANY' ? 'People at the company are listed first.' : undefined}
                 />
@@ -260,12 +281,18 @@ function OrderForm({ order }) {
 
 function EditOrder({ orderId }) {
     const order = useOrder(orderId);
-    return <DataView resource={order} skeleton="form">{(o) => <OrderForm order={o} />}</DataView>;
+    return <DataView resource={order} skeleton="form" notFoundTitle="Order not found">{(o) => <OrderForm order={o} />}</DataView>;
 }
 
-/** New order (/orders/new) and Edit order (/orders/:orderId/edit), F-05. Online only. */
+function NewOrder({ params }) {
+    const preselect = readClientPreselect(params);
+    return <OrderForm key={preselect ? `${preselect.type}:${preselect.id}` : 'new'} preselect={preselect} />;
+}
+
+/** New order (/orders/new, ?clientType=&clientId= preselect) and Edit order (/orders/:orderId/edit), F-05. Online only. */
 export default function OrderFormPage() {
     const { orderId } = useParams();
+    const [params] = useSearchParams();
     const navigate = useNavigate();
     const { online } = useOnlineStatus();
     // A form opened while offline shows the "needs a connection" state until the app is online once.
@@ -295,7 +322,7 @@ export default function OrderFormPage() {
     return (
         <PageBody width="form">
             <PageHeader backTo={isEdit ? `/orders/${orderId}` : '/orders'} backLabel={isEdit ? 'Order' : 'Orders'} />
-            {isEdit ? <EditOrder orderId={orderId} /> : <OrderForm />}
+            {isEdit ? <EditOrder orderId={orderId} /> : <NewOrder params={params} />}
         </PageBody>
     );
 }

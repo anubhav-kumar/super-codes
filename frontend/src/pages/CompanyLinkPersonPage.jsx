@@ -128,7 +128,7 @@ export default function CompanyLinkPersonPage() {
                     action={{ label: 'Go back', onClick: () => navigate(-1) }}
                 />
             ) : (
-                <DataView resource={company} skeleton="form">{(c) => <LinkPersonForm key={c.id} company={c} />}</DataView>
+                <DataView resource={company} skeleton="form" notFoundTitle="Company not found">{(c) => <LinkPersonForm key={c.id} company={c} />}</DataView>
             )}
         </PageBody>
     );
