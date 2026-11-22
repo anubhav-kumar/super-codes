@@ -66,7 +66,7 @@ export default function PeopleListPage() {
                         />
                     ) : (
                         <>
-                            <ListToolbar sort={list} className="lg:hidden" />
+                            <ListToolbar sort={list} count={`${rows.length} ${rows.length === 1 ? 'person' : 'people'}`} className="lg:hidden" />
                             <ResponsiveList
                                 rows={rows}
                                 rowKey={(p) => p.id}
