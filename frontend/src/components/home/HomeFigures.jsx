@@ -1,4 +1,4 @@
-import { formatMoney } from '../../utils/format.js';
+import { formatFigure } from '../../utils/format.js';
 import KeyFigures from '../KeyFigures.jsx';
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -10,7 +10,7 @@ const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
  *   Overdue invoices (₹ + count)    -> /invoices?filter=overdue   (danger above 0)
  *   Orders overdue (count)          -> /orders?filter=overdue     (danger above 0)
  *   Due this week (count)           -> /orders?filter=due-week    (warning above 0)
- * Phones: 2 x 2; md+: one row of 4 (KeyFigures).
+ * 2 x 2, one row of 4 when the content is at least 40rem wide (KeyFigures).
  */
 export default function HomeFigures({ summary, className = '' }) {
     const invoices = (summary && summary.invoices) || {};
@@ -24,14 +24,14 @@ export default function HomeFigures({ summary, className = '' }) {
         {
             key: 'outstanding',
             label: 'Outstanding',
-            value: formatMoney(num(invoices.outstandingTotal), { paise: 'auto' }),
+            value: formatFigure(num(invoices.outstandingTotal)),
             sub: unpaid === 0 ? 'No unpaid invoices' : plural(unpaid, 'unpaid invoice'),
             to: '/invoices?filter=unpaid',
         },
         {
             key: 'overdue-invoices',
             label: 'Overdue invoices',
-            value: formatMoney(num(invoices.overdueTotal), { paise: 'auto' }),
+            value: formatFigure(num(invoices.overdueTotal)),
             sub: plural(overdueInvoices, 'invoice'),
             tone: 'danger',
             number: overdueInvoices,

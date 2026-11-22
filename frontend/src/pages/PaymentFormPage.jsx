@@ -175,7 +175,7 @@ function InvoiceSummary({ invoice }) {
             </div>
             <div className="flex shrink-0 flex-col items-end gap-0.5">
                 <span className="text-xs text-ink-muted">Outstanding</span>
-                <Money value={outstanding} paise="always" overdue={Boolean(invoice.isOverdue) && outstanding > 0} strong />
+                <Money value={outstanding} paise="auto" overdue={Boolean(invoice.isOverdue) && outstanding > 0} strong />
             </div>
         </div>
     );

@@ -2,11 +2,12 @@ import { formatMoney } from '../utils/format.js';
 
 /**
  * Amount in INR with tabular figures.
- * paise: 'auto' (default, drops ".00" on whole amounts) or 'always' (2 decimals).
+ * paise: 'none' (default; whole rupees, for rows, cells and facts), 'auto' (paise only when
+ * non-zero) or 'always' (2 decimals). See formatMoney.
  * overdue: red (only for an overdue invoice's outstanding amount). strong: semibold.
  * paidLabel: shows "Paid" in green instead of a zero amount.
  */
-export default function Money({ value, paise = 'auto', overdue = false, strong = false, paidLabel = false, className = '' }) {
+export default function Money({ value, paise = 'none', overdue = false, strong = false, paidLabel = false, className = '' }) {
     if (value === null || value === undefined || value === '') {
         return <span className={`text-ink-subtle ${className}`}>—</span>;
     }

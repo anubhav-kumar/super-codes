@@ -33,19 +33,47 @@ export function formatDateTime(value, { seconds = false } = {}) {
 
 const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 });
 const inrWhole = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 });
+const inrCrore = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 1 });
+
+const CRORE = 10000000;
+const toPaise = (n) => Math.round(n * 100);
 
 /**
- * INR with Indian grouping, e.g. ₹1,23,456.00. Empty string for null/undefined.
- * `{ paise: 'auto' }` drops ".00" for whole amounts (₹8,108, ₹1,628.50).
+ * INR with Indian grouping. Empty string for null/undefined/invalid. Display only: callers keep
+ * summing and comparing exact values. `paise`:
+ *   'auto' (default) - 2 decimals only when the paise are non-zero (₹8,108, ₹1,628.50); forms, toasts.
+ *   'none'           - whole rupees, nearest rupee (₹14,82,300); rows, cells, figures, captions.
+ *                      A non-zero amount that would round to ₹0 keeps its paise (₹0.40).
+ *   'always'         - always 2 decimals (₹7,700.00).
  */
-export function formatMoney(value, { paise = 'always' } = {}) {
+export function formatMoney(value, { paise = 'auto' } = {}) {
     if (value === null || value === undefined || value === '') return '';
     const n = Number(value);
     if (!Number.isFinite(n)) return '';
-    if (paise === 'auto' && Math.round(n * 100) % 100 === 0) return inrWhole.format(n);
+    if (paise === 'none') return Math.abs(n) < 0.5 && toPaise(n) !== 0 ? inr.format(n) : inrWhole.format(n);
+    if (paise === 'auto' && toPaise(n) % 100 === 0) return inrWhole.format(n);
     return inr.format(n);
 }
 
+/** True when the amount has non-zero paise (₹7,700.50, not ₹7,700 or ₹7,700.00). */
+export function hasPaise(value) {
+    if (value === null || value === undefined || value === '') return false;
+    const n = Number(value);
+    return Number.isFinite(n) && toPaise(n) % 100 !== 0;
+}
+
+/**
+ * Key figure value: `{ text, full }`. `full` is the whole-rupee amount; `text` is the same, or from
+ * ₹10 crore the short form "₹12.3 Cr" (one decimal, rounded down so it never overstates, ".0"
+ * dropped). KeyFigures shows `full` as the tooltip and accessible name when they differ.
+ */
+export function formatFigure(value) {
+    const full = formatMoney(value, { paise: 'none' });
+    const n = Number(value);
+    if (!full || Math.abs(n) < 10 * CRORE) return { text: full, full };
+    const crore = Math.trunc(n / (CRORE / 10)) / 10;
+    return { text: `${inrCrore.format(crore)} Cr`, full };
+}
 
 /**
  * Indian words for large amounts, used in the money read-back: 150000 -> "1.5 lakh",

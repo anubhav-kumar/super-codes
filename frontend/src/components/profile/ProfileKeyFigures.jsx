@@ -1,4 +1,4 @@
-import { formatMoney } from '../../utils/format.js';
+import { formatFigure } from '../../utils/format.js';
 import KeyFigures from '../KeyFigures.jsx';
 import { profileFigures, scrollToSection } from './profileFigures.js';
 
@@ -19,7 +19,7 @@ export default function ProfileKeyFigures({ orders, invoices, className = '' }) 
     const ordersData = orders.status === 'loaded' ? orders.data : null;
     const invoicesData = invoices.status === 'loaded' ? invoices.data.items : null;
     const f = profileFigures(ordersData, invoicesData);
-    const money = (v) => formatMoney(v, { paise: 'auto' });
+    const money = formatFigure;
     const anyOverdue = (f.overdueCount || 0) > 0;
 
     return (

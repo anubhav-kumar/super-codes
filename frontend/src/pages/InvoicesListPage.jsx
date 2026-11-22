@@ -92,7 +92,7 @@ function invoiceColumns({ filter, serviceByOrderId }) {
             width: '8rem',
             render: (i) =>
                 i.baseStatus === 'CANCELLED' ? (
-                    <span className="whitespace-nowrap text-ink-subtle tabular-nums">{formatMoney(i.total, { paise: 'auto' })}</span>
+                    <span className="whitespace-nowrap text-ink-subtle tabular-nums">{formatMoney(i.total, { paise: 'none' })}</span>
                 ) : (
                     <Money value={i.total} />
                 ),
@@ -169,10 +169,10 @@ function summaryItems(rows, filter) {
     // Draft, Paid and Cancelled owe nothing; a line of zeros there is noise.
     if (totals.openCount === 0 && !['all', 'unpaid', 'overdue'].includes(filter)) return undefined;
     return [
-        { label: 'Outstanding', value: formatMoney(totals.outstanding, { paise: 'auto' }) },
+        { label: 'Outstanding', value: formatMoney(totals.outstanding, { paise: 'none' }) },
         {
             label: 'Overdue',
-            value: `${formatMoney(totals.overdue, { paise: 'auto' })} (${totals.overdueCount})`,
+            value: `${formatMoney(totals.overdue, { paise: 'none' })} (${totals.overdueCount})`,
             tone: totals.overdueCount > 0 ? 'danger' : undefined,
         },
     ];
