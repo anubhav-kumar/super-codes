@@ -33,7 +33,7 @@ function PaymentRow({ invoiceId, payment: p }) {
                 counted ? (
                     <Money value={p.amount} strong />
                 ) : (
-                    <span className="whitespace-nowrap text-ink-muted tabular-nums">{formatMoney(p.amount, { paise: 'auto' })}</span>
+                    <span className="whitespace-nowrap text-ink-muted tabular-nums">{formatMoney(p.amount, { paise: 'none' })}</span>
                 )
             }
             meta={[

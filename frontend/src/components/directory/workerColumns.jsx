@@ -7,7 +7,7 @@ import { OpenOrders, WorkerStatus } from './WorkerRow.jsx';
  */
 export function workerColumns({ hideStatus = false } = {}) {
     const columns = [
-        { key: 'name', header: 'Name', sortKey: 'name', render: (w) => w.name },
+        { key: 'name', header: 'Name', sortKey: 'name', minWidth: '14rem', render: (w) => w.name },
         {
             key: 'designation',
             header: 'Designation',

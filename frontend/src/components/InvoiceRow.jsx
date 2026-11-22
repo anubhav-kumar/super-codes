@@ -13,7 +13,7 @@ const ALL = ['billedTo', 'number', 'due'];
 /** Right side of line 1: what is still owed. Draft and cancelled show the total, quietly. */
 function Amount({ invoice }) {
     if (invoice.baseStatus === 'DRAFT' || invoice.baseStatus === 'CANCELLED') {
-        return <span className="whitespace-nowrap text-ink-muted tabular-nums">{formatMoney(invoice.total, { paise: 'auto' })}</span>;
+        return <span className="whitespace-nowrap text-ink-muted tabular-nums">{formatMoney(invoice.total, { paise: 'none' })}</span>;
     }
     return <Money value={invoice.outstanding ?? 0} overdue={Boolean(invoice.isOverdue)} strong paidLabel />;
 }

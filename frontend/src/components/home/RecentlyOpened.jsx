@@ -33,7 +33,7 @@ export default function RecentlyOpened({ className = '' }) {
             <ul className="divide-y divide-line border-t border-line">
                 {shown.map((e) => (
                     <li key={`${e.type}:${e.id}`}>
-                        <ListRow to={recentPath(e)} leading={<TypeIcon type={e.type} />} title={e.title} meta={e.subtitle ? [e.subtitle] : undefined} />
+                        <ListRow to={recentPath(e)} leading={<TypeIcon type={e.type} />} title={e.title} meta={e.subtitle ? e.subtitle.split(' · ') : undefined} />
                     </li>
                 ))}
             </ul>

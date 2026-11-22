@@ -45,6 +45,10 @@
   /* Key figures on Home and profiles (text-figure) */
   --text-figure: 1.625rem;
   --text-figure--line-height: 2rem;
+
+  /* Key figures inside a section (order Billing) */
+  --text-figure-section: 1.25rem;
+  --text-figure-section--line-height: 1.75rem;
 }
 
 html,

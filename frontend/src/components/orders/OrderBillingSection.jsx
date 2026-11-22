@@ -1,5 +1,5 @@
 import { useOrderInvoices } from '../../hooks/useInvoices.js';
-import { formatMoney } from '../../utils/format.js';
+import { formatFigure, formatMoney } from '../../utils/format.js';
 import DataView from '../DataView.jsx';
 import InvoiceRow from '../InvoiceRow.jsx';
 import KeyFigures from '../KeyFigures.jsx';
@@ -41,10 +41,10 @@ function BillingFigures({ figures }) {
         <div className="px-4 pb-4">
             <KeyFigures
                 items={[
-                    { key: 'billed', label: 'Billed', value: formatMoney(billed), sub: draft > 0 ? `incl. ${formatMoney(draft)} draft` : undefined },
-                    { key: 'received', label: 'Received', value: formatMoney(received) },
-                    { key: 'outstanding', label: 'Outstanding', value: formatMoney(outstanding), tone: overdue ? 'danger' : undefined, number: outstanding, sub: overdue ? 'Overdue' : undefined },
-                    notBilled === null ? null : { key: 'not-billed', label: 'Not yet billed', value: formatMoney(notBilled) },
+                    { key: 'billed', label: 'Billed', value: formatFigure(billed), sub: draft > 0 ? `incl. ${formatMoney(draft, { paise: 'none' })} draft` : undefined },
+                    { key: 'received', label: 'Received', value: formatFigure(received) },
+                    { key: 'outstanding', label: 'Outstanding', value: formatFigure(outstanding), tone: overdue ? 'danger' : undefined, number: outstanding, sub: overdue ? 'Overdue' : undefined },
+                    notBilled === null ? null : { key: 'not-billed', label: 'Not yet billed', value: formatFigure(notBilled) },
                 ]}
             />
             {share !== null && (
@@ -60,7 +60,7 @@ function BillingFigures({ figures }) {
                         <div className="h-full rounded-full bg-ink" style={{ width: `${share}%` }} />
                     </div>
                     <p className="mt-1.5 text-xs text-ink-muted tabular-nums">
-                        {formatMoney(billed)} of {formatMoney(amount)} billed ({share}%)
+                        {formatMoney(billed, { paise: 'none' })} of {formatMoney(amount, { paise: 'none' })} billed ({share}%)
                     </p>
                 </div>
             )}

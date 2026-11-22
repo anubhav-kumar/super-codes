@@ -36,7 +36,7 @@ const MENU_SORTS = ORDER_SORTS.filter((o) => o.menu);
 /** Desktop table columns (lg+). The Status column is dropped when a status chip already says it. */
 function tableColumns(hideStatus) {
     const columns = [
-        { key: 'number', header: 'Number', sortKey: 'number', width: '7.5rem', render: (o) => <RecordNo className="text-sm">{o.orderNumber}</RecordNo> },
+        { key: 'number', header: 'Number', sortKey: 'number', width: '7.5rem', nowrap: true, render: (o) => <RecordNo className="text-sm">{o.orderNumber}</RecordNo> },
         {
             key: 'client',
             header: 'Client',
@@ -52,20 +52,23 @@ function tableColumns(hideStatus) {
         {
             key: 'owner',
             header: 'Owner',
+            // One line once the table has room (56rem: 1024 px with the rail); wraps in a narrower table.
+            nowrap: 'wide',
             render: (o) =>
                 o.primaryOwner && o.primaryOwner.name ? (
-                    <span className="break-words text-ink-muted">{o.primaryOwner.name}</span>
+                    <span className="text-ink-muted">{o.primaryOwner.name}</span>
                 ) : (
                     <span className="text-ink-subtle">—</span>
                 ),
         },
-        { key: 'due', header: 'Due', sortKey: 'due', render: (o) => <DueLabel dueDate={o.dueDate} open={isOrderOpen(o)} compact /> },
+        { key: 'due', header: 'Due', sortKey: 'due', nowrap: true, render: (o) => <DueLabel dueDate={o.dueDate} open={isOrderOpen(o)} compact /> },
         { key: 'amount', header: 'Amount', align: 'right', sortKey: 'amount', sortDesc: true, render: (o) => <Money value={o.amount} /> },
     ];
     if (!hideStatus) {
         columns.push({
             key: 'status',
             header: 'Status',
+            nowrap: true,
             render: (o) => <Badge tone={ORDER_STATUS_TONE[o.status]}>{orderStatusLabel(o.status)}</Badge>,
         });
     }

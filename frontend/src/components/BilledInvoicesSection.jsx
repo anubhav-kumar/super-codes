@@ -27,8 +27,8 @@ function Totals({ items, summary }) {
         <SummaryStrip
             className="px-4 pb-3"
             items={[
-                { label: 'Outstanding', value: formatMoney(Number(totals.totalOutstanding) || 0, { paise: 'auto' }) },
-                { label: 'Received', value: formatMoney(Number(totals.totalReceived) || 0, { paise: 'auto' }) },
+                { label: 'Outstanding', value: formatMoney(Number(totals.totalOutstanding) || 0, { paise: 'none' }) },
+                { label: 'Received', value: formatMoney(Number(totals.totalReceived) || 0, { paise: 'none' }) },
             ]}
         />
     );

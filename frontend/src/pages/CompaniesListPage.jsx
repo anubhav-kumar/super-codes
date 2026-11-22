@@ -66,7 +66,7 @@ export default function CompaniesListPage() {
                         />
                     ) : (
                         <>
-                            <ListToolbar sort={list} className="lg:hidden" />
+                            <ListToolbar sort={list} count={`${rows.length} ${rows.length === 1 ? 'company' : 'companies'}`} className="lg:hidden" />
                             <ResponsiveList
                                 rows={rows}
                                 rowKey={(c) => c.id}
