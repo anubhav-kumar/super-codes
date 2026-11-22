@@ -1,239 +1,122 @@
-import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import BilledInvoicesSection from '../components/BilledInvoicesSection.jsx';
 import Button from '../components/Button.jsx';
-import Card from '../components/Card.jsx';
 import ClientOrdersSection from '../components/ClientOrdersSection.jsx';
-import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import DataView from '../components/DataView.jsx';
-import DetailField from '../components/DetailField.jsx';
-import Icon from '../components/Icon.jsx';
+import FactList from '../components/FactList.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import RecordHeader from '../components/RecordHeader.jsx';
-import RelatedSection from '../components/RelatedSection.jsx';
-import SectionAction from '../components/SectionAction.jsx';
+import Section from '../components/Section.jsx';
 import Tag from '../components/Tag.jsx';
-import SelectField from '../components/SelectField.jsx';
-import { removeAssociation, updateAssociation } from '../api/companies.js';
-import { entityTypeLabel, RELATIONSHIP_TYPES, relationshipLabel } from '../constants/clients.js';
+import CompanyPeopleSection from '../components/profile/CompanyPeopleSection.jsx';
+import ContactActions from '../components/profile/ContactActions.jsx';
+import ProfileKeyFigures from '../components/profile/ProfileKeyFigures.jsx';
+import { entityTypeLabel } from '../constants/clients.js';
 import { useCompany } from '../hooks/useCompanies.js';
+import { useBillingEntityInvoices } from '../hooks/useInvoices.js';
+import useMediaQuery from '../hooks/useMediaQuery.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
-import useInlineSave from '../hooks/useInlineSave.js';
-import useSubmit, { OFFLINE_SAVE_MESSAGE } from '../hooks/useSubmit.js';
-import useToast from '../hooks/useToast.js';
+import { useClientOrders } from '../hooks/useOrders.js';
 
-const LAST_LINK_HINT = 'A company needs at least one person.';
-
-function AssociationRow({ association, companyId, isLast, online, open, onToggle, onChanged, onRemove, removing }) {
-    const a = association;
-    const name = a.personName || 'This person';
-    const relationship = useInlineSave(a.relationshipType);
-    const saving = relationship.saving || removing;
-
-    // Optimistic: the row shows the new relationship at once and rolls back with an error toast on failure.
-    const changeType = async (value) => {
-        if (!value || value === relationship.value) return;
-        const result = await relationship.save(value, () => updateAssociation(companyId, a.personId, value), {
-            success: `${name} is now ${relationshipLabel(value)}`,
-        });
-        if (result.ok) onChanged();
-    };
-
+/** Company facts; empty ones are hidden and offered as "Add …" links instead. PAN stays in the header. */
+function CompanyDetails({ company: c }) {
+    const editTo = `/companies/${c.id}/edit`;
+    const items = [
+        { label: 'Phone', value: c.phone, href: c.phone ? `tel:${c.phone.replace(/[^\d+]/g, '')}` : undefined, icon: 'phone' },
+        { label: 'GSTIN', value: c.gstin, mono: true },
+        { label: 'Email', value: c.email, href: c.email ? `mailto:${c.email}` : undefined, icon: 'email', span: true },
+        { label: 'Registered address', value: c.address, span: true },
+        { label: 'Notes', value: c.notes, span: true },
+    ];
+    const addLinks = [
+        !c.phone && { label: 'Add phone', to: editTo },
+        !c.email && { label: 'Add email', to: editTo },
+        !c.gstin && { label: 'Add GSTIN', to: editTo },
+        !c.address && { label: 'Add address', to: editTo },
+    ];
     return (
-        <li>
-            <div className="flex min-h-14 items-center gap-2 pr-2">
-                <Link
-                    to={`/people/${a.personId}`}
-                    className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 transition hover:bg-surface-subtle focus-visible:bg-surface-subtle focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
-                >
-                    <span className="min-w-0 flex-1">
-                        <span className="block truncate font-medium text-ink">{a.personName || 'Unknown person'}</span>
-                        <span className="block truncate text-sm text-ink-muted">
-                            {relationshipLabel(relationship.value)}
-                            {a.personPhone ? ` · ${a.personPhone}` : ''}
-                        </span>
-                    </span>
-                </Link>
-                <button
-                    type="button"
-                    onClick={onToggle}
-                    aria-expanded={open}
-                    aria-label={`Actions for ${a.personName || 'this person'}`}
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-control text-ink-muted hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-accent"
-                >
-                    <Icon name={open ? 'close' : 'more'} />
-                </button>
-            </div>
-            {open && (
-                <div className="flex flex-col gap-3 border-t border-line bg-surface-subtle px-4 py-3">
-                    <SelectField
-                        label="Change relationship"
-                        options={RELATIONSHIP_TYPES}
-                        value={relationship.value}
-                        disabled={!online || saving}
-                        hint={relationship.saving ? 'Saving…' : undefined}
-                        onChange={changeType}
-                    />
-                    <div className="flex flex-wrap items-center gap-3">
-                        <Button variant="secondary" size="sm" disabled={!online || isLast || saving} loading={removing} onClick={onRemove}>
-                            Remove link
-                        </Button>
-                        {isLast && <span className="text-sm text-ink-muted">{LAST_LINK_HINT}</span>}
-                    </div>
-                    {!online && <OfflineActionHint />}
-                </div>
-            )}
-        </li>
-    );
-}
-
-function CompanyPeopleSection({ company, online, reload }) {
-    const associations = company.associations || [];
-    const [openId, setOpenId] = useState(null);
-    const [confirm, setConfirm] = useState(null);
-    const remove = useSubmit();
-    const toast = useToast();
-    const isLast = associations.length <= 1;
-
-    const onConfirmRemove = async () => {
-        const target = confirm;
-        const name = target.personName || 'This person';
-        const result = await remove.submit(() => removeAssociation(company.id, target.personId));
-        setConfirm(null);
-        // 404: already removed (e.g. a retry after a dropped connection) -> treat as done and refresh.
-        if (result.ok || (result.error && result.error.status === 404)) {
-            remove.clearErrors();
-            toast.success(`${name} unlinked from ${company.name}`);
-            setOpenId(null);
-            reload();
-            return;
-        }
-        // The row stays as it was; one error toast says why.
-        const error = result.error;
-        toast.error(!error || error.offline ? OFFLINE_SAVE_MESSAGE : error.message || "Couldn't remove the link");
-    };
-
-    return (
-        <>
-            <RelatedSection
-                title="People"
-                count={associations.length}
-                action={
-                    <SectionAction icon="link" to={`/companies/${company.id}/people/new`} disabled={!online}>
-                        Link person
-                    </SectionAction>
-                }
-            >
-                {associations.length === 0 ? (
-                    <p className="px-4 pb-4 text-sm text-ink-muted">No people linked yet.</p>
-                ) : (
-                    <ul className="divide-y divide-line border-t border-line">
-                        {associations.map((a) => (
-                            <AssociationRow
-                                key={a.personId}
-                                association={a}
-                                companyId={company.id}
-                                isLast={isLast}
-                                online={online}
-                                open={openId === a.personId}
-                                removing={remove.submitting && confirm?.personId === a.personId}
-                                onToggle={() => setOpenId((id) => (id === a.personId ? null : a.personId))}
-                                onChanged={reload}
-                                onRemove={() => setConfirm(a)}
-                            />
-                        ))}
-                    </ul>
-                )}
-            </RelatedSection>
-            <ConfirmDialog
-                open={Boolean(confirm)}
-                title="Remove link?"
-                text={confirm ? `${confirm.personName || 'This person'} will no longer be linked to ${company.name}. The person is not deleted.` : ''}
-                confirmLabel="Remove link"
-                tone="danger"
-                busy={remove.submitting}
-                onConfirm={onConfirmRemove}
-                onCancel={() => setConfirm(null)}
-            />
-        </>
+        <Section id="details" title="Details" flush={false}>
+            <FactList items={items} addLinks={addLinks} />
+        </Section>
     );
 }
 
 /**
- * Company detail (F-03). Later features add one line per section component below the People
- * section (F-08 orders, invoices and outstanding).
+ * Company profile, summary first (F-28): header with entity type, PAN and contact buttons, key
+ * figures (Outstanding, Overdue, Open orders), New order / New invoice with this company
+ * preselected, then Open orders, Invoices, People and Details.
+ * Phones: one column in that order. lg+: figures, details and people left; orders and invoices right.
+ * Orders and invoices load once here and feed both the figures and their sections.
  */
 export default function CompanyDetailPage() {
     const { companyId } = useParams();
     const { online } = useOnlineStatus();
     const company = useCompany(companyId);
+    const orders = useClientOrders(companyId);
+    const invoices = useBillingEntityInvoices(companyId);
+    const wide = useMediaQuery('(min-width: 1024px)');
 
     return (
         <PageBody width="detail">
             <PageHeader backTo="/companies" backLabel="Companies" />
             <DataView resource={company} skeleton="detail" notFoundTitle="Company not found">
-                {(c) => (
-                    <>
-                        <RecordHeader
-                            eyebrow={<Tag>{entityTypeLabel(c.entityType) || 'Company'}</Tag>}
-                            icon="COMPANY"
-                            title={c.name}
-                            meta={c.pan ? <span className="font-mono text-[13px] text-ink-muted">PAN {c.pan}</span> : null}
-                            actions={
-                                <Button variant="secondary" icon="edit" to={`/companies/${c.id}/edit`} disabled={!online}>
-                                    Edit
-                                </Button>
-                            }
-                        >
-                            {!online && <OfflineActionHint />}
-                        </RecordHeader>
+                {(c) => {
+                    const preselect = `clientType=COMPANY&clientId=${encodeURIComponent(c.id)}`;
+                    const figures = <ProfileKeyFigures orders={orders} invoices={invoices} />;
+                    const openOrders = <ClientOrdersSection orders={orders} showReceivedFrom />;
+                    const billed = <BilledInvoicesSection invoices={invoices} />;
+                    const people = <CompanyPeopleSection company={c} online={online} reload={company.reload} />;
+                    const details = <CompanyDetails company={c} />;
 
-                        <div className="flex flex-col gap-4">
-                            <Card>
-                                <dl className="grid gap-4 md:grid-cols-2">
-                                    <DetailField label="GSTIN" value={c.gstin ? <span className="font-mono text-[13px]">{c.gstin}</span> : null} />
-                                    <DetailField
-                                        label="Email"
-                                        value={
-                                            c.email ? (
-                                                <a href={`mailto:${c.email}`} className="text-ink underline-offset-2 hover:underline focus-visible:underline">
-                                                    {c.email}
-                                                </a>
-                                            ) : null
-                                        }
-                                    />
-                                    <DetailField
-                                        label="Phone"
-                                        value={
-                                            c.phone ? (
-                                                <a href={`tel:${c.phone.replace(/[^\d+]/g, '')}`} className="text-ink underline-offset-2 hover:underline focus-visible:underline">
-                                                    {c.phone}
-                                                </a>
-                                            ) : null
-                                        }
-                                    />
-                                    <DetailField
-                                        label="Registered address"
-                                        value={c.address ? <span className="whitespace-pre-line">{c.address}</span> : null}
-                                    />
-                                    <DetailField
-                                        label="Notes"
-                                        value={c.notes ? <span className="whitespace-pre-line">{c.notes}</span> : null}
-                                        className="md:col-span-2"
-                                    />
-                                </dl>
-                            </Card>
+                    return (
+                        <>
+                            <RecordHeader
+                                eyebrow={<Tag>{entityTypeLabel(c.entityType) || 'Company'}</Tag>}
+                                icon="COMPANY"
+                                title={c.name}
+                                meta={c.pan ? <span className="font-mono text-[13px] text-ink-muted">PAN {c.pan}</span> : null}
+                                actions={
+                                    <>
+                                        <Button icon="plus" to={`/orders/new?${preselect}`} disabled={!online}>
+                                            New order
+                                        </Button>
+                                        <Button variant="secondary" icon="raise-invoice" to={`/invoices/new?${preselect}`} disabled={!online}>
+                                            New invoice
+                                        </Button>
+                                    </>
+                                }
+                                more={[{ label: 'Edit', icon: 'edit', to: `/companies/${c.id}/edit`, disabled: !online }]}
+                            >
+                                <ContactActions phone={c.phone} email={c.email} />
+                                {!online && <OfflineActionHint />}
+                            </RecordHeader>
 
-                            <CompanyPeopleSection company={c} online={online} reload={company.reload} />
-
-                            {/* Sections added by later features, one line each */}
-                            <ClientOrdersSection clientId={c.id} />
-                            <BilledInvoicesSection billedToId={c.id} />
-                        </div>
-                    </>
-                )}
+                            {wide ? (
+                                <div className="grid grid-cols-[minmax(0,5fr)_minmax(0,7fr)] items-start gap-6">
+                                    <div className="flex flex-col gap-4">
+                                        {figures}
+                                        {details}
+                                        {people}
+                                    </div>
+                                    <div className="flex flex-col gap-4">
+                                        {openOrders}
+                                        {billed}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col gap-4">
+                                    {figures}
+                                    {openOrders}
+                                    {billed}
+                                    {people}
+                                    {details}
+                                </div>
+                            )}
+                        </>
+                    );
+                }}
             </DataView>
         </PageBody>
     );
