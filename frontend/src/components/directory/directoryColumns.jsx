@@ -5,16 +5,21 @@ import { CompanyLinks, Missing, Outstanding } from './directoryText.jsx';
 const dash = <span className="text-ink-subtle">—</span>;
 const mono = (value) => (value ? <span className="tabular-nums">{value}</span> : dash);
 
-/** DataTable columns of the People list at lg+ (F-29): Name · PAN · Phone · Companies · Outstanding. */
+/**
+ * DataTable columns of the People list at lg+ (F-29): Name · PAN · Phone · Companies · Outstanding.
+ * Name columns get priority width (F-33): at least 15rem, so names up to about 25 characters stay on
+ * one line; quiet tags sit under the name instead of beside it.
+ */
 export const PEOPLE_COLUMNS = [
     {
         key: 'name',
         header: 'Name',
         sortKey: 'name',
+        minWidth: '15rem',
         render: (p) => (
             <>
                 {p.name}
-                {p.isIndividualClient && <Tag className="ml-2">Individual client</Tag>}
+                {p.isIndividualClient && <Tag className="mt-0.5 block">Individual client</Tag>}
             </>
         ),
     },
@@ -34,7 +39,7 @@ export const PEOPLE_COLUMNS = [
 
 /** DataTable columns of the Companies list at lg+ (F-29): Name · Entity type · PAN · Main contact · Outstanding. */
 export const COMPANY_COLUMNS = [
-    { key: 'name', header: 'Name', sortKey: 'name', render: (c) => c.name },
+    { key: 'name', header: 'Name', sortKey: 'name', minWidth: '15rem', render: (c) => c.name },
     { key: 'entityType', header: 'Entity type', width: '9rem', render: (c) => entityTypeLabel(c.entityType) || dash },
     { key: 'pan', header: 'PAN', width: '9rem', render: (c) => mono(c.pan) },
     {
@@ -44,7 +49,7 @@ export const COMPANY_COLUMNS = [
             c.mainContact && c.mainContact.personName ? (
                 <>
                     {c.mainContact.personName}
-                    <Tag className="ml-2">{relationshipLabel(c.mainContact.relationshipType)}</Tag>
+                    <Tag className="mt-0.5 block">{relationshipLabel(c.mainContact.relationshipType)}</Tag>
                 </>
             ) : (
                 <Missing>No contact</Missing>

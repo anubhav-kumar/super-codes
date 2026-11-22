@@ -70,10 +70,13 @@ function OrderCell({ order, service }) {
 
 function invoiceColumns({ filter, serviceByOrderId }) {
     return [
-        { key: 'number', header: 'Number', width: '7.5rem', render: (i) => <span className="whitespace-nowrap tabular-nums">{i.invoiceNumber}</span> },
+        { key: 'number', header: 'Number', nowrap: true, render: (i) => <span className="whitespace-nowrap tabular-nums">{i.invoiceNumber}</span> },
         {
             key: 'billedTo',
             header: 'Billed to',
+            // Priority width: 12rem from a ~1310 px table (1440 px), 15% of the table below that,
+            // so the Order column keeps room at 1024 px.
+            minWidth: 'min(12rem, 15cqi)',
             render: (i) => (
                 <span className="flex items-center gap-2">
                     {i.billedTo && <ClientIcon type={i.billedTo.type} size="inline" />}
@@ -82,7 +85,7 @@ function invoiceColumns({ filter, serviceByOrderId }) {
             ),
         },
         { key: 'order', header: 'Order', render: (i) => <OrderCell order={i.order} service={i.order ? serviceByOrderId.get(i.order.id) : null} /> },
-        { key: 'due', header: 'Due', sortKey: 'due', width: '9.5rem', render: (i) => <DueCell invoice={i} /> },
+        { key: 'due', header: 'Due', sortKey: 'due', nowrap: true, render: (i) => <DueCell invoice={i} /> },
         {
             key: 'total',
             header: 'Total',
@@ -109,7 +112,7 @@ function invoiceColumns({ filter, serviceByOrderId }) {
         {
             key: 'status',
             header: 'Status',
-            width: '8.5rem',
+            nowrap: true,
             render: (i) =>
                 statusHidden(i, filter) ? null : <Badge tone={INVOICE_STATUS_TONE[i.displayedStatus]}>{invoiceStatusLabel(i.displayedStatus)}</Badge>,
         },
