@@ -3,11 +3,11 @@ import { useNavigate, useParams } from 'react-router-dom';
 import DataView from '../components/DataView.jsx';
 import DateField from '../components/DateField.jsx';
 import EmptyState from '../components/EmptyState.jsx';
-import FormError from '../components/FormError.jsx';
 import FormFooter from '../components/FormFooter.jsx';
+import FormLayout, { FormHeading } from '../components/FormLayout.jsx';
+import FormSection, { FormRow } from '../components/FormSection.jsx';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
-import PageTitle from '../components/PageTitle.jsx';
 import SelectField from '../components/SelectField.jsx';
 import TextArea from '../components/TextArea.jsx';
 import TextField from '../components/TextField.jsx';
@@ -88,41 +88,59 @@ function WorkerForm({ worker }) {
     const cancelTo = isEdit ? `/workers/${worker.id}` : '/workers';
 
     return (
-        <form noValidate onSubmit={handleSubmit} className="flex max-w-xl flex-col gap-4">
-            <FormError message={formError} />
-            <TextField label="Name" required autoComplete="off" value={form.name} onChange={set('name')} error={errorOf('name')} />
-            <SelectField
-                label="Designation"
-                required
-                placeholder="Choose a designation"
-                options={DESIGNATIONS}
-                value={form.designation}
-                onChange={set('designation')}
-                error={errorOf('designation')}
-            />
-            <TextField
-                label="Email"
-                type="email"
-                inputMode="email"
-                autoCapitalize="none"
-                spellCheck={false}
-                value={form.email}
-                onChange={set('email')}
-                error={errorOf('email')}
-            />
-            <TextField label="Phone" type="tel" inputMode="tel" value={form.phone} onChange={set('phone')} error={errorOf('phone')} />
-            <DateField label="Joining date" value={form.joiningDate} onChange={set('joiningDate')} error={errorOf('joiningDate')} />
-            <SelectField
-                label="Status"
-                options={WORKER_STATUSES}
-                value={form.status}
-                onChange={set('status')}
-                error={errorOf('status')}
-                hint={form.status === 'INACTIVE' ? "Inactive workers keep their current orders but can't be assigned new ones." : undefined}
-            />
-            <TextArea label="Notes" rows={4} value={form.notes} onChange={set('notes')} error={errorOf('notes')} />
-            <FormFooter submitLabel={isEdit ? 'Save' : 'Add worker'} submitting={submitting} cancelTo={cancelTo} />
-        </form>
+        <FormLayout
+            title={isEdit ? 'Edit worker' : 'Add worker'}
+            meta={isEdit ? worker.name : undefined}
+            error={formError}
+            onSubmit={handleSubmit}
+            footer={<FormFooter submitLabel={isEdit ? 'Save' : 'Add worker'} submitting={submitting} cancelTo={cancelTo} />}
+        >
+            <FormSection title="Worker">
+                <TextField label="Name" required autoComplete="off" value={form.name} onChange={set('name')} error={errorOf('name')} />
+                <FormRow>
+                    <SelectField
+                        label="Designation"
+                        required
+                        placeholder="Choose a designation"
+                        options={DESIGNATIONS}
+                        value={form.designation}
+                        onChange={set('designation')}
+                        error={errorOf('designation')}
+                    />
+                    <SelectField
+                        label="Status"
+                        options={WORKER_STATUSES}
+                        value={form.status}
+                        onChange={set('status')}
+                        error={errorOf('status')}
+                        hint={form.status === 'INACTIVE' ? "Inactive workers keep their current orders but can't be assigned new ones." : undefined}
+                    />
+                </FormRow>
+            </FormSection>
+            <FormSection title="Contact">
+                <FormRow>
+                    <TextField label="Phone" type="tel" inputMode="tel" value={form.phone} onChange={set('phone')} error={errorOf('phone')} />
+                    <TextField
+                        label="Email"
+                        type="email"
+                        inputMode="email"
+                        autoCapitalize="none"
+                        spellCheck={false}
+                        value={form.email}
+                        onChange={set('email')}
+                        error={errorOf('email')}
+                    />
+                </FormRow>
+            </FormSection>
+            <FormSection title="Dates">
+                <FormRow>
+                    <DateField label="Joining date" value={form.joiningDate} onChange={set('joiningDate')} error={errorOf('joiningDate')} />
+                </FormRow>
+            </FormSection>
+            <FormSection title="Notes">
+                <TextArea label="Notes" rows={4} value={form.notes} onChange={set('notes')} error={errorOf('notes')} />
+            </FormSection>
+        </FormLayout>
     );
 }
 
@@ -149,7 +167,7 @@ export default function WorkerFormPage() {
         return (
             <PageBody width="form">
                 <PageHeader backTo={isEdit ? `/workers/${workerId}` : '/workers'} backLabel={isEdit ? 'Worker' : 'Workers'} />
-                <PageTitle title={title} />
+                <FormHeading title={title} />
                 <EmptyState
                     icon="offline"
                     title="Adding and editing need a connection"
@@ -163,7 +181,6 @@ export default function WorkerFormPage() {
     return (
         <PageBody width="form">
             <PageHeader backTo={isEdit ? `/workers/${workerId}` : '/workers'} backLabel={isEdit ? 'Worker' : 'Workers'} />
-            <PageTitle title={title} />
             {isEdit ? <EditWorker workerId={workerId} /> : <WorkerForm />}
         </PageBody>
     );

@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import Card from '../components/Card.jsx';
 import DataView from '../components/DataView.jsx';
 import EmptyState from '../components/EmptyState.jsx';
-import FormError from '../components/FormError.jsx';
 import FormFooter from '../components/FormFooter.jsx';
+import FormLayout from '../components/FormLayout.jsx';
+import FormSection, { FormRow } from '../components/FormSection.jsx';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
-import PageTitle from '../components/PageTitle.jsx';
 import Switch from '../components/Switch.jsx';
 import TextArea from '../components/TextArea.jsx';
 import TextField from '../components/TextField.jsx';
@@ -111,42 +110,55 @@ function PersonForm({ person }) {
     const banner = panTaken ? null : formError;
 
     return (
-        <>
-            <PageTitle title={isEdit ? 'Edit person' : 'Add person'} subtitle={isEdit ? person.name : undefined} />
-            <form noValidate onSubmit={handleSubmit} className="flex max-w-xl flex-col gap-4">
-                <FormError message={banner} />
-                <Card>
+        <FormLayout
+            title={isEdit ? 'Edit person' : 'Add person'}
+            meta={isEdit ? person.name : undefined}
+            error={banner}
+            onSubmit={handleSubmit}
+            footer={<FormFooter submitLabel="Save" submitting={submitting} cancelTo={isEdit ? `/people/${person.id}` : '/people'} />}
+        >
+            <FormSection title="Person">
+                <TextField
+                    label="Name"
+                    required
+                    autoComplete="off"
+                    maxLength={PERSON_LIMITS.name}
+                    value={values.name}
+                    onChange={set('name')}
+                    error={errorFor('name')}
+                />
+                <Switch
+                    label="Individual client"
+                    hint="The firm does work for this person directly."
+                    checked={values.isIndividualClient}
+                    onChange={set('isIndividualClient')}
+                />
+                <TextField
+                    label="PAN"
+                    required={values.isIndividualClient}
+                    transform="uppercase"
+                    autoCapitalize="characters"
+                    autoComplete="off"
+                    spellCheck={false}
+                    maxLength={10}
+                    className="[&_input]:font-mono"
+                    value={values.pan}
+                    onChange={set('pan')}
+                    error={panError}
+                    hint={values.isIndividualClient ? undefined : 'Optional for company contacts.'}
+                />
+            </FormSection>
+            <FormSection title="Contact">
+                <FormRow>
                     <TextField
-                        label="Name"
-                        required
-                        autoComplete="off"
-                        maxLength={PERSON_LIMITS.name}
-                        value={values.name}
-                        onChange={set('name')}
-                        error={errorFor('name')}
+                        label="Phone"
+                        type="tel"
+                        inputMode="tel"
+                        maxLength={PERSON_LIMITS.phone}
+                        value={values.phone}
+                        onChange={set('phone')}
+                        error={errorFor('phone')}
                     />
-                    <Switch
-                        label="Individual client"
-                        hint="The firm does work for this person directly."
-                        checked={values.isIndividualClient}
-                        onChange={set('isIndividualClient')}
-                    />
-                    <TextField
-                        label="PAN"
-                        required={values.isIndividualClient}
-                        transform="uppercase"
-                        autoCapitalize="characters"
-                        autoComplete="off"
-                        spellCheck={false}
-                        maxLength={10}
-                        className="[&_input]:font-mono"
-                        value={values.pan}
-                        onChange={set('pan')}
-                        error={panError}
-                        hint={values.isIndividualClient ? undefined : 'Optional for company contacts.'}
-                    />
-                </Card>
-                <Card>
                     <TextField
                         label="Email"
                         type="email"
@@ -158,34 +170,26 @@ function PersonForm({ person }) {
                         onChange={set('email')}
                         error={errorFor('email')}
                     />
-                    <TextField
-                        label="Phone"
-                        type="tel"
-                        inputMode="tel"
-                        maxLength={PERSON_LIMITS.phone}
-                        value={values.phone}
-                        onChange={set('phone')}
-                        error={errorFor('phone')}
-                    />
-                    <TextArea
-                        label="Address"
-                        maxLength={PERSON_LIMITS.address}
-                        value={values.address}
-                        onChange={set('address')}
-                        error={errorFor('address')}
-                    />
-                    <TextArea
-                        label="Notes"
-                        rows={4}
-                        maxLength={PERSON_LIMITS.notes}
-                        value={values.notes}
-                        onChange={set('notes')}
-                        error={errorFor('notes')}
-                    />
-                </Card>
-                <FormFooter submitLabel="Save" submitting={submitting} cancelTo={isEdit ? `/people/${person.id}` : '/people'} />
-            </form>
-        </>
+                </FormRow>
+                <TextArea
+                    label="Address"
+                    maxLength={PERSON_LIMITS.address}
+                    value={values.address}
+                    onChange={set('address')}
+                    error={errorFor('address')}
+                />
+            </FormSection>
+            <FormSection title="Notes">
+                <TextArea
+                    label="Notes"
+                    rows={4}
+                    maxLength={PERSON_LIMITS.notes}
+                    value={values.notes}
+                    onChange={set('notes')}
+                    error={errorFor('notes')}
+                />
+            </FormSection>
+        </FormLayout>
     );
 }
 

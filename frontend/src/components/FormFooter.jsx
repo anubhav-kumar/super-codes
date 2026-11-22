@@ -3,21 +3,39 @@ import Button from './Button.jsx';
 import OfflineActionHint from './OfflineActionHint.jsx';
 
 /**
- * Sticky footer for forms: Cancel + primary submit. Must be rendered inside the <form>.
- * Submit is disabled while offline, with OfflineActionHint.
+ * Sticky footer for forms: Cancel, optional secondary submit, primary submit. Must be rendered inside
+ * the <form>. Submit buttons are disabled while offline, with OfflineActionHint.
+ *   secondarySubmit  { label, onClick, loading } — e.g. "Save as draft" next to "Issue invoice".
+ *                    A plain button (type="button"); onClick runs the page's own save path.
+ * The bar bleeds to the PageBody gutters (16 / 24 / 32 px), so it spans the content column.
  */
-export default function FormFooter({ submitLabel = 'Save', submitting = false, disabled = false, cancelTo, onCancel, cancelLabel = 'Cancel' }) {
+export default function FormFooter({
+    submitLabel = 'Save',
+    submitting = false,
+    disabled = false,
+    cancelTo,
+    onCancel,
+    cancelLabel = 'Cancel',
+    secondarySubmit,
+}) {
     const { online } = useOnlineStatus();
+    const secondaryLoading = Boolean(secondarySubmit && secondarySubmit.loading);
+    const blocked = disabled || !online;
     return (
-        <div className="sticky bottom-0 z-10 -mx-4 mt-2 border-t border-line bg-surface/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+        <div className="sticky bottom-0 z-10 -mx-4 mt-2 border-t border-line bg-surface/95 px-4 py-3 backdrop-blur md:-mx-6 md:px-6 xl:-mx-8 xl:px-8">
             {!online && <OfflineActionHint className="mb-2" />}
-            <div className="flex items-center justify-end gap-3">
+            <div className="flex flex-wrap items-center justify-end gap-3">
                 {(cancelTo || onCancel) && (
                     <Button variant="secondary" to={cancelTo} onClick={onCancel}>
                         {cancelLabel}
                     </Button>
                 )}
-                <Button type="submit" loading={submitting} disabled={disabled || !online}>
+                {secondarySubmit && (
+                    <Button variant="secondary" onClick={secondarySubmit.onClick} loading={secondaryLoading} disabled={blocked || submitting}>
+                        {secondarySubmit.label}
+                    </Button>
+                )}
+                <Button type="submit" loading={submitting} disabled={blocked || secondaryLoading}>
                     {submitLabel}
                 </Button>
             </div>

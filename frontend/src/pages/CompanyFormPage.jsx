@@ -1,15 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Button from '../components/Button.jsx';
-import Card from '../components/Card.jsx';
 import DataView from '../components/DataView.jsx';
 import EmptyState from '../components/EmptyState.jsx';
-import FormError from '../components/FormError.jsx';
 import FormFooter from '../components/FormFooter.jsx';
+import FormLayout from '../components/FormLayout.jsx';
+import FormSection, { FormRow } from '../components/FormSection.jsx';
 import Icon from '../components/Icon.jsx';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
-import PageTitle from '../components/PageTitle.jsx';
 import PersonPicker, { pickedPersonId, toAssociationInput } from '../components/PersonPicker.jsx';
 import SelectField from '../components/SelectField.jsx';
 import TextArea from '../components/TextArea.jsx';
@@ -120,8 +119,7 @@ function AssociationRows({ rows, setRows, rowErrors, fieldErrors, blockError }) 
     const pickedIds = rows.map((r) => pickedPersonId(r.person)).filter(Boolean);
 
     return (
-        <Card title="Associated people">
-            <p className="-mt-2 text-sm text-ink-muted">Add at least one person who represents this company.</p>
+        <FormSection title="People" description="Add at least one person who represents this company.">
             {blockError && (
                 <p role="alert" className="text-sm text-danger">
                     {blockError}
@@ -174,7 +172,7 @@ function AssociationRows({ rows, setRows, rowErrors, fieldErrors, blockError }) 
                     Add another person
                 </Button>
             )}
-        </Card>
+        </FormSection>
     );
 }
 
@@ -236,20 +234,24 @@ function CompanyForm({ company }) {
     const banner = panTaken ? null : formError;
 
     return (
-        <>
-            <PageTitle title={isEdit ? 'Edit company' : 'Add company'} subtitle={isEdit ? company.name : undefined} />
-            <form noValidate onSubmit={handleSubmit} className="flex max-w-xl flex-col gap-4">
-                <FormError message={banner} />
-                <Card>
-                    <TextField
-                        label="Company name"
-                        required
-                        autoComplete="off"
-                        maxLength={COMPANY_LIMITS.name}
-                        value={values.name}
-                        onChange={set('name')}
-                        error={errorFor('name')}
-                    />
+        <FormLayout
+            title={isEdit ? 'Edit company' : 'Add company'}
+            meta={isEdit ? company.name : undefined}
+            error={banner}
+            onSubmit={handleSubmit}
+            footer={<FormFooter submitLabel="Save" submitting={submitting} cancelTo={isEdit ? `/companies/${company.id}` : '/companies'} />}
+        >
+            <FormSection title="Company">
+                <TextField
+                    label="Company name"
+                    required
+                    autoComplete="off"
+                    maxLength={COMPANY_LIMITS.name}
+                    value={values.name}
+                    onChange={set('name')}
+                    error={errorFor('name')}
+                />
+                <FormRow>
                     <TextField
                         label="PAN"
                         required
@@ -272,26 +274,30 @@ function CompanyForm({ company }) {
                         onChange={set('entityType')}
                         error={errorFor('entityType')}
                     />
+                </FormRow>
+                <TextField
+                    label="GSTIN"
+                    transform="uppercase"
+                    autoCapitalize="characters"
+                    autoComplete="off"
+                    spellCheck={false}
+                    maxLength={COMPANY_LIMITS.gstin}
+                    className="[&_input]:font-mono"
+                    value={values.gstin}
+                    onChange={set('gstin')}
+                    error={errorFor('gstin')}
+                />
+            </FormSection>
+            <FormSection title="Contact">
+                <FormRow>
                     <TextField
-                        label="GSTIN"
-                        transform="uppercase"
-                        autoCapitalize="characters"
-                        autoComplete="off"
-                        spellCheck={false}
-                        maxLength={COMPANY_LIMITS.gstin}
-                        className="[&_input]:font-mono"
-                        value={values.gstin}
-                        onChange={set('gstin')}
-                        error={errorFor('gstin')}
-                    />
-                </Card>
-                <Card>
-                    <TextArea
-                        label="Registered address"
-                        maxLength={COMPANY_LIMITS.address}
-                        value={values.address}
-                        onChange={set('address')}
-                        error={errorFor('address')}
+                        label="Phone"
+                        type="tel"
+                        inputMode="tel"
+                        maxLength={COMPANY_LIMITS.phone}
+                        value={values.phone}
+                        onChange={set('phone')}
+                        error={errorFor('phone')}
                     />
                     <TextField
                         label="Email"
@@ -304,36 +310,35 @@ function CompanyForm({ company }) {
                         onChange={set('email')}
                         error={errorFor('email')}
                     />
-                    <TextField
-                        label="Phone"
-                        type="tel"
-                        inputMode="tel"
-                        maxLength={COMPANY_LIMITS.phone}
-                        value={values.phone}
-                        onChange={set('phone')}
-                        error={errorFor('phone')}
-                    />
-                    <TextArea
-                        label="Notes"
-                        rows={4}
-                        maxLength={COMPANY_LIMITS.notes}
-                        value={values.notes}
-                        onChange={set('notes')}
-                        error={errorFor('notes')}
-                    />
-                </Card>
-                {!isEdit && (
-                    <AssociationRows
-                        rows={rows}
-                        setRows={setRowsAndClear}
-                        rowErrors={rowErrors.rows}
-                        fieldErrors={fieldErrors}
-                        blockError={rowErrors.block || fieldErrors.associations}
-                    />
-                )}
-                <FormFooter submitLabel="Save" submitting={submitting} cancelTo={isEdit ? `/companies/${company.id}` : '/companies'} />
-            </form>
-        </>
+                </FormRow>
+                <TextArea
+                    label="Registered address"
+                    maxLength={COMPANY_LIMITS.address}
+                    value={values.address}
+                    onChange={set('address')}
+                    error={errorFor('address')}
+                />
+            </FormSection>
+            {!isEdit && (
+                <AssociationRows
+                    rows={rows}
+                    setRows={setRowsAndClear}
+                    rowErrors={rowErrors.rows}
+                    fieldErrors={fieldErrors}
+                    blockError={rowErrors.block || fieldErrors.associations}
+                />
+            )}
+            <FormSection title="Notes">
+                <TextArea
+                    label="Notes"
+                    rows={4}
+                    maxLength={COMPANY_LIMITS.notes}
+                    value={values.notes}
+                    onChange={set('notes')}
+                    error={errorFor('notes')}
+                />
+            </FormSection>
+        </FormLayout>
     );
 }
 

@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import Card from '../components/Card.jsx';
 import DataView from '../components/DataView.jsx';
 import EmptyState from '../components/EmptyState.jsx';
-import FormError from '../components/FormError.jsx';
 import FormFooter from '../components/FormFooter.jsx';
+import FormLayout from '../components/FormLayout.jsx';
+import FormSection from '../components/FormSection.jsx';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
-import PageTitle from '../components/PageTitle.jsx';
 import PersonPicker, { pickedPersonId, pickedPersonName, toAssociationInput } from '../components/PersonPicker.jsx';
 import SelectField from '../components/SelectField.jsx';
 import { addAssociation } from '../api/companies.js';
@@ -70,39 +69,40 @@ function LinkPersonForm({ company }) {
     const personError = errors.person || fieldErrors.personId || Object.entries(fieldErrors).find(([f]) => f.startsWith('person'))?.[1];
 
     return (
-        <>
-            <PageTitle title="Link person" subtitle={company.name} />
-            <form noValidate onSubmit={handleSubmit} className="flex max-w-xl flex-col gap-4">
-                <FormError message={banner} />
-                <Card>
-                    <PersonPicker
-                        label="Person"
-                        required
-                        allowQuickAdd
-                        value={person}
-                        excludeIds={linkedIds}
-                        onChange={(p) => {
-                            setPerson(p);
-                            setErrors((e) => ({ ...e, person: undefined }));
-                        }}
-                        error={personError}
-                    />
-                    <SelectField
-                        label="Relationship"
-                        required
-                        placeholder="Choose…"
-                        options={RELATIONSHIP_TYPES}
-                        value={relationshipType}
-                        onChange={(v) => {
-                            setRelationshipType(v);
-                            setErrors((e) => ({ ...e, relationshipType: undefined }));
-                        }}
-                        error={errors.relationshipType || fieldErrors.relationshipType}
-                    />
-                </Card>
-                <FormFooter submitLabel="Link person" submitting={submitting} cancelTo={detailPath} />
-            </form>
-        </>
+        <FormLayout
+            title="Link person"
+            meta={company.name}
+            error={banner}
+            onSubmit={handleSubmit}
+            footer={<FormFooter submitLabel="Link person" submitting={submitting} cancelTo={detailPath} />}
+        >
+            <FormSection title="Person">
+                <PersonPicker
+                    label="Person"
+                    required
+                    allowQuickAdd
+                    value={person}
+                    excludeIds={linkedIds}
+                    onChange={(p) => {
+                        setPerson(p);
+                        setErrors((e) => ({ ...e, person: undefined }));
+                    }}
+                    error={personError}
+                />
+                <SelectField
+                    label="Relationship"
+                    required
+                    placeholder="Choose…"
+                    options={RELATIONSHIP_TYPES}
+                    value={relationshipType}
+                    onChange={(v) => {
+                        setRelationshipType(v);
+                        setErrors((e) => ({ ...e, relationshipType: undefined }));
+                    }}
+                    error={errors.relationshipType || fieldErrors.relationshipType}
+                />
+            </FormSection>
+        </FormLayout>
     );
 }
 

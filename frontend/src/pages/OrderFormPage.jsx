@@ -5,16 +5,15 @@ import ComboField from '../components/ComboField.jsx';
 import DataView from '../components/DataView.jsx';
 import DateField from '../components/DateField.jsx';
 import EmptyState from '../components/EmptyState.jsx';
-import FormError from '../components/FormError.jsx';
 import FormFooter from '../components/FormFooter.jsx';
+import FormLayout, { FormHeading } from '../components/FormLayout.jsx';
+import FormSection, { FormRow } from '../components/FormSection.jsx';
 import MoneyField from '../components/MoneyField.jsx';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
-import PageTitle from '../components/PageTitle.jsx';
 import PersonPicker, { pickedPersonId } from '../components/PersonPicker.jsx';
 import SelectField from '../components/SelectField.jsx';
 import TextArea from '../components/TextArea.jsx';
-import TextField from '../components/TextField.jsx';
 import WorkerAssignmentEditor from '../components/WorkerAssignmentEditor.jsx';
 import { createOrder, updateOrder } from '../api/orders.js';
 import { ORDER_LIMITS, ORDER_STATUSES, SERVICE_SUGGESTIONS } from '../constants/orders.js';
@@ -23,10 +22,10 @@ import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useOrder } from '../hooks/useOrders.js';
 import useSubmit from '../hooks/useSubmit.js';
 import useToast from '../hooks/useToast.js';
-import { formatDate } from '../utils/format.js';
+import { todayLocal } from '../utils/dates.js';
 import { parseMoney } from '../utils/validation.js';
 
-const today = () => formatDate(new Date());
+const today = () => todayLocal();
 const personValue = (p) => (p && p.id ? { type: 'existing', personId: p.id, name: p.name } : null);
 
 function toForm(order) {
@@ -194,54 +193,68 @@ function OrderForm({ order }) {
     const cancelTo = isEdit ? `/orders/${order.id}` : '/orders';
 
     return (
-        <form noValidate onSubmit={handleSubmit} className="flex max-w-xl flex-col gap-4">
-            <FormError message={formError} />
-            {isEdit ? (
-                <TextField label="Order number" value={order.orderNumber} readOnly disabled className="tabular-nums" />
-            ) : (
-                <p className="text-sm text-ink-muted">Number is assigned when you save.</p>
-            )}
-            <ComboField
-                label="Service"
-                required
-                maxLength={ORDER_LIMITS.serviceName}
-                suggestions={SERVICE_SUGGESTIONS}
-                value={form.serviceName}
-                onChange={set('serviceName')}
-                error={errorOf('serviceName')}
-                hint="Pick a suggestion or type your own."
-            />
-            <ClientPicker
-                label="Client"
-                required
-                value={form.client}
-                onChange={setClient}
-                error={errorOf('client')}
-                hint="An individual client or a company."
-            />
-            <PersonPicker
-                label="Received from"
-                required
-                sheetTitle="Who requested this?"
-                value={form.receivedFrom}
-                onChange={setReceivedFrom}
-                suggested={suggested}
-                error={errorOf('receivedFrom')}
-                hint={form.client && form.client.type === 'COMPANY' ? 'People at the company are listed first.' : undefined}
-            />
-            <div className="grid gap-4 sm:grid-cols-2">
-                <DateField label="Order date" required value={form.orderDate} onChange={set('orderDate')} error={errorOf('orderDate')} />
-                <DateField label="Due date" value={form.dueDate} onChange={set('dueDate')} error={errorOf('dueDate')} />
-            </div>
-            <MoneyField label="Amount" placeholder="0.00" value={form.amount} onChange={set('amount')} error={errorOf('amount')} />
-            {isEdit && (
-                <SelectField label="Status" required options={ORDER_STATUSES} value={form.status} onChange={set('status')} error={errorOf('status')} />
-            )}
-            <TextArea label="Description" rows={3} value={form.description} onChange={set('description')} error={errorOf('description')} />
-            <WorkerAssignmentEditor value={form.assignments} onChange={set('assignments')} error={errorOf('assignments')} />
-            <TextArea label="Notes" rows={3} value={form.notes} onChange={set('notes')} error={errorOf('notes')} />
-            <FormFooter submitLabel={isEdit ? 'Save' : 'Create order'} submitting={submitting} cancelTo={cancelTo} />
-        </form>
+        <FormLayout
+            title={isEdit ? 'Edit order' : 'New order'}
+            meta={isEdit ? order.orderNumber : undefined}
+            description={isEdit ? undefined : 'Number is assigned when you save.'}
+            error={formError}
+            onSubmit={handleSubmit}
+            footer={<FormFooter submitLabel={isEdit ? 'Save' : 'Create order'} submitting={submitting} cancelTo={cancelTo} />}
+        >
+            <FormSection title="Client">
+                <ClientPicker
+                    label="Client"
+                    required
+                    value={form.client}
+                    onChange={setClient}
+                    error={errorOf('client')}
+                    hint="An individual client or a company."
+                />
+                <PersonPicker
+                    label="Received from"
+                    required
+                    sheetTitle="Who requested this?"
+                    value={form.receivedFrom}
+                    onChange={setReceivedFrom}
+                    suggested={suggested}
+                    error={errorOf('receivedFrom')}
+                    hint={form.client && form.client.type === 'COMPANY' ? 'People at the company are listed first.' : undefined}
+                />
+            </FormSection>
+            <FormSection title="Work">
+                <ComboField
+                    label="Service"
+                    required
+                    maxLength={ORDER_LIMITS.serviceName}
+                    suggestions={SERVICE_SUGGESTIONS}
+                    value={form.serviceName}
+                    onChange={set('serviceName')}
+                    error={errorOf('serviceName')}
+                    hint="Pick a suggestion or type your own."
+                />
+                <TextArea label="Description" rows={3} value={form.description} onChange={set('description')} error={errorOf('description')} />
+                {isEdit && (
+                    <FormRow>
+                        <SelectField label="Status" required options={ORDER_STATUSES} value={form.status} onChange={set('status')} error={errorOf('status')} />
+                    </FormRow>
+                )}
+            </FormSection>
+            <FormSection title="Dates and amount">
+                <FormRow>
+                    <DateField label="Order date" required value={form.orderDate} onChange={set('orderDate')} error={errorOf('orderDate')} />
+                    <DateField label="Due date" relative value={form.dueDate} onChange={set('dueDate')} error={errorOf('dueDate')} />
+                </FormRow>
+                <FormRow>
+                    <MoneyField label="Amount" placeholder="0.00" value={form.amount} onChange={set('amount')} error={errorOf('amount')} />
+                </FormRow>
+            </FormSection>
+            <FormSection title="Assignment">
+                <WorkerAssignmentEditor value={form.assignments} onChange={set('assignments')} error={errorOf('assignments')} />
+            </FormSection>
+            <FormSection title="Notes">
+                <TextArea label="Notes" rows={3} value={form.notes} onChange={set('notes')} error={errorOf('notes')} />
+            </FormSection>
+        </FormLayout>
     );
 }
 
@@ -268,7 +281,7 @@ export default function OrderFormPage() {
         return (
             <PageBody width="form">
                 <PageHeader backTo={isEdit ? `/orders/${orderId}` : '/orders'} backLabel={isEdit ? 'Order' : 'Orders'} />
-                <PageTitle title={title} />
+                <FormHeading title={title} />
                 <EmptyState
                     icon="offline"
                     title="Adding and editing need a connection"
@@ -282,7 +295,6 @@ export default function OrderFormPage() {
     return (
         <PageBody width="form">
             <PageHeader backTo={isEdit ? `/orders/${orderId}` : '/orders'} backLabel={isEdit ? 'Order' : 'Orders'} />
-            <PageTitle title={title} />
             {isEdit ? <EditOrder orderId={orderId} /> : <OrderForm />}
         </PageBody>
     );

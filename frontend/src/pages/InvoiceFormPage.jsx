@@ -5,16 +5,15 @@ import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import DataView from '../components/DataView.jsx';
 import DateField from '../components/DateField.jsx';
 import EmptyState from '../components/EmptyState.jsx';
-import FormError from '../components/FormError.jsx';
 import FormFooter from '../components/FormFooter.jsx';
+import FormLayout, { FormHeading } from '../components/FormLayout.jsx';
+import FormSection, { FormRow } from '../components/FormSection.jsx';
 import MoneyField from '../components/MoneyField.jsx';
 import OrderPicker from '../components/OrderPicker.jsx';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
-import PageTitle from '../components/PageTitle.jsx';
 import SelectField from '../components/SelectField.jsx';
 import TextArea from '../components/TextArea.jsx';
-import TextField from '../components/TextField.jsx';
 import { createInvoice, updateInvoice } from '../api/invoices.js';
 import { INVOICE_BASE_STATUSES, INVOICE_LIMITS } from '../constants/invoices.js';
 import { useInvoice } from '../hooks/useInvoices.js';
@@ -22,10 +21,11 @@ import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useOrder } from '../hooks/useOrders.js';
 import useSubmit from '../hooks/useSubmit.js';
 import useToast from '../hooks/useToast.js';
-import { formatDate, formatMoney } from '../utils/format.js';
+import { todayLocal } from '../utils/dates.js';
+import { formatMoney } from '../utils/format.js';
 import { parseMoney } from '../utils/validation.js';
 
-const today = () => formatDate(new Date());
+const today = () => todayLocal();
 const party = (p) => (p && p.id ? { type: p.type, id: p.id, name: p.name } : null);
 
 function toForm(invoice) {
@@ -186,54 +186,63 @@ function InvoiceForm({ invoice, prefillOrderId }) {
     const prefillFailed = !isEdit && prefillOrderId && (prefill.status === 'error' || prefill.status === 'unavailable');
 
     return (
-        <form noValidate onSubmit={handleSubmit} className="flex max-w-xl flex-col gap-4">
-            <FormError message={formError} />
-            {prefillFailed && <FormError message="Couldn't load the order to fill in this invoice. Choose the details below." />}
-            {isEdit ? (
-                <TextField label="Invoice number" value={invoice.invoiceNumber} readOnly disabled className="tabular-nums" />
-            ) : (
-                <p className="text-sm text-ink-muted">Number is assigned when you save. New invoices start as Draft.</p>
-            )}
-            <ClientPicker
-                label="Billed to"
-                required
-                anyPerson
-                sheetTitle="Who are you billing?"
-                value={form.billedTo}
-                onChange={set('billedTo')}
-                error={errorOf('billedTo')}
-                hint="A person or a company."
-            />
-            <OrderPicker
-                value={form.order}
-                onChange={set('order')}
-                error={errorOf('order')}
-                hint={!isEdit && prefill.status === 'loading' && prefillOrderId ? 'Loading the order…' : 'Optional. Choosing an order does not change billed to.'}
-            />
-            <div className="grid gap-4 sm:grid-cols-2">
-                <DateField label="Invoice date" required value={form.invoiceDate} onChange={set('invoiceDate')} error={errorOf('invoiceDate')} />
-                <DateField label="Due date" required value={form.dueDate} onChange={set('dueDate')} error={errorOf('dueDate')} />
-            </div>
-            <TextArea label="Description" rows={3} value={form.description} onChange={set('description')} error={errorOf('description')} />
-            <div className="grid gap-4 sm:grid-cols-2">
-                <MoneyField label="Amount" required placeholder="0.00" value={form.amount} onChange={set('amount')} error={errorOf('amount')} />
-                <MoneyField label="Tax" placeholder="0.00" value={form.tax} onChange={set('tax')} error={errorOf('tax')} />
-            </div>
-            <div className="flex items-baseline justify-between rounded-control border border-line bg-surface-subtle px-3 py-2.5">
-                <span className="text-sm text-ink-muted">Total (amount + tax)</span>
-                <span className="font-semibold text-ink tabular-nums">{total === null ? '—' : formatMoney(total)}</span>
-            </div>
-            {isEdit && (
-                <SelectField
-                    label="Status"
+        <FormLayout
+            title={isEdit ? 'Edit invoice' : 'New invoice'}
+            meta={isEdit ? invoice.invoiceNumber : undefined}
+            description={isEdit ? undefined : 'Number is assigned when you save. New invoices start as Draft.'}
+            error={[formError, prefillFailed && "Couldn't load the order to fill in this invoice. Choose the details below."]}
+            onSubmit={handleSubmit}
+            footer={<FormFooter submitLabel={isEdit ? 'Save' : 'Create invoice'} submitting={submitting} cancelTo={cancelTo} />}
+        >
+            <FormSection title="Billing">
+                <ClientPicker
+                    label="Billed to"
                     required
-                    options={INVOICE_BASE_STATUSES}
-                    value={form.status}
-                    onChange={set('status')}
-                    error={errorOf('status')}
+                    anyPerson
+                    sheetTitle="Who are you billing?"
+                    value={form.billedTo}
+                    onChange={set('billedTo')}
+                    error={errorOf('billedTo')}
+                    hint="A person or a company."
                 />
+                <OrderPicker
+                    value={form.order}
+                    onChange={set('order')}
+                    error={errorOf('order')}
+                    hint={!isEdit && prefill.status === 'loading' && prefillOrderId ? 'Loading the order…' : 'Optional. Choosing an order does not change billed to.'}
+                />
+            </FormSection>
+            <FormSection title="Dates">
+                <FormRow>
+                    <DateField label="Invoice date" required value={form.invoiceDate} onChange={set('invoiceDate')} error={errorOf('invoiceDate')} />
+                    <DateField label="Due date" required relative value={form.dueDate} onChange={set('dueDate')} error={errorOf('dueDate')} />
+                </FormRow>
+            </FormSection>
+            <FormSection title="Amount">
+                <TextArea label="Description" rows={3} value={form.description} onChange={set('description')} error={errorOf('description')} />
+                <FormRow>
+                    <MoneyField label="Amount" required placeholder="0.00" value={form.amount} onChange={set('amount')} error={errorOf('amount')} />
+                    <MoneyField label="Tax" placeholder="0.00" value={form.tax} onChange={set('tax')} error={errorOf('tax')} />
+                </FormRow>
+                <div className="flex items-baseline justify-between rounded-control border border-line bg-surface-subtle px-3 py-2.5">
+                    <span className="text-sm text-ink-muted">Total (amount + tax)</span>
+                    <span className="font-semibold text-ink tabular-nums">{total === null ? '—' : formatMoney(total)}</span>
+                </div>
+            </FormSection>
+            {isEdit && (
+                <FormSection title="Status">
+                    <FormRow>
+                        <SelectField
+                            label="Status"
+                            required
+                            options={INVOICE_BASE_STATUSES}
+                            value={form.status}
+                            onChange={set('status')}
+                            error={errorOf('status')}
+                        />
+                    </FormRow>
+                </FormSection>
             )}
-            <FormFooter submitLabel={isEdit ? 'Save' : 'Create invoice'} submitting={submitting} cancelTo={cancelTo} />
             <ConfirmDialog
                 open={confirmCancel}
                 title="Cancel this invoice?"
@@ -245,7 +254,7 @@ function InvoiceForm({ invoice, prefillOrderId }) {
                 onConfirm={save}
                 onCancel={() => setConfirmCancel(false)}
             />
-        </form>
+        </FormLayout>
     );
 }
 
@@ -274,7 +283,7 @@ export default function InvoiceFormPage() {
         return (
             <PageBody width="form">
                 <PageHeader backTo={isEdit ? `/invoices/${invoiceId}` : '/invoices'} backLabel={isEdit ? 'Invoice' : 'Invoices'} />
-                <PageTitle title={title} />
+                <FormHeading title={title} />
                 <EmptyState
                     icon="offline"
                     title="Adding and editing need a connection"
@@ -288,7 +297,6 @@ export default function InvoiceFormPage() {
     return (
         <PageBody width="form">
             <PageHeader backTo={isEdit ? `/invoices/${invoiceId}` : '/invoices'} backLabel={isEdit ? 'Invoice' : 'Invoices'} />
-            <PageTitle title={title} />
             {isEdit ? <EditInvoice invoiceId={invoiceId} /> : <InvoiceForm key={prefillOrderId || 'new'} prefillOrderId={prefillOrderId} />}
         </PageBody>
     );

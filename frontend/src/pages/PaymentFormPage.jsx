@@ -3,12 +3,12 @@ import { useNavigate, useParams } from 'react-router-dom';
 import DataView from '../components/DataView.jsx';
 import DateField from '../components/DateField.jsx';
 import EmptyState from '../components/EmptyState.jsx';
-import FormError from '../components/FormError.jsx';
 import FormFooter from '../components/FormFooter.jsx';
+import FormLayout, { FormHeading } from '../components/FormLayout.jsx';
+import FormSection, { FormRow } from '../components/FormSection.jsx';
 import MoneyField from '../components/MoneyField.jsx';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
-import PageTitle from '../components/PageTitle.jsx';
 import SelectField from '../components/SelectField.jsx';
 import TextField from '../components/TextField.jsx';
 import { createPayment, updatePayment } from '../api/payments.js';
@@ -17,10 +17,11 @@ import { useInvoice } from '../hooks/useInvoices.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import useSubmit from '../hooks/useSubmit.js';
 import useToast from '../hooks/useToast.js';
-import { formatDate, formatMoney } from '../utils/format.js';
+import { todayLocal } from '../utils/dates.js';
+import { formatMoney } from '../utils/format.js';
 import { parseMoney } from '../utils/validation.js';
 
-const today = () => formatDate(new Date());
+const today = () => todayLocal();
 const text = (v) => (v === null || v === undefined ? '' : String(v));
 
 function toForm(payment) {
@@ -107,39 +108,44 @@ function PaymentForm({ invoice, payment }) {
     };
 
     return (
-        <form noValidate onSubmit={handleSubmit} className="flex max-w-xl flex-col gap-4">
-            <div className="flex items-baseline justify-between gap-3 rounded-control border border-line bg-surface-subtle px-3 py-2.5">
-                <span className="text-sm text-ink-muted">
-                    Invoice <span className="text-ink tabular-nums">{invoice.invoiceNumber}</span> outstanding
-                </span>
-                <span className="font-semibold text-ink tabular-nums">{formatMoney(invoice.outstanding)}</span>
-            </div>
-            <FormError message={formError} />
-            {isEdit ? (
-                <TextField label="Payment reference" value={payment.paymentNumber} readOnly disabled className="tabular-nums" />
-            ) : (
-                <p className="text-sm text-ink-muted">Reference is assigned when you save. Only Paid payments count as received.</p>
-            )}
-            <MoneyField label="Amount" required placeholder="0.00" value={form.amount} onChange={set('amount')} error={errorOf('amount')} />
-            <TextField
-                label="Payment link or reference"
-                value={form.link}
-                onChange={set('link')}
-                error={errorOf('link')}
-                hint="Optional. Paste the link from your payment gateway, or any reference."
-                autoComplete="off"
-            />
-            <div className="grid gap-4 sm:grid-cols-2">
-                <SelectField label="Status" required options={PAYMENT_STATUSES} value={form.status} onChange={set('status')} error={errorOf('status')} />
-                <DateField label="Expiry date" value={form.expiryDate} onChange={set('expiryDate')} error={errorOf('expiryDate')} />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-                <DateField
-                    label="Payment date"
-                    required={form.status === 'PAID'}
-                    value={form.paymentDate}
-                    onChange={set('paymentDate')}
-                    error={errorOf('paymentDate')}
+        <FormLayout
+            title={isEdit ? 'Edit payment' : 'Add payment'}
+            meta={isEdit ? payment.paymentNumber : undefined}
+            description={isEdit ? undefined : 'Reference is assigned when you save. Only Paid payments count as received.'}
+            error={formError}
+            onSubmit={handleSubmit}
+            before={
+                <div className="flex items-baseline justify-between gap-3 rounded-control border border-line bg-surface-subtle px-3 py-2.5">
+                    <span className="text-sm text-ink-muted">
+                        Invoice <span className="text-ink tabular-nums">{invoice.invoiceNumber}</span> outstanding
+                    </span>
+                    <span className="font-semibold text-ink tabular-nums">{formatMoney(invoice.outstanding)}</span>
+                </div>
+            }
+            footer={<FormFooter submitLabel={isEdit ? 'Save' : 'Add payment'} submitting={submitting} cancelTo={`/invoices/${invoice.id}`} />}
+        >
+            <FormSection title="Payment">
+                <FormRow>
+                    <MoneyField label="Amount" required placeholder="0.00" value={form.amount} onChange={set('amount')} error={errorOf('amount')} />
+                    <SelectField label="Status" required options={PAYMENT_STATUSES} value={form.status} onChange={set('status')} error={errorOf('status')} />
+                </FormRow>
+                <FormRow>
+                    <DateField
+                        label="Payment date"
+                        required={form.status === 'PAID'}
+                        value={form.paymentDate}
+                        onChange={set('paymentDate')}
+                        error={errorOf('paymentDate')}
+                    />
+                    <DateField label="Expiry date" relative value={form.expiryDate} onChange={set('expiryDate')} error={errorOf('expiryDate')} />
+                </FormRow>
+                <TextField
+                    label="Payment link or reference"
+                    value={form.link}
+                    onChange={set('link')}
+                    error={errorOf('link')}
+                    hint="Optional. Paste the link from your payment gateway, or any reference."
+                    autoComplete="off"
                 />
                 <TextField
                     label="Transaction reference"
@@ -148,9 +154,8 @@ function PaymentForm({ invoice, payment }) {
                     error={errorOf('transactionReference')}
                     autoComplete="off"
                 />
-            </div>
-            <FormFooter submitLabel={isEdit ? 'Save' : 'Add payment'} submitting={submitting} cancelTo={`/invoices/${invoice.id}`} />
-        </form>
+            </FormSection>
+        </FormLayout>
     );
 }
 
@@ -159,11 +164,14 @@ function PaymentFormContent({ invoice, paymentId }) {
         const payment = (invoice.payments || []).find((p) => p.id === paymentId);
         if (!payment) {
             return (
-                <EmptyState
-                    title="Payment not found"
-                    text="This payment does not exist on this invoice."
-                    action={{ label: 'Back to invoice', to: `/invoices/${invoice.id}` }}
-                />
+                <>
+                    <FormHeading title="Edit payment" />
+                    <EmptyState
+                        title="Payment not found"
+                        text="This payment does not exist on this invoice."
+                        action={{ label: 'Back to invoice', to: `/invoices/${invoice.id}` }}
+                    />
+                </>
             );
         }
         return <PaymentForm invoice={invoice} payment={payment} />;
@@ -171,11 +179,14 @@ function PaymentFormContent({ invoice, paymentId }) {
     // Add payment needs an issued invoice (base status, not displayed status). The server enforces it too.
     if (invoice.baseStatus !== 'ISSUED') {
         return (
-            <EmptyState
-                title="Issue the invoice to add payments"
-                text="Payments can be added only to issued invoices."
-                action={{ label: 'Back to invoice', to: `/invoices/${invoice.id}` }}
-            />
+            <>
+                <FormHeading title="Add payment" />
+                <EmptyState
+                    title="Issue the invoice to add payments"
+                    text="Payments can be added only to issued invoices."
+                    action={{ label: 'Back to invoice', to: `/invoices/${invoice.id}` }}
+                />
+            </>
         );
     }
     return <PaymentForm invoice={invoice} />;
@@ -203,7 +214,7 @@ export default function PaymentFormPage() {
         return (
             <PageBody width="form">
                 <PageHeader backTo={`/invoices/${invoiceId}`} backLabel="Invoice" />
-                <PageTitle title={title} />
+                <FormHeading title={title} />
                 <EmptyState
                     icon="offline"
                     title="Adding and editing need a connection"
@@ -217,7 +228,6 @@ export default function PaymentFormPage() {
     return (
         <PageBody width="form">
             <PageHeader backTo={`/invoices/${invoiceId}`} backLabel="Invoice" />
-            <PageTitle title={title} />
             <DataView resource={invoice} skeleton="form">{(i) => <PaymentFormContent invoice={i} paymentId={paymentId} />}</DataView>
         </PageBody>
     );
