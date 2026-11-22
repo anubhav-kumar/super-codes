@@ -1,7 +1,10 @@
-/** Shared classes for form controls (TextField, TextArea, SelectField). */
+/**
+ * Shared classes for form controls (TextField, TextArea, SelectField, DateField, MoneyField).
+ * Border line-strong (3:1 on white), solid 2 px focus ring in the accent; red border and ring on error.
+ */
 export const controlClass = (hasError) =>
-    `w-full rounded-control border bg-surface px-3 text-base text-ink placeholder:text-ink-muted/70 focus:outline-none focus:ring-2 disabled:bg-page disabled:text-ink-muted ${
-        hasError ? 'border-danger focus:ring-danger/30' : 'border-line focus:border-primary-500 focus:ring-primary-500/25'
+    `w-full rounded-control border bg-surface px-3 text-base text-ink transition-colors placeholder:text-ink-subtle focus:outline-2 focus:outline-offset-1 disabled:border-line disabled:bg-surface-subtle disabled:text-ink-subtle ${
+        hasError ? 'border-danger focus:border-danger focus:outline-danger' : 'border-line-strong hover:border-ink-subtle focus:border-accent focus:outline-accent'
     }`;
 
 export function FieldLabel({ htmlFor, label, required }) {
@@ -9,7 +12,12 @@ export function FieldLabel({ htmlFor, label, required }) {
     return (
         <label htmlFor={htmlFor} className="text-sm font-medium text-ink">
             {label}
-            {required && <span className="text-danger"> *</span>}
+            {required && (
+                <span aria-hidden="true" className="text-ink-subtle">
+                    {' '}
+                    *
+                </span>
+            )}
         </label>
     );
 }

@@ -19,12 +19,12 @@ export default function Switch({ label, checked = false, onChange, hint, disable
                 aria-checked={checked}
                 disabled={disabled}
                 onClick={() => onChange && onChange(!checked)}
-                className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500 disabled:opacity-50 ${
-                    checked ? 'bg-primary-600' : 'bg-line'
+                className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50 ${
+                    checked ? 'bg-accent' : 'bg-line-strong'
                 }`}
             >
                 <span
-                    className={`inline-block h-5 w-5 rounded-full bg-surface shadow transition ${checked ? 'translate-x-6' : 'translate-x-1'}`}
+                    className={`inline-block h-5 w-5 rounded-full bg-surface shadow-raised transition ${checked ? 'translate-x-6' : 'translate-x-1'}`}
                 />
             </button>
         </div>

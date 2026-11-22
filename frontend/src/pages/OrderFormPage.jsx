@@ -5,14 +5,15 @@ import ComboField from '../components/ComboField.jsx';
 import DataView from '../components/DataView.jsx';
 import DateField from '../components/DateField.jsx';
 import EmptyState from '../components/EmptyState.jsx';
-import FormError from '../components/FormError.jsx';
 import FormFooter from '../components/FormFooter.jsx';
+import FormLayout, { FormHeading } from '../components/FormLayout.jsx';
+import FormSection, { FormRow } from '../components/FormSection.jsx';
 import MoneyField from '../components/MoneyField.jsx';
+import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import PersonPicker, { pickedPersonId } from '../components/PersonPicker.jsx';
 import SelectField from '../components/SelectField.jsx';
 import TextArea from '../components/TextArea.jsx';
-import TextField from '../components/TextField.jsx';
 import WorkerAssignmentEditor from '../components/WorkerAssignmentEditor.jsx';
 import { createOrder, updateOrder } from '../api/orders.js';
 import { ORDER_LIMITS, ORDER_STATUSES, SERVICE_SUGGESTIONS } from '../constants/orders.js';
@@ -20,10 +21,11 @@ import { useCompanyPeople } from '../hooks/useCompanies.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useOrder } from '../hooks/useOrders.js';
 import useSubmit from '../hooks/useSubmit.js';
-import { formatDate } from '../utils/format.js';
+import useToast from '../hooks/useToast.js';
+import { todayLocal } from '../utils/dates.js';
 import { parseMoney } from '../utils/validation.js';
 
-const today = () => formatDate(new Date());
+const today = () => todayLocal();
 const personValue = (p) => (p && p.id ? { type: 'existing', personId: p.id, name: p.name } : null);
 
 function toForm(order) {
@@ -125,7 +127,8 @@ function OrderForm({ order }) {
     const newId = useRef(isEdit ? null : crypto.randomUUID());
     const [form, setForm] = useState(() => toForm(order));
     const [localErrors, setLocalErrors] = useState({});
-    const { submit, submitting, formError, fieldErrors } = useSubmit();
+    const { submit, submitting, formError, fieldErrors } = useSubmit({ errorToast: true });
+    const toast = useToast();
 
     const companyId = form.client && form.client.type === 'COMPANY' ? form.client.id : null;
     const companyPeople = useCompanyPeople(companyId);
@@ -174,66 +177,90 @@ function OrderForm({ order }) {
         if (Object.keys(errors).length) return;
         const body = toBody(form, isEdit);
         const result = await submit(() => (isEdit ? updateOrder(order.id, body) : createOrder({ id: newId.current, ...body })));
-        if (result.ok) navigate(`/orders/${isEdit ? order.id : newId.current}`, { replace: true });
+        if (!result.ok) return;
+        const id = isEdit ? order.id : newId.current;
+        if (isEdit) {
+            toast.success('Changes saved');
+        } else {
+            const number = result.data && result.data.orderNumber;
+            toast.success(number ? `Order ${number} created` : 'Order created', {
+                action: { label: 'Raise invoice', to: `/invoices/new?orderId=${encodeURIComponent(id)}` },
+            });
+        }
+        navigate(`/orders/${id}`, { replace: true });
     };
 
     const cancelTo = isEdit ? `/orders/${order.id}` : '/orders';
 
     return (
-        <form noValidate onSubmit={handleSubmit} className="flex max-w-xl flex-col gap-4">
-            <FormError message={formError} />
-            {isEdit ? (
-                <TextField label="Order number" value={order.orderNumber} readOnly disabled className="font-mono" />
-            ) : (
-                <p className="text-sm text-ink-muted">Number is assigned when you save.</p>
-            )}
-            <ComboField
-                label="Service"
-                required
-                maxLength={ORDER_LIMITS.serviceName}
-                suggestions={SERVICE_SUGGESTIONS}
-                value={form.serviceName}
-                onChange={set('serviceName')}
-                error={errorOf('serviceName')}
-                hint="Pick a suggestion or type your own."
-            />
-            <ClientPicker
-                label="Client"
-                required
-                value={form.client}
-                onChange={setClient}
-                error={errorOf('client')}
-                hint="An individual client or a company."
-            />
-            <PersonPicker
-                label="Received from"
-                required
-                sheetTitle="Who requested this?"
-                value={form.receivedFrom}
-                onChange={setReceivedFrom}
-                suggested={suggested}
-                error={errorOf('receivedFrom')}
-                hint={form.client && form.client.type === 'COMPANY' ? 'People at the company are listed first.' : undefined}
-            />
-            <div className="grid gap-4 sm:grid-cols-2">
-                <DateField label="Order date" required value={form.orderDate} onChange={set('orderDate')} error={errorOf('orderDate')} />
-                <DateField label="Due date" value={form.dueDate} onChange={set('dueDate')} error={errorOf('dueDate')} />
-            </div>
-            <MoneyField label="Amount" placeholder="0.00" value={form.amount} onChange={set('amount')} error={errorOf('amount')} />
-            {isEdit && (
-                <SelectField label="Status" required options={ORDER_STATUSES} value={form.status} onChange={set('status')} error={errorOf('status')} />
-            )}
-            <TextArea label="Description" rows={3} value={form.description} onChange={set('description')} error={errorOf('description')} />
-            <WorkerAssignmentEditor value={form.assignments} onChange={set('assignments')} error={errorOf('assignments')} />
-            <TextArea label="Notes" rows={3} value={form.notes} onChange={set('notes')} error={errorOf('notes')} />
-            <FormFooter submitLabel={isEdit ? 'Save' : 'Create order'} submitting={submitting} cancelTo={cancelTo} />
-        </form>
+        <FormLayout
+            title={isEdit ? 'Edit order' : 'New order'}
+            meta={isEdit ? order.orderNumber : undefined}
+            description={isEdit ? undefined : 'Number is assigned when you save.'}
+            error={formError}
+            onSubmit={handleSubmit}
+            footer={<FormFooter submitLabel={isEdit ? 'Save' : 'Create order'} submitting={submitting} cancelTo={cancelTo} />}
+        >
+            <FormSection title="Client">
+                <ClientPicker
+                    label="Client"
+                    required
+                    value={form.client}
+                    onChange={setClient}
+                    error={errorOf('client')}
+                    hint="An individual client or a company."
+                />
+                <PersonPicker
+                    label="Received from"
+                    required
+                    sheetTitle="Who requested this?"
+                    value={form.receivedFrom}
+                    onChange={setReceivedFrom}
+                    suggested={suggested}
+                    error={errorOf('receivedFrom')}
+                    hint={form.client && form.client.type === 'COMPANY' ? 'People at the company are listed first.' : undefined}
+                />
+            </FormSection>
+            <FormSection title="Work">
+                <ComboField
+                    label="Service"
+                    required
+                    maxLength={ORDER_LIMITS.serviceName}
+                    suggestions={SERVICE_SUGGESTIONS}
+                    value={form.serviceName}
+                    onChange={set('serviceName')}
+                    error={errorOf('serviceName')}
+                    hint="Pick a suggestion or type your own."
+                />
+                <TextArea label="Description" rows={3} value={form.description} onChange={set('description')} error={errorOf('description')} />
+                {isEdit && (
+                    <FormRow>
+                        <SelectField label="Status" required options={ORDER_STATUSES} value={form.status} onChange={set('status')} error={errorOf('status')} />
+                    </FormRow>
+                )}
+            </FormSection>
+            <FormSection title="Dates and amount">
+                <FormRow>
+                    <DateField label="Order date" required value={form.orderDate} onChange={set('orderDate')} error={errorOf('orderDate')} />
+                    <DateField label="Due date" relative value={form.dueDate} onChange={set('dueDate')} error={errorOf('dueDate')} />
+                </FormRow>
+                <FormRow>
+                    <MoneyField label="Amount" placeholder="0.00" value={form.amount} onChange={set('amount')} error={errorOf('amount')} />
+                </FormRow>
+            </FormSection>
+            <FormSection title="Assignment">
+                <WorkerAssignmentEditor value={form.assignments} onChange={set('assignments')} error={errorOf('assignments')} />
+            </FormSection>
+            <FormSection title="Notes">
+                <TextArea label="Notes" rows={3} value={form.notes} onChange={set('notes')} error={errorOf('notes')} />
+            </FormSection>
+        </FormLayout>
     );
 }
 
 function EditOrder({ orderId }) {
     const order = useOrder(orderId);
-    return <DataView resource={order}>{(o) => <OrderForm order={o} />}</DataView>;
+    return <DataView resource={order} skeleton="form">{(o) => <OrderForm order={o} />}</DataView>;
 }
 
 /** New order (/orders/new) and Edit order (/orders/:orderId/edit), F-05. Online only. */
@@ -252,22 +279,23 @@ export default function OrderFormPage() {
 
     if (!everOnline) {
         return (
-            <>
-                <PageHeader title={title} />
+            <PageBody width="form">
+                <PageHeader backTo={isEdit ? `/orders/${orderId}` : '/orders'} backLabel={isEdit ? 'Order' : 'Orders'} />
+                <FormHeading title={title} />
                 <EmptyState
                     icon="offline"
                     title="Adding and editing need a connection"
                     text="Connect to the internet and try again."
                     action={{ label: 'Go back', onClick: () => navigate(isEdit ? `/orders/${orderId}` : '/orders') }}
                 />
-            </>
+            </PageBody>
         );
     }
 
     return (
-        <>
-            <PageHeader title={title} />
+        <PageBody width="form">
+            <PageHeader backTo={isEdit ? `/orders/${orderId}` : '/orders'} backLabel={isEdit ? 'Order' : 'Orders'} />
             {isEdit ? <EditOrder orderId={orderId} /> : <OrderForm />}
-        </>
+        </PageBody>
     );
 }

@@ -63,6 +63,7 @@ export default defineConfig(({ mode }) => {
             VitePWA({
                 registerType: 'prompt',
                 injectRegister: false, // registered from src/offline/serviceWorker.js
+                includeAssets: ['favicon.svg', 'favicon.ico', 'icons/apple-touch-icon.png', 'icons/app-mark.svg'],
                 manifest: {
                     name: appName,
                     short_name: appName,
@@ -71,8 +72,8 @@ export default defineConfig(({ mode }) => {
                     scope: '/',
                     display: 'standalone',
                     orientation: 'portrait',
-                    theme_color: '#2556e0',
-                    background_color: '#f5f7fa',
+                    theme_color: '#ffffff',
+                    background_color: '#f5f5f4',
                     icons: [
                         { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
                         { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },

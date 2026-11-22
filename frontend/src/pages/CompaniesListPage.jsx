@@ -4,8 +4,8 @@ import DataView from '../components/DataView.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ListItem from '../components/ListItem.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
+import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
-import SearchInput from '../components/SearchInput.jsx';
 import { entityTypeLabel } from '../constants/clients.js';
 import { useCompanies } from '../hooks/useCompanies.js';
 import useListFilter from '../hooks/useListFilter.js';
@@ -20,19 +20,21 @@ export default function CompaniesListPage() {
     const { query, setQuery, filtered } = useListFilter(companies.data, SEARCH_FIELDS);
 
     return (
-        <>
-            <ClientsTabs value="/companies" className="mb-4" />
+        <PageBody width="list">
             <PageHeader
                 title="Companies"
+                titleSlot={<ClientsTabs value="/companies" />}
+                search={companies.data && companies.data.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Search name or PAN' } : undefined}
                 actions={
-                    <Button icon="plus" to="/companies/new" disabled={!online}>
-                        Add company
+                    <Button icon="plus" to="/companies/new" disabled={!online} aria-label="Add company">
+                        <span className="md:hidden">Add</span>
+                        <span className="hidden md:inline">Add company</span>
                     </Button>
                 }
             />
-            {!online && <OfflineActionHint className="-mt-2 mb-4" />}
+            {!online && <OfflineActionHint className="mb-4" />}
 
-            <DataView resource={companies}>
+            <DataView resource={companies} skeleton="rows">
                 {(items) =>
                     !items || items.length === 0 ? (
                         <EmptyState
@@ -43,7 +45,6 @@ export default function CompaniesListPage() {
                         />
                     ) : (
                         <>
-                            <SearchInput value={query} onChange={setQuery} placeholder="Search name or PAN" className="mb-3" />
                             {filtered.length === 0 ? (
                                 <EmptyState
                                     icon="search"
@@ -58,7 +59,7 @@ export default function CompaniesListPage() {
                                                 to={`/companies/${company.id}`}
                                                 title={company.name}
                                                 subtitle={entityTypeLabel(company.entityType)}
-                                                meta={company.pan ? <span className="font-mono">{company.pan}</span> : undefined}
+                                                meta={company.pan ? <span className="tabular-nums">{company.pan}</span> : undefined}
                                             />
                                         </li>
                                     ))}
@@ -68,6 +69,6 @@ export default function CompaniesListPage() {
                     )
                 }
             </DataView>
-        </>
+        </PageBody>
     );
 }

@@ -20,10 +20,10 @@ function totalsOf({ items, summary }) {
 function Totals({ totals }) {
     const outstanding = Number(totals.totalOutstanding) || 0;
     return (
-        <dl className="mx-4 mb-3 grid grid-cols-2 gap-3 rounded-control bg-page p-3">
+        <dl className="mx-4 mb-3 grid grid-cols-2 gap-3 rounded-control bg-surface-subtle p-3">
             <div>
                 <dt className="text-sm text-ink-muted">Outstanding</dt>
-                <dd className={`text-lg font-semibold tabular-nums ${outstanding > 0 ? 'text-warning' : 'text-ink'}`}>
+                <dd className={`text-lg font-semibold tabular-nums text-ink`}>
                     {formatMoney(outstanding)}
                 </dd>
             </div>
@@ -55,7 +55,7 @@ export default function BilledInvoicesSection({ billedToId }) {
                                 <li key={i.id}>
                                     <ListItem
                                         to={`/invoices/${i.id}`}
-                                        title={<span className="font-mono text-sm">{i.invoiceNumber}</span>}
+                                        title={<span className="tabular-nums">{i.invoiceNumber}</span>}
                                         subtitle={`Total ${formatMoney(i.total)} · Received ${formatMoney(i.amountReceived ?? 0)}`}
                                         meta={`Outstanding ${formatMoney(i.outstanding ?? 0)}`}
                                         badges={<InvoiceStatusBadges invoice={i} />}

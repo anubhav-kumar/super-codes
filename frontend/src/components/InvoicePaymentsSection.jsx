@@ -50,7 +50,7 @@ export default function InvoicePaymentsSection({ invoice }) {
                         <li key={p.id}>
                             <ListItem
                                 to={`/invoices/${invoice.id}/payments/${p.id}/edit`}
-                                title={<span className="font-mono text-sm">{p.paymentNumber}</span>}
+                                title={<span className="tabular-nums">{p.paymentNumber}</span>}
                                 subtitle={subtitleOf(p)}
                                 meta={formatMoney(p.amount)}
                                 badges={<Badge tone={PAYMENT_STATUS_TONE[p.status]}>{paymentStatusLabel(p.status)}</Badge>}

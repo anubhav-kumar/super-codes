@@ -7,19 +7,21 @@ import InvoicePaymentsSection from '../components/InvoicePaymentsSection.jsx';
 import InvoiceStatusBadges from '../components/InvoiceStatusBadges.jsx';
 import MoneySummary from '../components/MoneySummary.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
+import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
+import PageTitle from '../components/PageTitle.jsx';
 import { clientPath } from '../constants/orders.js';
 import { useInvoice } from '../hooks/useInvoices.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { formatDate } from '../utils/format.js';
 
-const linkClass = 'text-primary-700 hover:underline';
+const linkClass = 'text-ink underline-offset-2 hover:underline focus-visible:underline';
 
 /** Outstanding tone and hint from server-derived fields only (F-07). */
 function outstandingLook(invoice) {
     if (invoice.baseStatus === 'DRAFT') return { tone: 'neutral', hint: 'Nothing is due until the invoice is issued.' };
     if (invoice.baseStatus === 'CANCELLED') return { tone: 'neutral', hint: 'Cancelled invoices are not outstanding.' };
-    if (Number(invoice.outstanding) > 0) return { tone: invoice.isOverdue ? 'danger' : 'warning' };
+    if (Number(invoice.outstanding) > 0) return { tone: invoice.isOverdue ? 'danger' : 'neutral' };
     return { tone: 'success' };
 }
 
@@ -31,8 +33,8 @@ function InvoiceDetail({ invoice }) {
 
     return (
         <>
-            <PageHeader
-                title={<span className="font-mono">{invoice.invoiceNumber}</span>}
+            <PageTitle
+                title={<span className="tabular-nums">{invoice.invoiceNumber}</span>}
                 subtitle={`Billed to ${billedToName}`}
                 actions={
                     <Button variant="secondary" icon="edit" to={`/invoices/${invoice.id}/edit`} disabled={!online}>
@@ -60,7 +62,7 @@ function InvoiceDetail({ invoice }) {
                     </DetailField>
                     <DetailField label="Related order">
                         {invoice.order && invoice.order.id ? (
-                            <Link to={`/orders/${invoice.order.id}`} className={`${linkClass} font-mono text-sm`}>
+                            <Link to={`/orders/${invoice.order.id}`} className={`${linkClass} tabular-nums`}>
                                 {invoice.order.orderNumber || 'Order'}
                             </Link>
                         ) : null}
@@ -82,5 +84,10 @@ function InvoiceDetail({ invoice }) {
 export default function InvoiceDetailPage() {
     const { invoiceId } = useParams();
     const invoice = useInvoice(invoiceId);
-    return <DataView resource={invoice}>{(i) => <InvoiceDetail invoice={i} reload={invoice.reload} />}</DataView>;
+    return (
+        <PageBody width="detail">
+            <PageHeader backTo="/invoices" backLabel="Invoices" />
+            <DataView resource={invoice} skeleton="detail">{(i) => <InvoiceDetail invoice={i} reload={invoice.reload} />}</DataView>
+        </PageBody>
+    );
 }

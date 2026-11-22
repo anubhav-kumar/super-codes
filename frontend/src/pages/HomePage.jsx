@@ -1,23 +1,32 @@
+import AppMark from '../components/AppMark.jsx';
 import Button from '../components/Button.jsx';
 import Card from '../components/Card.jsx';
 import Icon from '../components/Icon.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
+import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
-import InstallButton from '../components/offline/InstallButton.jsx';
-import useAuth from '../hooks/useAuth.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { sortedNavItems } from '../navigation.js';
 
-/** Signed-in Home: greeting, then one card per navigation section (read from NAV_ITEMS). */
+/** Signed-in Home: one card per navigation section (read from NAV_ITEMS). The signed-in email lives in the account menu. */
 export default function HomePage() {
-    const { user } = useAuth();
     const { online } = useOnlineStatus();
     const sections = sortedNavItems().filter((item) => item.id !== 'home');
     const hasQuickActions = sections.some((item) => item.quickAction);
 
     return (
-        <>
-            <PageHeader title="Home" subtitle={user ? `Signed in as ${user.email}` : undefined} actions={<InstallButton />} />
+        <PageBody width="detail">
+            <PageHeader
+                title="Home"
+                titleSlot={
+                    <span className="flex items-center gap-2">
+                        <AppMark size={24} className="md:hidden" />
+                        <span aria-hidden="true" className="text-base font-semibold text-ink md:text-lg">
+                            Home
+                        </span>
+                    </span>
+                }
+            />
 
             {sections.length === 0 ? (
                 <Card>
@@ -30,7 +39,7 @@ export default function HomePage() {
                             key={item.id}
                             title={
                                 <span className="flex items-center gap-2">
-                                    <Icon name={item.icon} className="h-5 w-5 text-primary-600" />
+                                    <Icon name={item.icon} size="md" className="text-ink-subtle" />
                                     {item.label}
                                 </span>
                             }
@@ -52,6 +61,6 @@ export default function HomePage() {
             )}
 
             {hasQuickActions && !online && <OfflineActionHint className="mt-4" />}
-        </>
+        </PageBody>
     );
 }

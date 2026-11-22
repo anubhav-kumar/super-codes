@@ -59,7 +59,7 @@ export default function WorkerAssignmentEditor({ value = [], onChange, error, di
                                     checked={Boolean(a.isPrimary)}
                                     disabled={disabled}
                                     onChange={() => makePrimary(a.workerId)}
-                                    className="h-5 w-5 shrink-0 accent-primary-600"
+                                    className="h-5 w-5 shrink-0 accent-accent"
                                 />
                                 <span className="min-w-0">
                                     <span className="block truncate font-medium text-ink">{a.workerName || 'Unknown worker'}</span>

@@ -9,8 +9,8 @@ export default function EmptyState({ icon = 'alert', title, text, action, compac
     return (
         <div className={`flex flex-col items-center text-center ${compact ? 'gap-2 py-6' : 'gap-3 px-4 py-12'} ${className}`}>
             {icon && (
-                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-50 text-primary-600">
-                    <Icon name={icon} className="h-6 w-6" />
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-muted text-ink-subtle">
+                    <Icon name={icon} />
                 </span>
             )}
             {title && <h2 className="text-base font-semibold text-ink">{title}</h2>}

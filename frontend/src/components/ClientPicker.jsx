@@ -41,7 +41,7 @@ function Rows({ items, fields, query, setQuery, subtitle, emptyTitle, emptyText,
                     <button
                         type="button"
                         onClick={() => onPick(x)}
-                        className="flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-page focus-visible:bg-page focus-visible:outline-none"
+                        className="flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-surface-subtle focus-visible:bg-surface-subtle focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
                     >
                         <span className="min-w-0 flex-1">
                             <span className="block truncate font-medium text-ink">{x.name}</span>
@@ -76,7 +76,7 @@ function ClientSheet({ title, initialTab, anyPerson, onPick, onClose }) {
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby={titleId}
-                className="relative flex max-h-[85vh] w-full max-w-lg flex-col rounded-t-card bg-surface pb-[env(safe-area-inset-bottom)] shadow-xl sm:rounded-card"
+                className="relative flex max-h-[85vh] w-full max-w-lg flex-col rounded-t-card bg-surface pb-[env(safe-area-inset-bottom)] shadow-overlay sm:rounded-card"
             >
                 <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
                     <h2 id={titleId} className="text-lg font-semibold text-ink">
@@ -86,9 +86,9 @@ function ClientSheet({ title, initialTab, anyPerson, onPick, onClose }) {
                         type="button"
                         onClick={onClose}
                         aria-label="Close"
-                        className="flex h-9 w-9 items-center justify-center rounded-control text-ink-muted hover:bg-page"
+                        className="flex h-9 w-9 items-center justify-center rounded-control text-ink-muted hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-accent"
                     >
-                        <Icon name="close" className="h-5 w-5" />
+                        <Icon name="close" />
                     </button>
                 </div>
                 <div className="flex flex-col gap-2 px-4 pt-3 pb-2">
@@ -169,11 +169,11 @@ export default function ClientPicker({
                 aria-describedby={error || hint ? messageId : undefined}
                 className={`flex min-h-11 items-center gap-2 text-left ${controlClass(Boolean(error))}`}
             >
-                <span className={`min-w-0 flex-1 truncate ${value ? 'text-ink' : 'text-ink-muted/70'}`}>
+                <span className={`min-w-0 flex-1 truncate ${value ? 'text-ink' : 'text-ink-subtle'}`}>
                     {value ? value.name || 'Unnamed client' : 'Choose a client'}
                 </span>
                 {value && <span className="shrink-0 text-xs text-ink-muted">{value.type === 'COMPANY' ? 'Company' : 'Person'}</span>}
-                <Icon name="chevron-right" className="h-4 w-4 shrink-0 text-ink-muted" />
+                <Icon name="chevron-right" size="sm" className="shrink-0 text-ink-muted" />
             </button>
             <FieldMessage id={messageId} error={error} hint={hint} />
             {open && (

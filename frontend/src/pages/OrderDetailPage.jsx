@@ -4,44 +4,46 @@ import Button from '../components/Button.jsx';
 import Card from '../components/Card.jsx';
 import DataView from '../components/DataView.jsx';
 import DetailField from '../components/DetailField.jsx';
-import FormError from '../components/FormError.jsx';
 import OrderInvoicesSection from '../components/OrderInvoicesSection.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
+import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
+import PageTitle from '../components/PageTitle.jsx';
 import RelatedSection from '../components/RelatedSection.jsx';
 import SelectField from '../components/SelectField.jsx';
 import { orderUpdateBody, updateOrder } from '../api/orders.js';
 import { clientPath, ORDER_STATUSES, ORDER_STATUS_TONE, orderStatusLabel } from '../constants/orders.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useOrder } from '../hooks/useOrders.js';
-import useSubmit from '../hooks/useSubmit.js';
+import useInlineSave from '../hooks/useInlineSave.js';
 import { formatDate, formatMoney } from '../utils/format.js';
+import Tag from '../components/Tag.jsx';
 
-const linkClass = 'text-primary-700 hover:underline';
+const linkClass = 'text-ink underline-offset-2 hover:underline focus-visible:underline';
 
 function StatusChanger({ order, onSaved }) {
     const { online } = useOnlineStatus();
-    const { submit, submitting, formError } = useSubmit();
+    const status = useInlineSave(order.status);
 
+    // Optimistic: the select shows the new status at once and rolls back with an error toast on failure.
     // PUT needs the full field set; everything except status is sent back as loaded.
-    const change = async (status) => {
-        if (!status || status === order.status) return;
-        const result = await submit(() => updateOrder(order.id, orderUpdateBody(order, { status })));
+    const change = async (next) => {
+        if (!next || next === status.value) return;
+        const result = await status.save(next, () => updateOrder(order.id, orderUpdateBody(order, { status: next })), {
+            success: `Status changed to ${orderStatusLabel(next)}`,
+        });
         if (result.ok) onSaved();
     };
 
     return (
-        <div className="flex flex-col gap-2">
-            <SelectField
-                label="Change status"
-                options={ORDER_STATUSES}
-                value={order.status}
-                onChange={change}
-                disabled={!online || submitting}
-                hint={submitting ? 'Saving…' : undefined}
-            />
-            <FormError message={formError} />
-        </div>
+        <SelectField
+            label="Change status"
+            options={ORDER_STATUSES}
+            value={status.value}
+            onChange={change}
+            disabled={!online || status.saving}
+            hint={status.saving ? 'Saving…' : undefined}
+        />
     );
 }
 
@@ -56,7 +58,7 @@ function AssignmentsSection({ assignments }) {
                         <li key={a.workerId}>
                             <Link
                                 to={`/workers/${a.workerId}`}
-                                className="flex min-h-14 items-center gap-3 px-4 py-3 transition hover:bg-page focus-visible:bg-page focus-visible:outline-none"
+                                className="flex min-h-14 items-center gap-3 px-4 py-3 transition hover:bg-surface-subtle focus-visible:bg-surface-subtle focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
                             >
                                 <span className="min-w-0 flex-1">
                                     <span className="block truncate font-medium text-ink">{a.workerName || 'Unknown worker'}</span>
@@ -65,7 +67,7 @@ function AssignmentsSection({ assignments }) {
                                     )}
                                 </span>
                                 <span className="flex shrink-0 flex-wrap justify-end gap-1">
-                                    {a.isPrimary && <Badge tone="info">Primary owner</Badge>}
+                                    {a.isPrimary && <Tag>Primary owner</Tag>}
                                     {a.workerStatus === 'INACTIVE' && <Badge>Inactive</Badge>}
                                 </span>
                             </Link>
@@ -85,8 +87,8 @@ function OrderDetail({ order, reload }) {
 
     return (
         <>
-            <PageHeader
-                title={<span className="font-mono">{order.orderNumber}</span>}
+            <PageTitle
+                title={<span className="tabular-nums">{order.orderNumber}</span>}
                 subtitle={order.serviceName}
                 actions={
                     <Button variant="secondary" icon="edit" to={`/orders/${order.id}/edit`} disabled={!online}>
@@ -146,5 +148,10 @@ function OrderDetail({ order, reload }) {
 export default function OrderDetailPage() {
     const { orderId } = useParams();
     const order = useOrder(orderId);
-    return <DataView resource={order}>{(o) => <OrderDetail order={o} reload={order.reload} />}</DataView>;
+    return (
+        <PageBody width="detail">
+            <PageHeader backTo="/orders" backLabel="Orders" />
+            <DataView resource={order} skeleton="detail">{(o) => <OrderDetail order={o} reload={order.reload} />}</DataView>
+        </PageBody>
+    );
 }

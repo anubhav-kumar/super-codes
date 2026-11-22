@@ -5,14 +5,15 @@ import EmptyState from '../components/EmptyState.jsx';
 import InvoiceStatusBadges from '../components/InvoiceStatusBadges.jsx';
 import ListItem from '../components/ListItem.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
+import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
-import SearchInput from '../components/SearchInput.jsx';
 import SegmentedControl from '../components/SegmentedControl.jsx';
 import { INVOICE_FILTERS } from '../constants/invoices.js';
 import { useInvoices } from '../hooks/useInvoices.js';
 import useListFilter from '../hooks/useListFilter.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { formatDate, formatMoney } from '../utils/format.js';
+import RecordNo from '../components/RecordNo.jsx';
 
 const SEARCH_FIELDS = ['invoiceNumber', (i) => (i.billedTo && i.billedTo.name) || ''];
 const FILTER_OPTIONS = INVOICE_FILTERS.map(({ value, label }) => ({ value, label }));
@@ -32,10 +33,8 @@ function metaOf(i) {
     return formatMoney(i.total);
 }
 
-function InvoiceRows({ invoices, filter, addDisabled }) {
+function InvoiceRows({ invoices, filtered, query, setQuery, filter, addDisabled }) {
     const active = INVOICE_FILTERS.find((f) => f.value === filter) || INVOICE_FILTERS[0];
-    const byFilter = invoices.filter(active.test);
-    const { query, setQuery, filtered } = useListFilter(byFilter, SEARCH_FIELDS);
 
     if (invoices.length === 0) {
         return (
@@ -50,7 +49,6 @@ function InvoiceRows({ invoices, filter, addDisabled }) {
 
     return (
         <>
-            <SearchInput value={query} onChange={setQuery} placeholder="Search invoice number or billed to" className="mb-4" />
             {filtered.length === 0 ? (
                 query.trim() ? (
                     <EmptyState
@@ -69,8 +67,8 @@ function InvoiceRows({ invoices, filter, addDisabled }) {
                             to={`/invoices/${i.id}`}
                             title={
                                 <>
-                                    <span className="font-mono text-sm">{i.invoiceNumber}</span>
-                                    <span className="ml-2">{(i.billedTo && i.billedTo.name) || 'Unknown'}</span>
+                                    <span>{(i.billedTo && i.billedTo.name) || 'Unknown'}</span>
+                                    <RecordNo className="ml-2">{i.invoiceNumber}</RecordNo>
                                 </>
                             }
                             subtitle={subtitleOf(i)}
@@ -99,21 +97,30 @@ export default function InvoicesListPage() {
         setParams(next, { replace: true });
     };
 
+    // Search lives in the top bar, so it is filtered here and passed to the rows.
+    const all = invoices.data || [];
+    const activeFilter = INVOICE_FILTERS.find((f) => f.value === filter) || INVOICE_FILTERS[0];
+    const { query, setQuery, filtered } = useListFilter(all.filter(activeFilter.test), SEARCH_FIELDS);
+
     return (
-        <>
+        <PageBody width="list">
             <PageHeader
                 title="Invoices"
+                search={all.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Search invoice number or billed to' } : undefined}
                 actions={
-                    <Button icon="plus" to="/invoices/new" disabled={!online}>
-                        New invoice
+                    <Button icon="plus" to="/invoices/new" disabled={!online} aria-label="New invoice">
+                        <span className="md:hidden">New</span>
+                        <span className="hidden md:inline">New invoice</span>
                     </Button>
                 }
             />
-            {!online && <OfflineActionHint className="-mt-2 mb-4" />}
+            {!online && <OfflineActionHint className="mb-4" />}
             <SegmentedControl label="Filter" options={FILTER_OPTIONS} value={filter} onChange={setFilter} className="mb-3" />
-            <DataView resource={invoices}>
-                {(data) => <InvoiceRows invoices={data || []} filter={filter} addDisabled={!online} />}
+            <DataView resource={invoices} skeleton="rows">
+                {(data) => (
+                    <InvoiceRows invoices={data || []} filtered={filtered} query={query} setQuery={setQuery} filter={filter} addDisabled={!online} />
+                )}
             </DataView>
-        </>
+        </PageBody>
     );
 }

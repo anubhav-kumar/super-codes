@@ -2,6 +2,7 @@ import { ORDER_STATUS_TONE, orderStatusLabel } from '../constants/orders.js';
 import { formatDate } from '../utils/format.js';
 import Badge from './Badge.jsx';
 import ListItem from './ListItem.jsx';
+import RecordNo from './RecordNo.jsx';
 
 /**
  * Order rows for profile sections (F-08): number + `name(order)` as title, `detail(order)` as
@@ -17,8 +18,8 @@ export default function OrderRowList({ orders, name, detail, emptyText }) {
                         to={`/orders/${o.id}`}
                         title={
                             <>
-                                <span className="font-mono text-sm">{o.orderNumber}</span>
-                                <span className="ml-2">{name(o)}</span>
+                                <span>{name(o)}</span>
+                                <RecordNo className="ml-2">{o.orderNumber}</RecordNo>
                             </>
                         }
                         subtitle={detail(o) || undefined}

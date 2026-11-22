@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import Card from '../components/Card.jsx';
 import DataView from '../components/DataView.jsx';
 import EmptyState from '../components/EmptyState.jsx';
-import FormError from '../components/FormError.jsx';
 import FormFooter from '../components/FormFooter.jsx';
+import FormLayout from '../components/FormLayout.jsx';
+import FormSection, { FormRow } from '../components/FormSection.jsx';
+import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import Switch from '../components/Switch.jsx';
 import TextArea from '../components/TextArea.jsx';
@@ -14,6 +15,7 @@ import { PERSON_LIMITS } from '../constants/clients.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { usePerson } from '../hooks/usePeople.js';
 import useSubmit from '../hooks/useSubmit.js';
+import useToast from '../hooks/useToast.js';
 import { isValidEmail, isValidPan, isValidPhone, normalizePan } from '../utils/validation.js';
 
 const EMPTY = { name: '', isIndividualClient: false, pan: '', email: '', phone: '', address: '', notes: '' };
@@ -74,7 +76,8 @@ function PersonForm({ person }) {
     const [values, setValues] = useState(() => (person ? toValues(person) : EMPTY));
     const [localErrors, setLocalErrors] = useState({});
     const [panTaken, setPanTaken] = useState(null);
-    const { submit, submitting, formError, fieldErrors } = useSubmit();
+    const { submit, submitting, formError, fieldErrors } = useSubmit({ errorToast: true });
+    const toast = useToast();
 
     const set = (field) => (value) => {
         setValues((v) => ({ ...v, [field]: value }));
@@ -94,6 +97,8 @@ function PersonForm({ person }) {
         const result = await submit(() => (isEdit ? updatePerson(person.id, body) : createPerson({ id: newId, ...body })));
         if (result.ok) {
             const id = (result.data && result.data.id) || (isEdit ? person.id : newId);
+            const name = (result.data && result.data.name) || body.name;
+            toast.success(isEdit ? 'Changes saved' : name ? `${name} added` : 'Person added');
             navigate(`/people/${id}`, { replace: true });
         } else if (result.error && result.error.code === 'PAN_TAKEN') {
             setPanTaken(result.error.message || 'A person with this PAN already exists');
@@ -105,42 +110,55 @@ function PersonForm({ person }) {
     const banner = panTaken ? null : formError;
 
     return (
-        <>
-            <PageHeader title={isEdit ? 'Edit person' : 'Add person'} subtitle={isEdit ? person.name : undefined} />
-            <form noValidate onSubmit={handleSubmit} className="flex max-w-xl flex-col gap-4">
-                <FormError message={banner} />
-                <Card>
+        <FormLayout
+            title={isEdit ? 'Edit person' : 'Add person'}
+            meta={isEdit ? person.name : undefined}
+            error={banner}
+            onSubmit={handleSubmit}
+            footer={<FormFooter submitLabel="Save" submitting={submitting} cancelTo={isEdit ? `/people/${person.id}` : '/people'} />}
+        >
+            <FormSection title="Person">
+                <TextField
+                    label="Name"
+                    required
+                    autoComplete="off"
+                    maxLength={PERSON_LIMITS.name}
+                    value={values.name}
+                    onChange={set('name')}
+                    error={errorFor('name')}
+                />
+                <Switch
+                    label="Individual client"
+                    hint="The firm does work for this person directly."
+                    checked={values.isIndividualClient}
+                    onChange={set('isIndividualClient')}
+                />
+                <TextField
+                    label="PAN"
+                    required={values.isIndividualClient}
+                    transform="uppercase"
+                    autoCapitalize="characters"
+                    autoComplete="off"
+                    spellCheck={false}
+                    maxLength={10}
+                    className="[&_input]:font-mono"
+                    value={values.pan}
+                    onChange={set('pan')}
+                    error={panError}
+                    hint={values.isIndividualClient ? undefined : 'Optional for company contacts.'}
+                />
+            </FormSection>
+            <FormSection title="Contact">
+                <FormRow>
                     <TextField
-                        label="Name"
-                        required
-                        autoComplete="off"
-                        maxLength={PERSON_LIMITS.name}
-                        value={values.name}
-                        onChange={set('name')}
-                        error={errorFor('name')}
+                        label="Phone"
+                        type="tel"
+                        inputMode="tel"
+                        maxLength={PERSON_LIMITS.phone}
+                        value={values.phone}
+                        onChange={set('phone')}
+                        error={errorFor('phone')}
                     />
-                    <Switch
-                        label="Individual client"
-                        hint="The firm does work for this person directly."
-                        checked={values.isIndividualClient}
-                        onChange={set('isIndividualClient')}
-                    />
-                    <TextField
-                        label="PAN"
-                        required={values.isIndividualClient}
-                        transform="uppercase"
-                        autoCapitalize="characters"
-                        autoComplete="off"
-                        spellCheck={false}
-                        maxLength={10}
-                        className="[&_input]:font-mono"
-                        value={values.pan}
-                        onChange={set('pan')}
-                        error={panError}
-                        hint={values.isIndividualClient ? undefined : 'Optional for company contacts.'}
-                    />
-                </Card>
-                <Card>
                     <TextField
                         label="Email"
                         type="email"
@@ -152,34 +170,26 @@ function PersonForm({ person }) {
                         onChange={set('email')}
                         error={errorFor('email')}
                     />
-                    <TextField
-                        label="Phone"
-                        type="tel"
-                        inputMode="tel"
-                        maxLength={PERSON_LIMITS.phone}
-                        value={values.phone}
-                        onChange={set('phone')}
-                        error={errorFor('phone')}
-                    />
-                    <TextArea
-                        label="Address"
-                        maxLength={PERSON_LIMITS.address}
-                        value={values.address}
-                        onChange={set('address')}
-                        error={errorFor('address')}
-                    />
-                    <TextArea
-                        label="Notes"
-                        rows={4}
-                        maxLength={PERSON_LIMITS.notes}
-                        value={values.notes}
-                        onChange={set('notes')}
-                        error={errorFor('notes')}
-                    />
-                </Card>
-                <FormFooter submitLabel="Save" submitting={submitting} cancelTo={isEdit ? `/people/${person.id}` : '/people'} />
-            </form>
-        </>
+                </FormRow>
+                <TextArea
+                    label="Address"
+                    maxLength={PERSON_LIMITS.address}
+                    value={values.address}
+                    onChange={set('address')}
+                    error={errorFor('address')}
+                />
+            </FormSection>
+            <FormSection title="Notes">
+                <TextArea
+                    label="Notes"
+                    rows={4}
+                    maxLength={PERSON_LIMITS.notes}
+                    value={values.notes}
+                    onChange={set('notes')}
+                    error={errorFor('notes')}
+                />
+            </FormSection>
+        </FormLayout>
     );
 }
 
@@ -197,7 +207,7 @@ function NeedsConnection() {
 
 function EditPerson({ personId }) {
     const person = usePerson(personId);
-    return <DataView resource={person}>{(p) => <PersonForm key={p.id} person={p} />}</DataView>;
+    return <DataView resource={person} skeleton="form">{(p) => <PersonForm key={p.id} person={p} />}</DataView>;
 }
 
 /** Add person (/people/new) and Edit person (/people/:personId/edit), F-02. Online only. */
@@ -210,6 +220,10 @@ export default function PersonFormPage() {
     useEffect(() => {
         if (online) setHadConnection(true);
     }, [online]);
-    if (!online && !hadConnection) return <NeedsConnection />;
-    return personId ? <EditPerson personId={personId} /> : <PersonForm />;
+    return (
+        <PageBody width="form">
+            <PageHeader backTo={personId ? `/people/${personId}` : '/people'} backLabel={personId ? 'Person' : 'People'} />
+            {!online && !hadConnection ? <NeedsConnection /> : personId ? <EditPerson personId={personId} /> : <PersonForm />}
+        </PageBody>
+    );
 }
