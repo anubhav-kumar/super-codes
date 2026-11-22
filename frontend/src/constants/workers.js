@@ -1,3 +1,5 @@
+import { compareNumber, compareText } from '../hooks/useListSort.js';
+
 /** Worker option lists and labels (backend enums are uppercase codes). */
 
 export const DESIGNATIONS = [
@@ -22,3 +24,12 @@ const labelOf = (options) => (value) => (options.find((o) => o.value === value) 
 
 export const designationLabel = labelOf(DESIGNATIONS);
 export const workerStatusLabel = labelOf(WORKER_STATUSES);
+
+/**
+ * Sort options of the Workers list (F-30, useListSort). The list arrives sorted by name and the sort
+ * is stable, so workers with the same open order count stay in name order.
+ */
+export const WORKER_LIST_SORTS = [
+    { value: 'name', label: 'Name', compare: compareText((w) => w.name) },
+    { value: '-openOrders', label: 'Open orders', compare: compareNumber((w) => w.openOrderCount) },
+];
