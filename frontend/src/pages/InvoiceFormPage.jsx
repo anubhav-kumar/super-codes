@@ -266,7 +266,7 @@ function InvoiceForm({ invoice, prefillOrderId, preselect }) {
 
 function EditInvoice({ invoiceId }) {
     const invoice = useInvoice(invoiceId);
-    return <DataView resource={invoice} skeleton="form">{(i) => <InvoiceForm invoice={i} />}</DataView>;
+    return <DataView resource={invoice} skeleton="form" notFoundTitle="Invoice not found">{(i) => <InvoiceForm invoice={i} />}</DataView>;
 }
 
 /** New invoice (/invoices/new, ?orderId= prefill, ?clientType=&clientId= preselect) and Edit invoice (/invoices/:invoiceId/edit), F-06. Online only. */

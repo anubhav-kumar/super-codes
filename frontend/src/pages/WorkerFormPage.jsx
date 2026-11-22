@@ -146,7 +146,7 @@ function WorkerForm({ worker }) {
 
 function EditWorker({ workerId }) {
     const worker = useWorker(workerId);
-    return <DataView resource={worker} skeleton="form">{(w) => <WorkerForm worker={w} />}</DataView>;
+    return <DataView resource={worker} skeleton="form" notFoundTitle="Worker not found">{(w) => <WorkerForm worker={w} />}</DataView>;
 }
 
 /** Add worker (/workers/new) and Edit worker (/workers/:workerId/edit), F-04. Online only. */

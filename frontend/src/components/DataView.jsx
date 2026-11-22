@@ -1,5 +1,6 @@
 import StaleDataNotice from './offline/StaleDataNotice.jsx';
 import EmptyState from './EmptyState.jsx';
+import NotFoundState from './NotFoundState.jsx';
 import PageSkeleton from './PageSkeleton.jsx';
 
 /**
@@ -8,10 +9,11 @@ import PageSkeleton from './PageSkeleton.jsx';
  *   loaded       -> children (a node, or a function of data)
  *   stale        -> StaleDataNotice above the children
  *   unavailable  -> "Not available offline" with Try again
+ *   not found    -> NotFoundState titled `notFoundTitle` (e.g. "Order not found") for a 404
  *   error        -> the error message with Try again
  * `compact` renders smaller states for a section inside a page.
  */
-export default function DataView({ resource, children, compact = false, loaderRows, skeleton }) {
+export default function DataView({ resource, children, compact = false, loaderRows, skeleton, notFoundTitle }) {
     const { status, data, fromCache, fetchedAt, error, reload } = resource;
 
     if (status === 'loading') {
@@ -34,13 +36,14 @@ export default function DataView({ resource, children, compact = false, loaderRo
 
     if (status === 'error') {
         const notFound = error && error.status === 404;
+        if (notFound && !compact) return <NotFoundState title={notFoundTitle} />;
         return (
             <EmptyState
-                icon="alert"
+                icon={notFound ? 'not-found' : 'alert'}
                 compact={compact}
-                title={notFound ? 'Not found' : "Couldn't load this"}
-                text={notFound ? 'This record does not exist or was removed.' : (error && error.message) || 'Something went wrong.'}
-                action={notFound ? { label: 'Go home', to: '/' } : { label: 'Try again', onClick: reload }}
+                title={notFound ? notFoundTitle || 'Not found' : "Couldn't load this"}
+                text={notFound ? 'This link may be old or mistyped.' : (error && error.message) || 'Something went wrong.'}
+                action={notFound ? undefined : { label: 'Try again', onClick: reload }}
             />
         );
     }

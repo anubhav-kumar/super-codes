@@ -173,7 +173,7 @@ export default function CompanyDetailPage() {
     return (
         <PageBody width="detail">
             <PageHeader backTo="/companies" backLabel="Companies" />
-            <DataView resource={company} skeleton="detail">
+            <DataView resource={company} skeleton="detail" notFoundTitle="Company not found">
                 {(c) => (
                     <>
                         <RecordHeader

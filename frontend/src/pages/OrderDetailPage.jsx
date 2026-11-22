@@ -164,7 +164,7 @@ export default function OrderDetailPage() {
     return (
         <PageBody width="detail">
             <PageHeader backTo="/orders" backLabel="Orders" />
-            <DataView resource={order} skeleton="detail">{(o) => <OrderDetail order={o} reload={order.reload} />}</DataView>
+            <DataView resource={order} skeleton="detail" notFoundTitle="Order not found">{(o) => <OrderDetail order={o} reload={order.reload} />}</DataView>
         </PageBody>
     );
 }

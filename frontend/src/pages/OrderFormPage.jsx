@@ -281,7 +281,7 @@ function OrderForm({ order, preselect }) {
 
 function EditOrder({ orderId }) {
     const order = useOrder(orderId);
-    return <DataView resource={order} skeleton="form">{(o) => <OrderForm order={o} />}</DataView>;
+    return <DataView resource={order} skeleton="form" notFoundTitle="Order not found">{(o) => <OrderForm order={o} />}</DataView>;
 }
 
 function NewOrder({ params }) {
