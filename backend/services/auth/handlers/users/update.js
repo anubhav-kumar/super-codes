@@ -72,23 +72,59 @@ const workerAlreadyLinked = () =>
     ]);
 
 /**
+ * Condition that the Users item is still the one this attempt read: same userId and same updatedAt
+ * (absent stays absent). Every write to a Users item (edit, password change, admin reset,
+ * create-user.js --overwrite) sets updatedAt, so a password change, reset or session revocation
+ * since the read fails it and the edit re-reads instead of writing stale values back.
+ */
+function unchangedSince(target) {
+    const values = { ':id': target.userId };
+    let expr = 'attribute_exists(email) AND userId = :id AND ';
+    if (target.updatedAt === undefined) {
+        expr += 'attribute_not_exists(updatedAt)';
+    } else {
+        expr += 'updatedAt = :readUpdatedAt';
+        values[':readUpdatedAt'] = target.updatedAt;
+    }
+    return { ConditionExpression: expr, ExpressionAttributeValues: values };
+}
+
+/**
  * Builds the TransactWriteItems of one edit. Returns { transactItems, roles } where roles[i] names
  * what item i guards ('user', 'newEmail', 'link') for mapping cancellation reasons.
+ * Same email: an Update that sets only name, isAdmin, workerId and updatedAt, so passwordHash,
+ * passwordState, tempPasswordExpiresAt and sessionsValidAfter are never written by an edit.
  * An email change re-keys the item (Delete old key + Put new key); the new item is a copy of the
- * whole current item (passwordHash, passwordState, tempPasswordExpiresAt, sessionsValidAfter,
- * createdAt, ...) with the edited fields replaced, so password and revoked sessions stay as they are.
+ * whole read item with the edited fields replaced. The Delete is conditioned on the read updatedAt,
+ * so the copy is only written if the old item (password, revocation state) is still exactly as read.
  */
 function buildTransaction(target, item, nowIso) {
     const id = target.userId;
     const transactItems = [];
     const roles = [];
+    const guard = unchangedSince(target);
     if (item.email === target.email) {
+        const values = {
+            ...guard.ExpressionAttributeValues,
+            ':name': item.name,
+            ':isAdmin': item.isAdmin,
+            ':now': nowIso,
+        };
+        let updateExpression = 'SET #n = :name, isAdmin = :isAdmin, updatedAt = :now';
+        if (item.workerId) {
+            updateExpression += ', workerId = :workerId';
+            values[':workerId'] = item.workerId;
+        } else {
+            updateExpression += ' REMOVE workerId';
+        }
         transactItems.push({
-            Put: {
+            Update: {
                 TableName: process.env.USERS_TABLE,
-                Item: item,
-                ConditionExpression: 'attribute_exists(email) AND userId = :id',
-                ExpressionAttributeValues: { ':id': id },
+                Key: { email: target.email },
+                UpdateExpression: updateExpression,
+                ConditionExpression: guard.ConditionExpression,
+                ExpressionAttributeNames: { '#n': 'name' },
+                ExpressionAttributeValues: values,
             },
         });
         roles.push('user');
@@ -97,11 +133,12 @@ function buildTransaction(target, item, nowIso) {
             Delete: {
                 TableName: process.env.USERS_TABLE,
                 Key: { email: target.email },
-                ConditionExpression: 'userId = :id',
-                ExpressionAttributeValues: { ':id': id },
+                ...guard,
             },
         });
         roles.push('user');
+        // The new key's own condition can only be "absent"; the read-updatedAt guard is on the Delete
+        // of the old key in the same transaction (one transaction cannot touch the old item twice).
         transactItems.push({
             Put: {
                 TableName: process.env.USERS_TABLE,
@@ -239,14 +276,16 @@ async function attemptUpdate(id, input, caller) {
  * Body { name: 1-100, email: valid, max 254, isAdmin: boolean, workerId: uuid v4 | null }
  *   Full editable set; workerId null unlinks (the Worker and its orders stay).
  * 200 { user: User object }
- *   Password, temporary-password state, sessionsValidAfter and sessions are not touched. An email
+ *   Password, temporary-password state, sessionsValidAfter and sessions are not touched: every write
+ *   is conditioned on the read updatedAt, so a concurrent password change, reset or revocation makes
+ *   the edit re-read and retry once (then 409 USER_CHANGED) instead of writing stale values. An email
  *   change re-keys the Users item in one transaction (with any Worker link change) and then points
  *   the user's sessions at the new email; the user signs in with the new email next time. Role and
  *   Worker link apply on the user's next request (requireUser reads the record every time).
  * 400 VALIDATION_FAILED name | email | isAdmin | workerId; REFERENCE_NOT_FOUND workerId
  * 404 NOT_FOUND unknown id
  * 409 EMAIL_TAKEN email | WORKER_ALREADY_LINKED workerId | WORKER_INACTIVE workerId (only a new link)
- *     | CANNOT_DEMOTE_SELF isAdmin | LAST_ADMIN isAdmin
+ *     | CANNOT_DEMOTE_SELF isAdmin | LAST_ADMIN isAdmin | USER_CHANGED (changed twice during the edit)
  */
 module.exports.handler = middleware.withHandler(
     async ({ event, body, user: caller }) => {
