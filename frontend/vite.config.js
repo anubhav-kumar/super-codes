@@ -37,9 +37,13 @@ export default defineConfig(({ mode }) => {
     const apiRules = apiBaseUrl
         ? [
               // Health and auth must always hit the network: a cached "API online" would be
-              // misleading, and a cached GET /auth/me would hide an ended session.
+              // misleading, and a cached GET /auth/me would hide an ended session. File open links
+              // (F-63, GET /files/orders/{orderId}/{fileId}/url) are short-lived and private:
+              // never served from or stored in the cache.
               {
-                  urlPattern: new RegExp(`^${escapeRegExp(apiBaseUrl)}/(?:health|auth)(?:[/?#]|$)`),
+                  urlPattern: new RegExp(
+                      `^${escapeRegExp(apiBaseUrl)}/(?:(?:health|auth)(?:[/?#]|$)|files/orders/[^/?#]+/[^/?#]+/url(?:[?#]|$))`
+                  ),
                   handler: 'NetworkOnly',
               },
               {
@@ -85,7 +89,7 @@ export default defineConfig(({ mode }) => {
                     navigateFallback: '/index.html',
                     cleanupOutdatedCaches: true,
                     runtimeCaching: [
-                        ...apiRules.slice(0, 1), // NetworkOnly /health first
+                        ...apiRules.slice(0, 1), // NetworkOnly /health, /auth and file links first
                         {
                             urlPattern: ({ request }) => request.destination === 'image',
                             handler: 'CacheFirst',

@@ -11,6 +11,10 @@
  * 3. Delete the shared API stage.
  * 4. Delete service stacks in parallel and wait.
  * 5. Delete the API Gateway stack only if every service stack was deleted.
+ *
+ * The private files storage stack (infra/storage, bucket <account>-ca-crm with client documents) is
+ * never emptied and never deleted here (FR2 reconciliation 2). It is left in place, so the bucket
+ * and its files survive and a later deploy reuses it. Removing it is a manual, deliberate step.
  */
 
 const readline = require('readline');
@@ -30,6 +34,7 @@ const {
     log,
     discoverServices,
     apiGatewayInfo,
+    storageInfo,
     getStackOutputs,
     emptyBucket,
 } = require('./scripts/common');
@@ -92,6 +97,10 @@ async function main() {
     const gatewayStack = `${gateway.serviceName}-${stage}`;
     const gatewayOutputs = await getStackOutputs(cfn, gatewayStack);
 
+    const storage = storageInfo();
+    const storageStack = storage ? `${storage.serviceName}-${stage}` : null;
+    const storageOutputs = storageStack ? await getStackOutputs(cfn, storageStack) : null;
+
     const services = [];
     for (const s of discoverServices()) {
         const stackName = `${s.serviceName}-${stage}`;
@@ -105,6 +114,9 @@ async function main() {
     console.log(`Backend UNDEPLOY: account ${account}, region ${region}, stage ${stage}`);
     console.log(`  Service stacks:    ${services.map((s) => s.stackName).join(', ') || '(none)'}`);
     console.log(`  API Gateway stack: ${gatewayOutputs ? gatewayStack : '(not found)'}`);
+    if (storageOutputs) {
+        console.log(`  Storage stack:     ${storageStack} KEPT (not deleted; bucket ${storageOutputs.FilesBucketName} is never emptied)`);
+    }
     for (const b of buckets) console.log(`  Bucket: ${b.name} (${b.stackName}/${b.logicalId})${b.retain ? ' RETAINED, will not be emptied' : ''}`);
     if (!stacks.length) {
         console.log('Nothing to delete.');
@@ -171,6 +183,9 @@ async function main() {
     console.log('');
     console.log(`================ Undeploy summary (account ${account}, ${region}, stage ${stage}) ================`);
     for (const r of results) console.log(`  ${r.ok ? 'DELETED' : 'FAILED '} ${r.name}`);
+    if (storageOutputs) {
+        console.log(`  KEPT    ${storageStack} (files bucket ${storageOutputs.FilesBucketName} and every client document in it were kept)`);
+    }
     if (results.some((r) => !r.ok)) process.exit(1);
 }
 

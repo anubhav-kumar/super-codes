@@ -7,7 +7,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 const SLUG = 'ca-crm';
 const ALLOWED_PROFILE = 'CoderAnubhav95';
@@ -84,6 +84,34 @@ function discoverServices() {
 function apiGatewayInfo() {
     const dir = path.join(BACKEND_DIR, 'infra', 'api-gateway');
     return { name: 'api-gateway', dir, serviceName: readServiceName(path.join(dir, 'serverless.yml')) };
+}
+
+/**
+ * The private files storage stack (infra/storage), or null when the project has none.
+ * It is not a service: discoverServices() never returns it and service-name arguments never match it.
+ */
+function storageInfo() {
+    const dir = path.join(BACKEND_DIR, 'infra', 'storage');
+    const yml = path.join(dir, 'serverless.yml');
+    if (!fs.existsSync(yml)) return null;
+    return { name: 'storage', dir, serviceName: readServiceName(yml) };
+}
+
+/**
+ * Installs the runtime dependencies a service bundles into its Lambda package (e.g. the files
+ * service's S3 SDK). Only services whose package.json declares "dependencies" are touched; it runs
+ * `npm ci` (lockfile) so the package matches the committed lockfile. Throws on failure.
+ */
+function installServiceDependencies(service) {
+    const pkgPath = path.join(service.dir, 'package.json');
+    if (!fs.existsSync(pkgPath)) return false;
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    if (!pkg.dependencies || Object.keys(pkg.dependencies).length === 0) return false;
+    const cmd = fs.existsSync(path.join(service.dir, 'package-lock.json')) ? 'ci' : 'install';
+    log(service.name, `installing bundled dependencies (npm ${cmd} --omit=dev)`);
+    const res = spawnSync('npm', [cmd, '--omit=dev', '--no-audit', '--no-fund'], { cwd: service.dir, stdio: 'inherit' });
+    if (res.status !== 0) throw new Error(`npm ${cmd} failed in ${service.dir}`);
+    return true;
 }
 
 /**
@@ -193,6 +221,8 @@ module.exports = {
     log,
     discoverServices,
     apiGatewayInfo,
+    storageInfo,
+    installServiceDependencies,
     runServerless,
     getStackOutputs,
     emptyBucket,
