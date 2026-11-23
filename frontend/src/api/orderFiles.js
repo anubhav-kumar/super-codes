@@ -37,3 +37,12 @@ export function completeOrderFileUpload(orderId, fileId, { signal } = {}) {
 export function getOrderFileLink(orderId, fileId, { signal } = {}) {
     return request(`${base(orderId)}/${enc(fileId)}/url`, { cache: 'no-store', signal });
 }
+
+/**
+ * DELETE /files/orders/{orderId}/{fileId} -> 204 (also when already removed). 403 FILE_NOT_YOURS
+ * (member, not the uploader), 404 NOT_FOUND (no access, unknown id). Online only, never queued:
+ * the S3 object is deleted and no new links are issued.
+ */
+export function removeOrderFile(orderId, fileId, { signal } = {}) {
+    return request(`${base(orderId)}/${enc(fileId)}`, { method: 'DELETE', signal });
+}

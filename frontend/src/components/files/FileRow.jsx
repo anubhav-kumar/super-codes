@@ -18,7 +18,7 @@ function uploadedLabel(iso) {
  * "PDF · 2.4 MB · Asha Rao · 23 Nov, 14:05". Never shows a preview or a link (files are private).
  * `onOpen` (F-63) makes the icon and name one tap target that opens the file; `opening` shows a
  * spinner while its link is fetched; `online: false` shows "Needs a connection" (tapping still
- * calls `onOpen`, which explains). `trailing` holds row actions (remove menu comes with F-64).
+ * calls `onOpen`, which explains). `trailing` holds row actions (the Open / Remove menu, F-64).
  * `compact`: 40 px row without uploader and time (inside a comment, P-30).
  */
 export default function FileRow({ file, trailing, onOpen, opening = false, online = true, compact = false, className = '' }) {
