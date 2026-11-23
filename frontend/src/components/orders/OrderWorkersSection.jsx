@@ -10,8 +10,10 @@ import { formatDate } from '../../utils/format.js';
  * "Associate · Primary owner · Assigned 22 Nov 2026". The designation is the worker's current one
  * (`workerDesignation`, F-36); it is missing on offline copies cached before that deploy, which
  * reads as null. Empty items are dropped by ListRow / MetaLine, so no stray "·".
+ * linkWorkerId: undefined links every row (admins); otherwise only that Worker's row is a link
+ * (a member opens only their own Worker, F-54), and null links none.
  */
-export default function OrderWorkersSection({ assignments }) {
+export default function OrderWorkersSection({ assignments, linkWorkerId }) {
     return (
         <Section title="Workers" count={assignments.length || ''}>
             {assignments.length === 0 ? (
@@ -21,7 +23,7 @@ export default function OrderWorkersSection({ assignments }) {
                     {assignments.map((a) => (
                         <li key={a.workerId}>
                             <ListRow
-                                to={`/workers/${a.workerId}`}
+                                to={linkWorkerId === undefined || a.workerId === linkWorkerId ? `/workers/${a.workerId}` : undefined}
                                 title={a.workerName || 'Unknown worker'}
                                 trailing={a.workerStatus === 'INACTIVE' ? <Badge>Inactive</Badge> : undefined}
                                 meta={[

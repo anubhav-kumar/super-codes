@@ -22,6 +22,7 @@ import { useOrderInvoices } from '../hooks/useInvoices.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useOrder } from '../hooks/useOrders.js';
 import useRecordVisit from '../hooks/useRecordVisit.js';
+import useRole from '../hooks/useRole.js';
 import { isOrderOpen } from '../utils/due.js';
 import { formatDate } from '../utils/format.js';
 
@@ -57,6 +58,9 @@ function TextSection({ title, text }) {
 
 function OrderDetail({ order, reload }) {
     const { online } = useOnlineStatus();
+    const role = useRole();
+    // Members open only their own Worker (F-54); admins (undefined) link every Worker.
+    const linkWorkerId = role.isAdmin ? undefined : role.workerId;
     // Owned here (not inside the control) so the header badge and the due label follow the new
     // status the moment it is chosen, and roll back with it if the save fails.
     const status = useInlineSave(order.status);
@@ -71,7 +75,10 @@ function OrderDetail({ order, reload }) {
     const changeStatus = async (next) => {
         if (!next || next === status.value) return;
         // PUT needs the full field set; everything except status is sent back as loaded.
-        const result = await status.save(next, () => updateOrder(order.id, orderUpdateBody(order, { status: next })), {
+        // A member never sends assignments (only an admin changes them; omitted = kept as they are).
+        const body = orderUpdateBody(order, { status: next });
+        if (!role.isAdmin) delete body.assignments;
+        const result = await status.save(next, () => updateOrder(order.id, body), {
             success: `Status changed to ${orderStatusLabel(next)}`,
         });
         if (result.ok) reload();
@@ -82,7 +89,13 @@ function OrderDetail({ order, reload }) {
         order.receivedFrom && order.receivedFrom.id
             ? { label: 'Received from', value: order.receivedFrom.name || 'Unknown person', to: `/people/${order.receivedFrom.id}` }
             : null,
-        owner ? { label: 'Primary owner', value: owner.name || 'Unknown worker', to: owner.id ? `/workers/${owner.id}` : undefined } : null,
+        owner
+            ? {
+                  label: 'Primary owner',
+                  value: owner.name || 'Unknown worker',
+                  to: owner.id && (linkWorkerId === undefined || owner.id === linkWorkerId) ? `/workers/${owner.id}` : undefined,
+              }
+            : null,
         { label: 'Order date', value: formatDate(order.orderDate) },
         { label: 'Due date', value: formatDate(order.dueDate) },
         { label: 'Amount', value: present(order.amount) ? <Money value={order.amount} /> : null },
@@ -107,9 +120,11 @@ function OrderDetail({ order, reload }) {
                 ]}
                 actions={
                     <>
-                        <Button variant={raiseVariant} icon="raise-invoice" to={`/invoices/new?orderId=${encodeURIComponent(order.id)}`} disabled={!online}>
-                            Raise invoice
-                        </Button>
+                        {role.isAdmin && (
+                            <Button variant={raiseVariant} icon="raise-invoice" to={`/invoices/new?orderId=${encodeURIComponent(order.id)}`} disabled={!online}>
+                                Raise invoice
+                            </Button>
+                        )}
                         <Button variant="secondary" icon="edit" to={editTo} disabled={!online}>
                             Edit
                         </Button>
@@ -131,7 +146,7 @@ function OrderDetail({ order, reload }) {
                         <FactList items={facts} addLinks={addLinks} />
                     </Section>
                     <div className="order-3 lg:order-none">
-                        <OrderWorkersSection assignments={order.assignments || []} />
+                        <OrderWorkersSection assignments={order.assignments || []} linkWorkerId={linkWorkerId} />
                     </div>
                     {present(order.description) && (
                         <div className="order-4 lg:order-none">

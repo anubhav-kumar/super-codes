@@ -13,6 +13,7 @@ import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import PersonPicker, { pickedPersonId } from '../components/PersonPicker.jsx';
 import SelectField from '../components/SelectField.jsx';
+import Tag from '../components/Tag.jsx';
 import TextArea from '../components/TextArea.jsx';
 import WorkerAssignmentEditor from '../components/WorkerAssignmentEditor.jsx';
 import { createOrder, updateOrder } from '../api/orders.js';
@@ -21,6 +22,7 @@ import useClientPreselect, { readClientPreselect } from '../hooks/useClientPrese
 import { useCompany } from '../hooks/useCompanies.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useOrder } from '../hooks/useOrders.js';
+import useRole from '../hooks/useRole.js';
 import useSubmit from '../hooks/useSubmit.js';
 import useToast from '../hooks/useToast.js';
 import { todayLocal } from '../utils/dates.js';
@@ -69,7 +71,7 @@ function toForm(order) {
     };
 }
 
-function validate(form, isEdit) {
+function validate(form, isEdit, canAssign) {
     const errors = {};
     const service = form.serviceName.trim();
     if (!service) errors.serviceName = 'Enter the service';
@@ -84,13 +86,14 @@ function validate(form, isEdit) {
     if (form.dueDate && form.orderDate && form.dueDate < form.orderDate) errors.dueDate = "Due date can't be before the order date";
     if (form.description.length > ORDER_LIMITS.description) errors.description = `Description can be at most ${ORDER_LIMITS.description} characters`;
     if (form.notes.length > ORDER_LIMITS.notes) errors.notes = `Notes can be at most ${ORDER_LIMITS.notes} characters`;
-    if (form.assignments.length > 0 && form.assignments.filter((a) => a.isPrimary).length !== 1) errors.assignments = 'Choose a primary owner';
+    if (canAssign && form.assignments.length > 0 && form.assignments.filter((a) => a.isPrimary).length !== 1) errors.assignments = 'Choose a primary owner';
     if (isEdit && !form.status) errors.status = 'Choose a status';
     return errors;
 }
 
 // Full editable field set (PUT clears omitted optional fields, so every field is always sent).
-function toBody(form, isEdit) {
+// Exception: without canAssign (members, F-54) `assignments` is left out, which keeps them as they are.
+function toBody(form, isEdit, canAssign) {
     const opt = (v) => (v.trim() === '' ? null : v.trim());
     const body = {
         serviceName: form.serviceName.trim(),
@@ -105,6 +108,7 @@ function toBody(form, isEdit) {
         assignments: form.assignments.map((a) => ({ workerId: a.workerId, isPrimary: Boolean(a.isPrimary) })),
     };
     if (isEdit) body.status = form.status;
+    if (!canAssign) delete body.assignments;
     return body;
 }
 
@@ -141,8 +145,32 @@ function withClient(f, client) {
     return { ...f, client, receivedFrom, receivedFromAuto };
 }
 
+/** The current assignment, read-only (members, F-54): only an admin changes who is assigned. */
+function AssignmentReadOnly({ assignments }) {
+    return (
+        <div className="flex flex-col gap-2">
+            {assignments.length === 0 ? (
+                <p className="text-sm text-ink-muted">No workers assigned.</p>
+            ) : (
+                <ul className="flex flex-col gap-1.5">
+                    {assignments.map((a) => (
+                        <li key={a.workerId} className="flex flex-wrap items-center gap-x-2 text-[15px]/[22px] text-ink md:text-sm/6">
+                            <span className="break-words">{a.workerName || 'Unknown worker'}</span>
+                            {a.isPrimary && <Tag>Primary owner</Tag>}
+                        </li>
+                    ))}
+                </ul>
+            )}
+            <p className="text-sm text-ink-muted">Only an admin can change who is assigned.</p>
+        </div>
+    );
+}
+
 function OrderForm({ order, preselect }) {
     const navigate = useNavigate();
+    const { isAdmin } = useRole();
+    // Members edit their own orders but never the assignment, and never create clients (F-54).
+    const canAssign = isAdmin;
     const isEdit = Boolean(order);
     // One id per form: a retried create after a dropped connection returns the same order (200).
     const newId = useRef(isEdit ? null : crypto.randomUUID());
@@ -192,10 +220,10 @@ function OrderForm({ order, preselect }) {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        const errors = validate(form, isEdit);
+        const errors = validate(form, isEdit, canAssign);
         setLocalErrors(errors);
         if (Object.keys(errors).length) return;
-        const body = toBody(form, isEdit);
+        const body = toBody(form, isEdit, canAssign);
         const result = await submit(() => (isEdit ? updateOrder(order.id, body) : createOrder({ id: newId.current, ...body })));
         if (!result.ok) return;
         const id = isEdit ? order.id : newId.current;
@@ -203,9 +231,10 @@ function OrderForm({ order, preselect }) {
             toast.success('Changes saved');
         } else {
             const number = result.data && result.data.orderNumber;
-            toast.success(number ? `Order ${number} created` : 'Order created', {
-                action: { label: 'Raise invoice', to: `/invoices/new?orderId=${encodeURIComponent(id)}` },
-            });
+            toast.success(
+                number ? `Order ${number} created` : 'Order created',
+                isAdmin ? { action: { label: 'Raise invoice', to: `/invoices/new?orderId=${encodeURIComponent(id)}` } } : undefined
+            );
         }
         navigate(`/orders/${id}`, { replace: true });
     };
@@ -228,6 +257,7 @@ function OrderForm({ order, preselect }) {
                     value={form.client}
                     onChange={setClient}
                     loading={preselected.loading}
+                    allowCreate={isAdmin}
                     error={errorOf('client')}
                     hint="An individual client or a company."
                 />
@@ -271,7 +301,11 @@ function OrderForm({ order, preselect }) {
                 </FormRow>
             </FormSection>
             <FormSection title="Assignment">
-                <WorkerAssignmentEditor value={form.assignments} onChange={set('assignments')} error={errorOf('assignments')} />
+                {canAssign ? (
+                    <WorkerAssignmentEditor value={form.assignments} onChange={set('assignments')} error={errorOf('assignments')} />
+                ) : (
+                    <AssignmentReadOnly assignments={form.assignments} />
+                )}
             </FormSection>
             <FormSection title="Notes">
                 <TextArea label="Notes" rows={3} value={form.notes} onChange={set('notes')} error={errorOf('notes')} />
