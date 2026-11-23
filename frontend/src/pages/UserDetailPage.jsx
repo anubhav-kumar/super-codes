@@ -10,6 +10,7 @@ import Tag from '../components/Tag.jsx';
 import { Missing } from '../components/directory/directoryText.jsx';
 import { UserStatus, YouTag } from '../components/users/UserRow.jsx';
 import UsersOfflineState from '../components/users/UsersOfflineState.jsx';
+import useDeleteUser from '../components/users/useDeleteUser.jsx';
 import useResetPassword from '../components/users/useResetPassword.jsx';
 import { roleLabel, workerName } from '../components/users/userStatus.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
@@ -35,7 +36,7 @@ function temporaryPasswordText(user) {
 }
 
 /** The loaded user: header with actions, Details. */
-function UserDetail({ user: u, reset }) {
+function UserDetail({ user: u, reset, remove }) {
     const { online } = useOnlineStatus();
     const { user: me } = useRole();
     const isYou = Boolean(me) && me.id === u.id;
@@ -75,17 +76,21 @@ function UserDetail({ user: u, reset }) {
                         </Button>
                         {/* Reset password (F-51) is hidden on your own record: use Change password instead. */}
                         {!isYou && (
-                            <Button variant="secondary" icon="key" onClick={reset.ask} disabled={!online || reset.submitting}>
+                            <Button variant="secondary" icon="key" onClick={reset.ask} disabled={!online || reset.submitting || remove.submitting}>
                                 Reset password
                             </Button>
                         )}
                     </>
                 }
+                // Delete user (F-53) is hidden on your own record; the backend refuses it too (CANNOT_DELETE_SELF).
+                more={[!isYou && { label: 'Delete user', tone: 'danger', onSelect: remove.ask }]}
+                moreDisabled={!online || remove.submitting || reset.submitting}
             />
             <Section id="details" title="Details" flush={false}>
                 <FactList items={facts} addLinks={addLinks} />
             </Section>
             {reset.dialog}
+            {remove.dialog}
         </>
     );
 }
@@ -93,7 +98,8 @@ function UserDetail({ user: u, reset }) {
 /**
  * User detail (F-48, admin only via the route guard): header with role tag, status badge and "You";
  * facts Email, Worker and the temporary password expiry. Loaded from GET /auth/users (no single-user
- * endpoint). Online only. Actions: Edit (F-52), Reset password (F-51); Delete comes with F-53.
+ * endpoint). Online only. Actions: Edit (F-52), Reset password (F-51), and Delete user (F-53) in the
+ * More menu. Reset and Delete are hidden on your own record.
  */
 export default function UserDetailPage() {
     const { userId } = useParams();
@@ -102,6 +108,7 @@ export default function UserDetailPage() {
     const offline = !online || user.status === 'unavailable';
     // At page level, so a temporary password already shown stays on screen if the connection drops.
     const reset = useResetPassword(user.data, user.reload);
+    const remove = useDeleteUser(user.data, user.reload);
 
     return (
         <PageBody width="detail">
@@ -110,7 +117,7 @@ export default function UserDetailPage() {
                 <UsersOfflineState onRetry={user.reload} />
             ) : (
                 <DataView resource={user} skeleton="detail" notFoundTitle="User not found">
-                    {(u) => <UserDetail user={u} reset={reset} />}
+                    {(u) => <UserDetail user={u} reset={reset} remove={remove} />}
                 </DataView>
             )}
             {reset.sheet}

@@ -58,3 +58,12 @@ export function resetUserPassword(id) {
 export function updateUser(id, body) {
     return request(`/auth/users/${encodeURIComponent(id)}`, { method: 'PUT', body });
 }
+
+/**
+ * DELETE /auth/users/{id} (F-53). 204, empty body. Removes the login and ends all the user's sessions;
+ * the linked Worker, its assignments and orders stay. The email is free for a new user at once.
+ * Errors: 404 NOT_FOUND (unknown id), 409 CANNOT_DELETE_SELF, 409 LAST_ADMIN.
+ */
+export function deleteUser(id) {
+    return request(`/auth/users/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
