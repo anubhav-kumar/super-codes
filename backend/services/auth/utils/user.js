@@ -6,7 +6,7 @@
  * User object of the admin user-management routes (/auth/users, P-25): see toUser.
  */
 
-const { GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { GetCommand, QueryCommand, ScanCommand } = require('@aws-sdk/lib-dynamodb');
 const { database, auth } = require('common');
 
 /** Users written before FR1 have no isAdmin and are admins (never use !!item.isAdmin). */
@@ -41,6 +41,27 @@ async function findUserById(userId) {
         if (item && item.userId === userId) return item;
     }
     return null;
+}
+
+/**
+ * Number of admins (isAdmin absent or true). Scan of Users: named exception (admin-only routes,
+ * one item per staff member). Follows LastEvaluatedKey until the table is read.
+ */
+async function countAdmins() {
+    let count = 0;
+    let ExclusiveStartKey;
+    do {
+        const res = await database.doc.send(
+            new ScanCommand({
+                TableName: process.env.USERS_TABLE,
+                ProjectionExpression: 'userId, isAdmin',
+                ExclusiveStartKey,
+            })
+        );
+        count += (res.Items || []).filter((item) => item.userId && isAdminItem(item)).length;
+        ExclusiveStartKey = res.LastEvaluatedKey;
+    } while (ExclusiveStartKey);
+    return count;
 }
 
 /** Name of the linked Worker, or null when there is no link or the Worker record is missing. */
@@ -119,6 +140,7 @@ module.exports = {
     isAdminItem,
     getUserByEmail,
     findUserById,
+    countAdmins,
     loadWorkerName,
     toSessionUser,
     sessionUser,
