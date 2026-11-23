@@ -104,6 +104,24 @@ functions:
           path: timeline/orders/{orderId}/comments
           method: post
           cors: true
+  updateComment:
+    handler: handlers/comments/update.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: timeline/orders/{orderId}/comments/{commentId}
+          method: put
+          cors: true
+  deleteComment:
+    handler: handlers/comments/delete.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: timeline/orders/{orderId}/comments/{commentId}
+          method: delete
+          cors: true
 
 resources:
   Resources:
