@@ -3,7 +3,10 @@ import ClientIcon from './ClientIcon.jsx';
 import ListRow from './ListRow.jsx';
 import Section from './Section.jsx';
 
-/** "Companies" section on the person profile (F-03), anchored at #companies: company name, relationship, entity type. */
+/**
+ * "Companies" section on the person profile (F-03), anchored at #companies: company name, relationship, entity type.
+ * A company the member may not open (`canOpen: false`, P-26 F-55) is plain text, not a link; a missing flag means it can be opened.
+ */
 export default function PersonCompaniesSection({ companies = [] }) {
     return (
         <Section id="companies" title="Companies" count={companies.length}>
@@ -14,7 +17,7 @@ export default function PersonCompaniesSection({ companies = [] }) {
                     {companies.map((c) => (
                         <li key={c.companyId}>
                             <ListRow
-                                to={`/companies/${c.companyId}`}
+                                to={c.canOpen === false ? undefined : `/companies/${c.companyId}`}
                                 leading={<ClientIcon type="COMPANY" />}
                                 title={c.companyName || 'Unknown company'}
                                 meta={[relationshipLabel(c.relationshipType), c.entityType ? entityTypeLabel(c.entityType) : null]}

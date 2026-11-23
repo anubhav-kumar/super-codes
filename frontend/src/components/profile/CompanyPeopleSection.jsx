@@ -42,7 +42,7 @@ function RelationshipSheet({ association, value, onSave, onClose }) {
     );
 }
 
-function PersonLinkRow({ association: a, companyId, isLast, online, onChanged, onRemove }) {
+function PersonLinkRow({ association: a, companyId, isLast, online, canManage, onChanged, onRemove }) {
     const relationship = useInlineSave(a.relationshipType);
     const [editing, setEditing] = useState(false);
 
@@ -60,35 +60,37 @@ function PersonLinkRow({ association: a, companyId, isLast, online, onChanged, o
     return (
         <li className="flex items-center gap-1 pr-2">
             <ListRow
-                to={`/people/${a.personId}`}
+                to={a.canOpen === false ? undefined : `/people/${a.personId}`}
                 className="min-w-0 flex-1"
                 leading={<ClientIcon type="PERSON" />}
                 title={a.personName || 'Unknown person'}
                 meta={[relationship.saving ? 'Saving…' : relationshipLabel(relationship.value), a.personPhone]}
             />
-            <Menu
-                label={`Actions for ${nameOf(a)}`}
-                icon="more"
-                sheetOnPhone
-                sheetTitle={nameOf(a)}
-                items={[
-                    {
-                        label: 'Change relationship',
-                        icon: 'edit',
-                        disabled: !online || busy,
-                        hint: online ? undefined : OFFLINE_HINT,
-                        onSelect: () => setEditing(true),
-                    },
-                    {
-                        label: 'Remove link',
-                        icon: 'unlink',
-                        tone: 'danger',
-                        disabled: !online || busy || isLast,
-                        hint: isLast ? LAST_LINK_HINT : online ? undefined : OFFLINE_HINT,
-                        onSelect: () => onRemove(a),
-                    },
-                ]}
-            />
+            {canManage && (
+                <Menu
+                    label={`Actions for ${nameOf(a)}`}
+                    icon="more"
+                    sheetOnPhone
+                    sheetTitle={nameOf(a)}
+                    items={[
+                        {
+                            label: 'Change relationship',
+                            icon: 'edit',
+                            disabled: !online || busy,
+                            hint: online ? undefined : OFFLINE_HINT,
+                            onSelect: () => setEditing(true),
+                        },
+                        {
+                            label: 'Remove link',
+                            icon: 'unlink',
+                            tone: 'danger',
+                            disabled: !online || busy || isLast,
+                            hint: isLast ? LAST_LINK_HINT : online ? undefined : OFFLINE_HINT,
+                            onSelect: () => onRemove(a),
+                        },
+                    ]}
+                />
+            )}
             {editing && (
                 <RelationshipSheet association={a} value={relationship.value} onSave={changeRelationship} onClose={() => setEditing(false)} />
             )}
@@ -101,8 +103,10 @@ function PersonLinkRow({ association: a, companyId, isLast, online, onChanged, o
  * relationship and phone; a row menu changes the relationship (sheet + inline save) or removes
  * the link (confirm, then inline save: the row disappears at once and comes back on failure).
  * A company keeps at least one person, so "Remove link" is disabled on the last one.
+ * Members (`canManage` false, FR1 A3) get no Link person action and no row menu. A person the
+ * member may not open (`canOpen: false`, P-26 F-55) is plain text, not a link.
  */
-export default function CompanyPeopleSection({ company, online, reload }) {
+export default function CompanyPeopleSection({ company, online, reload, canManage = true }) {
     const associations = company.associations || [];
     const hidden = useInlineSave(NONE_HIDDEN);
     const [confirm, setConfirm] = useState(null);
@@ -132,9 +136,11 @@ export default function CompanyPeopleSection({ company, online, reload }) {
                 title="People"
                 count={visible.length}
                 action={
-                    <SectionAction icon="link" to={`/companies/${company.id}/people/new`} disabled={!online}>
-                        Link person
-                    </SectionAction>
+                    canManage && (
+                        <SectionAction icon="link" to={`/companies/${company.id}/people/new`} disabled={!online}>
+                            Link person
+                        </SectionAction>
+                    )
                 }
             >
                 {visible.length === 0 ? (
@@ -148,6 +154,7 @@ export default function CompanyPeopleSection({ company, online, reload }) {
                                 companyId={company.id}
                                 isLast={isLast}
                                 online={online}
+                                canManage={canManage}
                                 onChanged={reload}
                                 onRemove={setConfirm}
                             />

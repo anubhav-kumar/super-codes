@@ -20,6 +20,7 @@ import useMediaQuery from '../hooks/useMediaQuery.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useClientOrders } from '../hooks/useOrders.js';
 import useRecordVisit from '../hooks/useRecordVisit.js';
+import useRole from '../hooks/useRole.js';
 
 /** Company facts; empty ones are hidden and offered as "Add …" links instead. PAN stays in the header. */
 function CompanyDetails({ company: c }) {
@@ -50,10 +51,13 @@ function CompanyDetails({ company: c }) {
  * preselected, then Open orders, Invoices, People and Details.
  * Phones: one column in that order. lg+: figures in one full-width row, then details and people left; orders and invoices right.
  * Orders and invoices load once here and feed both the figures and their sections.
+ * Members (P-26 F-55): no New order / New invoice and no people link actions; Edit stays; figures
+ * come from their scoped orders and invoices.
  */
 export default function CompanyDetailPage() {
     const { companyId } = useParams();
     const { online } = useOnlineStatus();
+    const { isAdmin } = useRole();
     const company = useCompany(companyId);
     useRecordVisit('company', companyId, company);
     const orders = useClientOrders(companyId);
@@ -69,7 +73,7 @@ export default function CompanyDetailPage() {
                     const figures = <ProfileKeyFigures orders={orders} invoices={invoices} />;
                     const openOrders = <ClientOrdersSection orders={orders} showReceivedFrom />;
                     const billed = <BilledInvoicesSection invoices={invoices} />;
-                    const people = <CompanyPeopleSection company={c} online={online} reload={company.reload} />;
+                    const people = <CompanyPeopleSection company={c} online={online} reload={company.reload} canManage={isAdmin} />;
                     const details = <CompanyDetails company={c} />;
 
                     return (
@@ -80,14 +84,16 @@ export default function CompanyDetailPage() {
                                 title={c.name}
                                 meta={c.pan ? <span className="font-mono text-[13px] text-ink-muted">PAN {c.pan}</span> : null}
                                 actions={
-                                    <>
-                                        <Button icon="plus" to={`/orders/new?${preselect}`} disabled={!online}>
-                                            New order
-                                        </Button>
-                                        <Button variant="secondary" icon="raise-invoice" to={`/invoices/new?${preselect}`} disabled={!online}>
-                                            New invoice
-                                        </Button>
-                                    </>
+                                    isAdmin && (
+                                        <>
+                                            <Button icon="plus" to={`/orders/new?${preselect}`} disabled={!online}>
+                                                New order
+                                            </Button>
+                                            <Button variant="secondary" icon="raise-invoice" to={`/invoices/new?${preselect}`} disabled={!online}>
+                                                New invoice
+                                            </Button>
+                                        </>
+                                    )
                                 }
                                 more={[{ label: 'Edit', icon: 'edit', to: `/companies/${c.id}/edit`, disabled: !online }]}
                             >
