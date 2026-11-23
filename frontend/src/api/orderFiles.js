@@ -28,3 +28,12 @@ export function startOrderFileUpload(orderId, { id, fileName, size }, { signal }
 export function completeOrderFileUpload(orderId, fileId, { signal } = {}) {
     return request(`${base(orderId)}/${enc(fileId)}/complete`, { method: 'POST', signal });
 }
+
+/**
+ * GET /files/orders/{orderId}/{fileId}/url -> { url, expiresAt } (signed, about 5 minutes;
+ * Cache-Control: no-store). 404 NOT_FOUND (no access, removed, unknown). Called on every open and
+ * never stored: the service worker treats this path as NetworkOnly (vite.config.js).
+ */
+export function getOrderFileLink(orderId, fileId, { signal } = {}) {
+    return request(`${base(orderId)}/${enc(fileId)}/url`, { cache: 'no-store', signal });
+}

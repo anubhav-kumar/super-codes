@@ -9,6 +9,7 @@ import FileRow from '../files/FileRow.jsx';
 import { ACCEPT, checkFile } from '../files/fileRules.js';
 import UploadRow from '../files/UploadRow.jsx';
 import useFileUploads from '../files/useFileUploads.js';
+import useOpenFile from '../files/useOpenFile.js';
 import StaleDataNotice from '../offline/StaleDataNotice.jsx';
 import Section from '../Section.jsx';
 import SectionAction from '../SectionAction.jsx';
@@ -20,7 +21,8 @@ const OFFLINE_TEXT = 'Connect to the internet to upload';
  * Files section of order detail (F-62): private files attached to the order, newest first, and
  * uploads in progress. Upload = request an upload slot -> PUT the bytes with exactly the returned
  * headers -> complete; only then is it a file row. Uploads are online only and stop when the page
- * is left. The list (names, never links) is readable offline from the API cache.
+ * is left. The list (names, never links) is readable offline from the API cache. Tapping a file
+ * opens it through a fresh short-lived link (F-63, online only).
  */
 export default function OrderFilesSection({ order, className = '' }) {
     const orderId = order.id;
@@ -57,6 +59,8 @@ export default function OrderFilesSection({ order, className = '' }) {
         [orderId],
     );
     const uploads = useFileUploads({ requestSlot, complete, onUploaded: reloadFiles });
+    // F-63: each tap fetches a fresh short-lived link; a 404 means removed or no longer visible.
+    const opener = useOpenFile(orderId, { onGone: reloadFiles });
 
     const choose = () => {
         if (online && inputRef.current) inputRef.current.click();
@@ -131,7 +135,12 @@ export default function OrderFilesSection({ order, className = '' }) {
                     ))}
                     {shown.map((file) => (
                         <li key={file.id}>
-                            <FileRow file={file} />
+                            <FileRow
+                                file={file}
+                                onOpen={() => opener.open(file)}
+                                opening={opener.openingId === file.id}
+                                online={online}
+                            />
                         </li>
                     ))}
                 </ul>
@@ -153,6 +162,7 @@ export default function OrderFilesSection({ order, className = '' }) {
                     </div>
                 )
             )}
+            {opener.sheet}
         </Section>
     );
 }
