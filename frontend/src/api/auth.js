@@ -28,3 +28,14 @@ export function getMe({ signal } = {}) {
 export function logout(token) {
     return request('/auth/logout', { method: 'POST', token, skipUnauthorized: true, trackConnectivity: false });
 }
+
+/**
+ * POST /auth/password { currentPassword, newPassword } -> { user: Session user, expiresAt } (F-47).
+ * This session stays (its expiry is reset); every other session of the user ends.
+ * 400 VALIDATION_FAILED with details field "currentPassword" (wrong current password; 400, not 401,
+ * so the app stays signed in) or "newPassword" (too short, too long, same as current).
+ * Allowed while a temporary password is active (the "Set a new password" screen uses it too).
+ */
+export function changePassword({ currentPassword, newPassword }) {
+    return request('/auth/password', { method: 'POST', body: { currentPassword, newPassword } });
+}

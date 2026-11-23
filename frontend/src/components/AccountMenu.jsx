@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuth from '../hooks/useAuth.js';
 import useInstallPrompt from '../hooks/useInstallPrompt.js';
+import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import useRole from '../hooks/useRole.js';
+import ChangePasswordSheet from './ChangePasswordSheet.jsx';
 import ConfirmDialog from './ConfirmDialog.jsx';
 import Menu from './Menu.jsx';
 import Tag from './Tag.jsx';
@@ -23,15 +25,18 @@ function AccountHeader({ user, isAdmin, workerName }) {
 
 /**
  * Top-bar account menu. Header: "Signed in as", name, email (the only place it appears), role tag
- * (Admin or Member) and the linked Worker. Items: Install app, Sign out.
+ * (Admin or Member) and the linked Worker. Items: Change password (F-47, needs a connection),
+ * Install app, Sign out.
  */
 export default function AccountMenu() {
     const { signOut } = useAuth();
     const { user, isAdmin, workerName } = useRole();
     const { canInstall, promptInstall } = useInstallPrompt();
+    const { online } = useOnlineStatus();
     const navigate = useNavigate();
     const [confirming, setConfirming] = useState(false);
     const [busy, setBusy] = useState(false);
+    const [changingPassword, setChangingPassword] = useState(false);
 
     const handleSignOut = async () => {
         setBusy(true);
@@ -51,10 +56,18 @@ export default function AccountMenu() {
                 icon="account"
                 header={<AccountHeader user={user} isAdmin={isAdmin} workerName={workerName} />}
                 items={[
+                    {
+                        label: 'Change password',
+                        icon: 'key',
+                        disabled: !online,
+                        hint: online ? undefined : 'Needs a connection',
+                        onSelect: () => setChangingPassword(true),
+                    },
                     canInstall && { label: 'Install app', icon: 'install', onSelect: promptInstall },
                     { label: 'Sign out', icon: 'sign-out', tone: 'danger', onSelect: () => setConfirming(true) },
                 ]}
             />
+            <ChangePasswordSheet open={changingPassword} onClose={() => setChangingPassword(false)} />
             <ConfirmDialog
                 open={confirming}
                 title="Sign out?"
