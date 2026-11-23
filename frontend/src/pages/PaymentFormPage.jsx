@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import ClientIcon from '../components/ClientIcon.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
@@ -212,6 +212,10 @@ function PaymentForm({ invoice, payment }) {
     const [localErrors, setLocalErrors] = useState({});
     const [finishing, setFinishing] = useState(false);
     const [confirmOver, setConfirmOver] = useState(false);
+    // Focus goes back to Amount after the overpayment confirm is cancelled (F-37). MoneyField gets an
+    // id, never a ref: a ref would replace its own input ref that restores the selection on focus.
+    const amountId = useId();
+    const refocusAmount = useRef(false);
     const { submit, submitting, formError, fieldErrors, clearErrors } = useSubmit({ errorToast: true });
     const toast = useToast();
 
@@ -253,6 +257,18 @@ function PaymentForm({ invoice, payment }) {
         }
         save();
     };
+
+    // "Change amount", Escape and the backdrop all cancel; the effect below focuses Amount once the
+    // dialog is gone, and programmatic focus makes MoneyField select the whole value.
+    const cancelOver = () => {
+        refocusAmount.current = true;
+        setConfirmOver(false);
+    };
+    useEffect(() => {
+        if (confirmOver || !refocusAmount.current) return;
+        refocusAmount.current = false;
+        document.getElementById(amountId)?.focus();
+    }, [confirmOver, amountId]);
 
     const save = async () => {
         setConfirmOver(false);
@@ -297,6 +313,7 @@ function PaymentForm({ invoice, payment }) {
                 <FormSection title="Payment received">
                     <FormRow>
                         <MoneyField
+                            id={amountId}
                             label="Amount"
                             required
                             placeholder="0.00"
@@ -375,7 +392,7 @@ function PaymentForm({ invoice, payment }) {
                 cancelLabel="Change amount"
                 busy={submitting}
                 onConfirm={save}
-                onCancel={() => setConfirmOver(false)}
+                onCancel={cancelOver}
             />
         </FormLayout>
     );

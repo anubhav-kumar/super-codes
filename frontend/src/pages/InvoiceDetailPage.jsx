@@ -7,6 +7,7 @@ import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import DataView from '../components/DataView.jsx';
 import DueLabel from '../components/DueLabel.jsx';
 import FactList from '../components/FactList.jsx';
+import Icon from '../components/Icon.jsx';
 import InvoicePaymentsSection from '../components/InvoicePaymentsSection.jsx';
 import MoneySummary from '../components/MoneySummary.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
@@ -14,6 +15,7 @@ import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import RecordHeader from '../components/RecordHeader.jsx';
 import RecordNo from '../components/RecordNo.jsx';
+import { isInvoicePaid, isInvoiceSettled, lastPaidDate } from '../components/invoices/invoiceSettlement.js';
 import { setInvoiceBaseStatus } from '../api/invoices.js';
 import { INVOICE_STATUS_TONE, invoiceStatusLabel } from '../constants/invoices.js';
 import { clientPath } from '../constants/orders.js';
@@ -91,7 +93,9 @@ function InvoiceDetail({ invoice, reload }) {
     const orderLabel = useRelatedOrderLabel(invoice.order);
     const status = useStatusChange(invoice, reload);
     const isDraft = invoice.baseStatus === 'DRAFT';
-    const canRecordPayment = invoice.baseStatus === 'ISSUED' && Number(invoice.outstanding) > 0;
+    const settled = isInvoiceSettled(invoice);
+    const paidOn = isInvoicePaid(invoice) ? lastPaidDate(invoice) : null;
+    const canRecordPayment = invoice.baseStatus === 'ISSUED' && !settled;
     const busy = !online || status.submitting;
 
     return (
@@ -113,7 +117,14 @@ function InvoiceDetail({ invoice, reload }) {
                     <Badge key="status" tone={INVOICE_STATUS_TONE[invoice.displayedStatus]}>
                         {invoiceStatusLabel(invoice.displayedStatus)}
                     </Badge>,
-                    invoice.baseStatus === 'ISSUED' ? (
+                    // Settled (F-37): no due label; a paid invoice says when it was paid instead.
+                    paidOn ? (
+                        <span key="paid-on" className="inline-flex items-center gap-1 whitespace-nowrap text-ink-muted tabular-nums">
+                            <Icon name="check" size="sm" className="shrink-0" />
+                            Paid on {formatDate(paidOn, { short: true })}
+                        </span>
+                    ) : null,
+                    invoice.baseStatus === 'ISSUED' && !settled ? (
                         <DueLabel
                             key="due"
                             dueDate={invoice.dueDate}
@@ -162,9 +173,10 @@ function InvoiceDetail({ invoice, reload }) {
 }
 
 /**
- * Invoice detail (F-06, F-07, F-25): header with status, due label and state actions (Issue invoice on
- * a draft, Record payment while something is outstanding, Edit, More > Cancel invoice), facts, money
- * summary and payments.
+ * Invoice detail (F-06, F-07, F-25, F-37): header with status, due label and state actions (Issue invoice
+ * on a draft, Record payment while something is outstanding, Edit, More > Cancel invoice), facts, money
+ * summary and payments. A settled invoice (paid or cancelled) shows no due label and no Record payment;
+ * a paid one shows "Paid on <last Paid payment date>".
  */
 export default function InvoiceDetailPage() {
     const { invoiceId } = useParams();
