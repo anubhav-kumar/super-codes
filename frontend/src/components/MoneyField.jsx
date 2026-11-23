@@ -3,35 +3,6 @@ import { formatLakh, formatMoney, groupMoneyInput } from '../utils/format.js';
 import { parseMoney } from '../utils/validation.js';
 import { controlClass, FieldLabel, FieldMessage } from './fieldStyles.jsx';
 
-const isAmountChar = (ch) => !/[,\s₹]/.test(ch);
-
-/**
- * Position in `raw` that matches `pos` in `shown` (its grouped form), by counting the characters
- * other than commas, spaces and "₹" before it: "5,0|00" -> "50|00".
- */
-export function rawCaret(shown, raw, pos) {
-    let count = 0;
-    for (let i = 0; i < pos && i < shown.length; i += 1) if (isAmountChar(shown[i])) count += 1;
-    let i = 0;
-    while (i < raw.length && count > 0) {
-        if (isAmountChar(raw[i])) count -= 1;
-        i += 1;
-    }
-    return i;
-}
-
-/**
- * Where the selection goes after the focus rewrite from the grouped text to the raw text. A full
- * selection (select all, Playwright fill, a browser's select-on-Tab) and any focus that did not
- * come from a pointer (Tab, programmatic) select the whole raw value, so typing replaces it. A
- * click keeps its caret at the same digit.
- */
-export function selectionAfterFocus(shown, raw, start, end, fromPointer) {
-    const all = start === 0 && end === shown.length && shown.length > 0;
-    if (all || !fromPointer) return [0, raw.length];
-    return [rawCaret(shown, raw, start), rawCaret(shown, raw, end)];
-}
-
 /**
  * INR amount input with a ₹ prefix. type="text" + inputMode="decimal" (not type="number", which
  * changes on scroll and depends on locale). The value stays the typed string; parse it with
@@ -39,9 +10,11 @@ export function selectionAfterFocus(shown, raw, start, end, fromPointer) {
  *
  * While typing, the amount is read back under the field with Indian grouping and words from 1 lakh
  * up ("₹15,00,000.00 · 15 lakh"). Out of focus the input text itself shows the grouping
- * ("15,00,000"); on focus it shows the raw text ("1500000"). Rewriting the value on focus would
- * reset the browser's selection, so the selection is restored right after the rewrite is committed
- * (selectionAfterFocus): select all + type replaces the value instead of appending to it.
+ * ("15,00,000"); on focus it shows the raw text ("1500000"). Every focus into the field (Tab,
+ * programmatic, or the first click or tap) selects the whole raw value right after that rewrite is
+ * committed, so typing replaces a prefilled amount instead of appending to it. The mouseup that
+ * ends a focusing click would collapse that selection, so it is cancelled once. A click while the
+ * field is already focused places the caret as usual.
  * The caret is never moved while typing and the value sent to onChange is never reformatted.
  *
  * `warning` shows a non-blocking message under the field (an `error` takes its place).
@@ -59,6 +32,7 @@ export default function MoneyField({
     onFocus,
     onBlur,
     onPointerDown,
+    onMouseUp,
     ...rest
 }) {
     const autoId = useId();
@@ -67,7 +41,7 @@ export default function MoneyField({
     const readbackId = `${fieldId}-readback`;
     const [focused, setFocused] = useState(false);
     const inputRef = useRef(null);
-    const pointerDown = useRef(false);
+    const selectOnMouseUp = useRef(false);
     const pendingSelection = useRef(null);
 
     const text = value ?? '';
@@ -101,21 +75,26 @@ export default function MoneyField({
                     value={shown}
                     onChange={(e) => onChange && onChange(e.target.value, e)}
                     onPointerDown={(e) => {
-                        pointerDown.current = true;
+                        // A click on the already focused field places the caret normally.
+                        selectOnMouseUp.current = false;
                         if (onPointerDown) onPointerDown(e);
                     }}
                     onFocus={(e) => {
-                        const input = e.target;
-                        const fromPointer = pointerDown.current;
-                        pointerDown.current = false;
-                        if (input.value !== text) {
-                            pendingSelection.current = selectionAfterFocus(input.value, text, input.selectionStart ?? 0, input.selectionEnd ?? 0, fromPointer);
-                        }
+                        pendingSelection.current = [0, text.length];
+                        selectOnMouseUp.current = text.length > 0;
                         setFocused(true);
                         if (onFocus) onFocus(e);
                     }}
+                    onMouseUp={(e) => {
+                        if (selectOnMouseUp.current) {
+                            selectOnMouseUp.current = false;
+                            e.preventDefault();
+                            e.currentTarget.setSelectionRange(0, e.currentTarget.value.length);
+                        }
+                        if (onMouseUp) onMouseUp(e);
+                    }}
                     onBlur={(e) => {
-                        pointerDown.current = false;
+                        selectOnMouseUp.current = false;
                         setFocused(false);
                         if (onBlur) onBlur(e);
                     }}
