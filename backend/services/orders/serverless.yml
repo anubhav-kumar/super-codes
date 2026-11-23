@@ -14,6 +14,7 @@ custom:
   workersTable: ca-crm-workers-${sls:stage}-workers
   sessionsTable: ca-crm-auth-${sls:stage}-sessions
   usersTable: ca-crm-auth-${sls:stage}-users
+  timelineTable: ca-crm-timeline-${sls:stage}-entries
 
 provider:
   name: aws
@@ -36,6 +37,7 @@ provider:
     WORKERS_TABLE: ${self:custom.workersTable}
     SESSIONS_TABLE: ${self:custom.sessionsTable}
     USERS_TABLE: ${self:custom.usersTable}
+    TIMELINE_TABLE: ${self:custom.timelineTable}
   iam:
     role:
       statements:
@@ -78,6 +80,12 @@ provider:
           Resource:
             - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.usersTable}
             - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.usersTable}/index/*
+        # Timeline (P-27 F-59): STATUS_CHANGED events in the order update transaction.
+        - Effect: Allow
+          Action:
+            - dynamodb:PutItem
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.timelineTable}
 
 package:
   patterns:

@@ -1,5 +1,6 @@
 import {
     ArrowDown,
+    ArrowRight,
     ArrowUp,
     ArrowUpDown,
     Building2,
@@ -28,6 +29,7 @@ import {
     Link,
     LogOut,
     Mail,
+    MessageSquare,
     PanelLeftClose,
     PanelLeftOpen,
     Pencil,
@@ -38,6 +40,7 @@ import {
     SearchX,
     Send,
     ShieldCheck,
+    Trash2,
     TriangleAlert,
     Unlink,
     User,
@@ -89,6 +92,10 @@ const ICONS = {
     retry: RefreshCw,
     recent: History,
     history: History,
+    // FR2 (P-27): timeline
+    comment: MessageSquare,
+    delete: Trash2,
+    'arrow-right': ArrowRight,
     check: Check,
     success: CircleCheck,
     close: X,

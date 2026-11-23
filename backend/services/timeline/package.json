@@ -1,0 +1,7 @@
+{
+  "name": "ca-crm-timeline",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Timeline service: GET /timeline/orders/{orderId} (order timeline of comments and events), POST /timeline/orders/{orderId}/comments (comment or progress update), PUT and DELETE /timeline/orders/{orderId}/comments/{commentId} (edit own, delete own or as admin)",
+  "license": "UNLICENSED"
+}
