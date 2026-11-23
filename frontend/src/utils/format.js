@@ -77,15 +77,31 @@ export function formatFigure(value) {
 
 /**
  * Indian words for large amounts, used in the money read-back: 150000 -> "1.5 lakh",
- * 1500000 -> "15 lakh", 25000000 -> "2.5 crore". '' below 1 lakh or for invalid values.
- * Rounded down to 2 decimals so the words never overstate the amount.
+ * 1500000 -> "15 lakh", 25000000 -> "2.5 crore", 266814.5 -> "2.67 lakh". '' below 1 lakh or for
+ * invalid values. Rounded half up to 2 decimals in whole paise (no float drift); an amount that
+ * rounds to 100 lakh reads "1 crore", never "100 lakh".
  */
 export function formatLakh(value) {
     const n = Number(value);
     if (!Number.isFinite(n) || n < 100000) return '';
-    // Divide by the unit / 100 first, so the floor works on whole hundredths (no float drift).
-    if (n >= 10000000) return `${Math.floor(n / 100000) / 100} crore`;
-    return `${Math.floor(n / 1000) / 100} lakh`;
+    const paise = Math.round(n * 100);
+    const lakhs = Math.floor((paise + 50000) / 100000); // hundredths of a lakh
+    if (lakhs < 10000) return `${lakhs / 100} lakh`;
+    const crores = Math.floor((paise + 5000000) / 10000000); // hundredths of a crore
+    return `${crores / 100} crore`;
+}
+
+/**
+ * Text to prefill a MoneyField: 266814.5 -> "266814.50", 266815 -> "266815", 0 -> "0",
+ * null / undefined / '' / invalid -> "". Two decimals when there are paise, none when whole, so the
+ * field and its read-back show the same paise.
+ */
+export function moneyInputValue(value) {
+    if (value === null || value === undefined || value === '') return '';
+    const n = Number(value);
+    if (!Number.isFinite(n)) return '';
+    const paise = Math.round(n * 100);
+    return paise % 100 === 0 ? String(paise / 100) : (paise / 100).toFixed(2);
 }
 
 /** Indian digit grouping of a string of digits: "1500000" -> "15,00,000". */

@@ -24,6 +24,7 @@ import { useOrder } from '../hooks/useOrders.js';
 import useSubmit from '../hooks/useSubmit.js';
 import useToast from '../hooks/useToast.js';
 import { todayLocal } from '../utils/dates.js';
+import { moneyInputValue } from '../utils/format.js';
 import { parseMoney } from '../utils/validation.js';
 
 const today = () => todayLocal();
@@ -55,7 +56,7 @@ function toForm(order) {
         receivedFromAuto: Boolean(client && receivedFrom && client.type === 'PERSON' && client.id === receivedFrom.personId),
         orderDate: order.orderDate || '',
         description: order.description || '',
-        amount: order.amount === null || order.amount === undefined ? '' : String(order.amount),
+        amount: moneyInputValue(order.amount),
         dueDate: order.dueDate || '',
         notes: order.notes || '',
         status: order.status || 'NEW',

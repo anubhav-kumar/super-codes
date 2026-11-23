@@ -25,7 +25,7 @@ import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import useSubmit from '../hooks/useSubmit.js';
 import useToast from '../hooks/useToast.js';
 import { todayLocal } from '../utils/dates.js';
-import { formatMoney } from '../utils/format.js';
+import { formatMoney, moneyInputValue } from '../utils/format.js';
 import { parseMoney } from '../utils/validation.js';
 
 const RECEIVED = 'received';
@@ -59,7 +59,7 @@ function overpaidBy(form, mode, invoice) {
 /** The invoice's outstanding as the amount to prefill; empty when nothing is owed. */
 function outstandingAmount(invoice) {
     const n = Number(invoice.outstanding);
-    return Number.isFinite(n) && n > 0 ? String(n) : '';
+    return Number.isFinite(n) && n > 0 ? moneyInputValue(n) : '';
 }
 
 function toForm(payment, invoice) {
@@ -75,7 +75,7 @@ function toForm(payment, invoice) {
         };
     }
     return {
-        amount: text(payment.amount),
+        amount: moneyInputValue(payment.amount),
         link: text(payment.link),
         expiryDate: text(payment.expiryDate),
         status: payment.status || 'CREATED',
