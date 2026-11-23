@@ -38,3 +38,12 @@ export async function getUser(id, { signal } = {}) {
 export function createUser(body) {
     return request('/auth/users', { method: 'POST', body });
 }
+
+/**
+ * POST /auth/users/{id}/reset-password (F-51), no body. Not idempotent: each call issues a new password.
+ * 200 -> data { user (status MUST_SET_PASSWORD), temporaryPassword, temporaryPasswordExpiresAt }.
+ * The user's sessions all end. Errors: 404 NOT_FOUND (unknown id), 409 CANNOT_RESET_SELF.
+ */
+export function resetUserPassword(id) {
+    return request(`/auth/users/${encodeURIComponent(id)}/reset-password`, { method: 'POST' });
+}

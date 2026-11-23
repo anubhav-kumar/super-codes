@@ -12,7 +12,7 @@ function validUntilText(iso) {
     return new Date().toDateString() === d.toDateString() ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : formatDateTime(d);
 }
 
-const firstName = (name) => String(name || '').trim().split(/\s+/)[0] || 'them';
+export const firstName = (name) => String(name || '').trim().split(/\s+/)[0] || 'them';
 
 /**
  * A temporary password shown once (FR1 D16, D17, D20): mono, selectable, with Copy and its expiry.
