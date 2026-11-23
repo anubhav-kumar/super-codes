@@ -1,6 +1,7 @@
-# Dashboard service. Read-only firm summary for Home (F-20). Owns no tables.
+# Dashboard service. Read-only summary for Home (F-20; member scope F-58). Owns no tables.
 # Reads billing's Invoices and orders' Orders (Query on table and GSIs), and directory's People and
-# Companies and workers' Workers (BatchGetItem) by their deterministic names, read-only.
+# Companies, workers' Workers and (members) Orders (BatchGetItem), and orders' OrderAssignments
+# byWorker (Query, members) by their deterministic names, read-only.
 service: ca-crm-dashboard
 
 frameworkVersion: '3'
@@ -11,6 +12,7 @@ custom:
   peopleTable: ca-crm-directory-${sls:stage}-people
   companiesTable: ca-crm-directory-${sls:stage}-companies
   workersTable: ca-crm-workers-${sls:stage}-workers
+  assignmentsTable: ca-crm-orders-${sls:stage}-order-assignments
   sessionsTable: ca-crm-auth-${sls:stage}-sessions
   usersTable: ca-crm-auth-${sls:stage}-users
 
@@ -32,6 +34,7 @@ provider:
     PEOPLE_TABLE: ${self:custom.peopleTable}
     COMPANIES_TABLE: ${self:custom.companiesTable}
     WORKERS_TABLE: ${self:custom.workersTable}
+    ASSIGNMENTS_TABLE: ${self:custom.assignmentsTable}
     SESSIONS_TABLE: ${self:custom.sessionsTable}
     USERS_TABLE: ${self:custom.usersTable}
   iam:
@@ -52,6 +55,13 @@ provider:
             - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.peopleTable}
             - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.companiesTable}
             - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.workersTable}
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.ordersTable}
+        # Member scope (P-26 F-58): which orders the member's Worker is assigned to.
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.assignmentsTable}/index/*
         - Effect: Allow
           Action:
             - dynamodb:GetItem

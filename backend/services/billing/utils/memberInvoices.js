@@ -44,4 +44,13 @@ async function isInvoiceVisible(user, item) {
     return Boolean(item && item.orderId) && scope.isOrderVisible(user, item.orderId);
 }
 
-module.exports = { byNewest, visibleInvoiceItems, isInvoiceVisible };
+/**
+ * A member's visible clients ({ personIds, companyIds }, common/scope) for billedTo.canOpen.
+ * Pass the member's visible order ids when already loaded.
+ */
+async function memberClients(user, orderIds) {
+    const ids = orderIds || (await scope.visibleOrderIds(user));
+    return scope.visibleClients(user, ids);
+}
+
+module.exports = { byNewest, visibleInvoiceItems, isInvoiceVisible, memberClients };

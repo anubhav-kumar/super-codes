@@ -7,7 +7,7 @@ const { ENTITY } = require('../../models/invoice');
 const { deriveInvoiceStatus } = require('../../utils/invoiceStatus');
 const { enrichInvoices } = require('../../utils/enrich');
 const scope = require('common/scope');
-const { byNewest, visibleInvoiceItems } = require('../../utils/memberInvoices');
+const { byNewest, visibleInvoiceItems, memberClients } = require('../../utils/memberInvoices');
 
 const DEFAULT_LIMIT = 200;
 const MAX_LIMIT = 500;
@@ -102,6 +102,8 @@ function summarize(items, today) {
  * to; invoices with no orderId never. Always unpaginated (limit/nextToken ignored, nextToken null).
  * ?orderId= of an order that is not visible gives 200 { items: [], nextToken: null, summary: 0/0 };
  * ?billedToId= keeps only visible invoices and sums only those. No linked Worker: every list is [].
+ * Every item's billedTo.canOpen: admin true; member true only when the billed-to party is one of
+ * their visible clients (common/scope visibleClients), else false (name only).
  */
 module.exports.handler = middleware.withHandler(async ({ event, user }) => {
     const query = event.queryStringParameters || {};
@@ -123,14 +125,13 @@ module.exports.handler = middleware.withHandler(async ({ event, user }) => {
         }
         let visible = null;
         if (member) {
-            if (idFilter === 'orderId') {
-                if (!(await scope.isOrderVisible(user, id))) {
-                    return http.ok({ items: [], nextToken: null, summary: { ...EMPTY_SUMMARY } });
-                }
-            } else {
-                visible = await scope.visibleOrderIds(user);
-                if (visible.size === 0) return http.ok({ items: [], nextToken: null, summary: { ...EMPTY_SUMMARY } });
+            if (idFilter === 'orderId' && !(await scope.isOrderVisible(user, id))) {
+                return http.ok({ items: [], nextToken: null, summary: { ...EMPTY_SUMMARY } });
             }
+            visible = await scope.visibleOrderIds(user);
+            // The base-table check above wins over a byWorker index that has not caught up yet.
+            if (idFilter === 'orderId') visible.add(id);
+            if (visible.size === 0) return http.ok({ items: [], nextToken: null, summary: { ...EMPTY_SUMMARY } });
         }
         const found = await database.queryAll({
             TableName: process.env.INVOICES_TABLE,
@@ -142,7 +143,8 @@ module.exports.handler = middleware.withHandler(async ({ event, user }) => {
         });
         const items = visible ? found.filter((i) => i.orderId && visible.has(i.orderId)) : found;
         const summary = summarize(items, validators.todayIst());
-        return http.ok({ items: await enrichInvoices(items), nextToken: null, summary });
+        const clients = member ? await memberClients(user, visible) : null;
+        return http.ok({ items: await enrichInvoices(items, clients), nextToken: null, summary });
     }
 
     if (query.status !== undefined) {
@@ -153,15 +155,20 @@ module.exports.handler = middleware.withHandler(async ({ event, user }) => {
         }
         if (member) {
             const today = validators.todayIst();
-            const items = (await visibleInvoiceItems(user)).filter((i) => matchesStatus(i, query.status, today));
-            return http.ok({ items: await enrichInvoices(items), nextToken: null });
+            const visible = await scope.visibleOrderIds(user);
+            const items = (await visibleInvoiceItems(user, visible)).filter((i) =>
+                matchesStatus(i, query.status, today)
+            );
+            return http.ok({ items: await enrichInvoices(items, await memberClients(user, visible)), nextToken: null });
         }
         const items = (await itemsForStatus(query.status)).sort(byNewest);
         return http.ok({ items: await enrichInvoices(items), nextToken: null });
     }
 
     if (member) {
-        return http.ok({ items: await enrichInvoices(await visibleInvoiceItems(user)), nextToken: null });
+        const visible = await scope.visibleOrderIds(user);
+        const items = await visibleInvoiceItems(user, visible);
+        return http.ok({ items: await enrichInvoices(items, await memberClients(user, visible)), nextToken: null });
     }
 
     const limit = parseLimit(query.limit);
