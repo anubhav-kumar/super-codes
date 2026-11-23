@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import Badge from '../components/Badge.jsx';
 import Button from '../components/Button.jsx';
-import Card from '../components/Card.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import DataView from '../components/DataView.jsx';
 import DueLabel from '../components/DueLabel.jsx';
@@ -15,6 +14,7 @@ import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import RecordHeader from '../components/RecordHeader.jsx';
 import RecordNo from '../components/RecordNo.jsx';
+import Section from '../components/Section.jsx';
 import { isInvoicePaid, isInvoiceSettled, lastPaidDate } from '../components/invoices/invoiceSettlement.js';
 import { setInvoiceBaseStatus } from '../api/invoices.js';
 import { INVOICE_STATUS_TONE, invoiceStatusLabel } from '../constants/invoices.js';
@@ -155,25 +155,44 @@ function InvoiceDetail({ invoice, reload }) {
             >
                 {!online && <OfflineActionHint />}
             </RecordHeader>
-            <Card>
-                <FactList
-                    items={[
-                        { label: 'Invoice date', value: formatDate(invoice.invoiceDate) },
-                        { label: 'Due date', value: formatDate(invoice.dueDate) },
-                        { label: 'Related order', value: orderLabel, to: invoice.order && invoice.order.id ? `/orders/${invoice.order.id}` : undefined, span: true },
-                        { label: 'Description', value: invoice.description || '', span: true },
-                    ]}
+            {/*
+              F-38, same split as order detail. Phones: one column in the order Details, Money summary,
+              Payments (the left column's wrapper is `contents`, so `order-*` interleaves the summary).
+              lg+: left Details / Payments, right a 360 px Money summary that stays in view, so each
+              label sits close to its amount.
+            */}
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,22.5rem)] lg:items-start lg:gap-6">
+                <div className="contents lg:flex lg:flex-col lg:gap-4">
+                    <Section title="Details" flush={false} className="order-1 lg:order-none">
+                        <FactList
+                            items={[
+                                { label: 'Invoice date', value: formatDate(invoice.invoiceDate) },
+                                { label: 'Due date', value: formatDate(invoice.dueDate) },
+                                { label: 'Related order', value: orderLabel, to: invoice.order && invoice.order.id ? `/orders/${invoice.order.id}` : undefined, span: true },
+                                { label: 'Description', value: invoice.description || '', span: true },
+                            ]}
+                        />
+                    </Section>
+                    <InvoicePaymentsSection invoice={invoice} className="order-3 lg:order-none" />
+                </div>
+                <MoneySummary
+                    amount={invoice.amount}
+                    tax={invoice.tax}
+                    total={invoice.total}
+                    received={invoice.amountReceived}
+                    outstanding={invoice.outstanding}
+                    outstandingTone={look.tone}
+                    outstandingHint={look.hint}
+                    className="order-2 lg:sticky lg:top-4 lg:order-none"
                 />
-            </Card>
+            </div>
             {status.dialog}
-            <MoneySummary amount={invoice.amount} tax={invoice.tax} total={invoice.total} received={invoice.amountReceived} outstanding={invoice.outstanding} outstandingTone={look.tone} outstandingHint={look.hint} className="mt-4" />
-            <InvoicePaymentsSection invoice={invoice} />
         </>
     );
 }
 
 /**
- * Invoice detail (F-06, F-07, F-25, F-37): header with status, due label and state actions (Issue invoice
+ * Invoice detail (F-06, F-07, F-25, F-37, F-38): header with status, due label and state actions (Issue invoice
  * on a draft, Record payment while something is outstanding, Edit, More > Cancel invoice), facts, money
  * summary and payments. A settled invoice (paid or cancelled) shows no due label and no Record payment;
  * a paid one shows "Paid on <last Paid payment date>".
