@@ -10,6 +10,7 @@ const { toItem, toWorker } = require('../models/worker');
  * Full replace of the editable fields; omitted or null optional fields are cleared.
  * 200 Worker, 400 VALIDATION_FAILED, 404 NOT_FOUND
  * Setting INACTIVE never touches order assignments.
+ * Admin only: a member gets 404 NOT_FOUND.
  */
 module.exports.handler = middleware.withHandler(async ({ event, body }) => {
     const id = event.pathParameters && event.pathParameters.id;
@@ -38,4 +39,4 @@ module.exports.handler = middleware.withHandler(async ({ event, body }) => {
 
     logger.info('worker updated', { workerId: id });
     return http.ok(toWorker(item));
-});
+}, { adminOnly: true });

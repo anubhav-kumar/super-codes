@@ -1,6 +1,6 @@
 'use strict';
 
-const { QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { middleware, database, errors, http } = require('common');
 const { STATUSES } = require('../validators/worker');
 const { ENTITY, toWorker } = require('../models/worker');
@@ -28,15 +28,24 @@ async function toListItems(items) {
  * GET /workers?status=ACTIVE|INACTIVE  filtered by status, by name A-Z, unpaginated
  * 200 { items: [Worker list item], nextToken: string | null }, 400 VALIDATION_FAILED
  * Worker list item = Worker + openOrderCount (open orders the worker is assigned to, primary or not).
+ * Member: only their own linked Worker (when it matches ?status), unpaginated; [] with no link.
  */
-module.exports.handler = middleware.withHandler(async ({ event }) => {
+module.exports.handler = middleware.withHandler(async ({ event, user }) => {
     const query = event.queryStringParameters || {};
     const table = process.env.WORKERS_TABLE;
 
+    if (query.status !== undefined && !STATUSES.includes(query.status)) {
+        throw errors.validationFailed([{ field: 'status', message: `Status must be one of ${STATUSES.join(', ')}` }]);
+    }
+
+    if (!user.isAdmin) {
+        if (!user.workerId) return http.ok({ items: [], nextToken: null });
+        const res = await database.doc.send(new GetCommand({ TableName: table, Key: { id: user.workerId } }));
+        const own = res.Item && (query.status === undefined || res.Item.status === query.status) ? [res.Item] : [];
+        return http.ok({ items: await toListItems(own), nextToken: null });
+    }
+
     if (query.status !== undefined) {
-        if (!STATUSES.includes(query.status)) {
-            throw errors.validationFailed([{ field: 'status', message: `Status must be one of ${STATUSES.join(', ')}` }]);
-        }
         const items = await database.queryAll({
             TableName: table,
             IndexName: 'byStatus',

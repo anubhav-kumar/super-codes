@@ -12,6 +12,8 @@ const { loadClientScope, canOpenCompany } = require('../../utils/scope');
  * 400 VALIDATION_FAILED, 404 NOT_FOUND, 409 PAN_TAKEN
  * Associations are changed only through the association routes.
  * A member may update only a visible client; any other id is 404 before the body is validated.
+ * A member may not change pan: a body PAN that differs from the stored one is 400 VALIDATION_FAILED
+ * (field pan), checked before the PAN uniqueness check.
  */
 module.exports.handler = middleware.withHandler(async ({ event, body, user }) => {
     const id = event.pathParameters && event.pathParameters.id;
@@ -25,6 +27,9 @@ module.exports.handler = middleware.withHandler(async ({ event, body, user }) =>
     const existing = await getCompany(id);
     if (!existing) throw errors.notFound();
 
+    if (!user.isAdmin && (fields.pan || null) !== (existing.pan || null)) {
+        throw errors.validationFailed([{ field: 'pan', message: 'Only an admin can change PAN' }]);
+    }
     await assertCompanyPanFree(fields.pan, id);
 
     const item = buildCompanyItem(id, fields, { createdAt: existing.createdAt, updatedAt: new Date().toISOString() });
