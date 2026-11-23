@@ -29,11 +29,12 @@ function BackButton({ backTo, backLabel }) {
 
 /**
  * Fills the shell's top bar (it renders nothing in the page body).
- *   Top-level lists: <PageHeader title="Orders" actions={...} search={{ value, onChange, placeholder }} />
+ *   Top-level lists: <PageHeader title="Orders" actions={...} search={{ value, onChange, placeholder, label }} />
  *   Inner screens:   <PageHeader backTo="/orders" backLabel="Orders" />  (the record or form title stays in the page)
  * `titleSlot` replaces the visible title (e.g. the People / Companies switch); `title` then stays as a
- * screen-reader heading. Search: inline 280 px field on md+; on phones a search button that opens
- * the field over the title (an active query keeps it open).
+ * screen-reader heading. Search: `placeholder` is the short visible hint, `label` the full accessible
+ * name. Inline 280 px field on md+; on phones a search button that opens the field over the title
+ * (an active query keeps it open).
  * Renders nothing until AppShell has mounted the slot, so the title never flashes in the body.
  */
 export default function PageHeader({ title, titleSlot, backTo, backLabel = 'Back', actions, search }) {
@@ -52,6 +53,7 @@ export default function PageHeader({ title, titleSlot, backTo, backLabel = 'Back
                 value={search.value}
                 onChange={search.onChange}
                 placeholder={search.placeholder}
+                label={search.label}
                 className="min-w-0 flex-1"
                 autoFocus
             />
@@ -82,6 +84,7 @@ export default function PageHeader({ title, titleSlot, backTo, backLabel = 'Back
                             value={search.value}
                             onChange={search.onChange}
                             placeholder={search.placeholder}
+                            label={search.label}
                             className="w-[280px]"
                         />
                     ) : (

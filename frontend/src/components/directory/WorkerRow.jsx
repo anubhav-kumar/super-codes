@@ -1,4 +1,5 @@
 import Badge from '../Badge.jsx';
+import ClientIcon from '../ClientIcon.jsx';
 import ListRow from '../ListRow.jsx';
 import { designationLabel, WORKER_STATUS_TONE, workerStatusLabel } from '../../constants/workers.js';
 import { Missing } from './directoryText.jsx';
@@ -20,13 +21,14 @@ export function WorkerStatus({ worker, hideActive = false }) {
 }
 
 /**
- * Workers list row (F-30). Line 1: name + "N open" on the right. Line 2: designation · status badge
+ * Workers list row (F-30). Leading person icon like People rows (F-42). Line 1: name + "N open" on the right. Line 2: designation · status badge
  * (no Active badge in the Active filter; Inactive is a quiet gray badge).
  */
 export default function WorkerRow({ worker, hideActive = false }) {
     return (
         <ListRow
             to={`/workers/${worker.id}`}
+            leading={<ClientIcon type="PERSON" />}
             title={worker.name}
             trailing={<OpenOrders worker={worker} />}
             meta={[

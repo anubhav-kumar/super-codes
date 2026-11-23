@@ -5,6 +5,7 @@ import Button from '../components/Button.jsx';
 import ClientIcon from '../components/ClientIcon.jsx';
 import DataView from '../components/DataView.jsx';
 import DueLabel from '../components/DueLabel.jsx';
+import { isInvoiceSettled } from '../components/invoices/invoiceSettlement.js';
 import EmptyState from '../components/EmptyState.jsx';
 import InvoiceRow from '../components/InvoiceRow.jsx';
 import ListToolbar from '../components/ListToolbar.jsx';
@@ -41,18 +42,25 @@ const statusHidden = (invoice, filter) => (INVOICE_FILTER_IMPLIED_STATUS[filter]
 const rowKey = (i) => i.id;
 const rowHref = (i) => `/invoices/${i.id}`;
 
-/** Due cell: relative label for issued invoices, the plain date for drafts, nothing for cancelled. */
+const NOTHING = (
+    <span className="text-ink-subtle">
+        <span aria-hidden="true">—</span>
+        <span className="sr-only">Nothing outstanding</span>
+    </span>
+);
+
+/** Due cell: relative label for open invoices, the plain date for drafts, "—" for closed (Paid / Cancelled). */
 function DueCell({ invoice }) {
-    if (invoice.baseStatus === 'CANCELLED') return <span className="text-ink-subtle">—</span>;
+    if (isInvoiceSettled(invoice)) return <span className="text-ink-subtle">—</span>;
     if (invoice.baseStatus === 'DRAFT') return <DueLabel dueDate={invoice.dueDate} open={false} compact />;
     const open = isInvoiceOpen(invoice);
     return <DueLabel dueDate={invoice.dueDate} open={open} overdue={open ? Boolean(invoice.isOverdue) : undefined} compact />;
 }
 
-/** Outstanding cell: red when overdue, "Paid" when nothing is owed; drafts and cancelled owe nothing. */
+/** Outstanding cell: the amount for open invoices (red when overdue); drafts and closed invoices show "—". */
 function OutstandingCell({ invoice }) {
-    if (invoice.baseStatus !== 'ISSUED') return <span className="text-ink-subtle">—</span>;
-    return <Money value={invoice.outstanding ?? 0} overdue={Boolean(invoice.isOverdue)} strong paidLabel />;
+    if (!isInvoiceOpen(invoice)) return NOTHING;
+    return <Money value={invoice.outstanding} overdue={Boolean(invoice.isOverdue)} strong />;
 }
 
 function OrderCell({ order, service }) {
@@ -60,17 +68,18 @@ function OrderCell({ order, service }) {
     return (
         <Link
             to={`/orders/${order.id}`}
-            className="relative z-10 inline-flex flex-col rounded-control hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            title={service || undefined}
+            className="relative z-10 inline-flex rounded-control whitespace-nowrap hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
             <RecordNo>{order.orderNumber || 'Order'}</RecordNo>
-            {service && <span className="text-[13px]/[18px] break-words text-ink-muted">{service}</span>}
         </Link>
     );
 }
 
 /**
- * Fits a 734 px table (1024 px, sidebar expanded): Order hides under 50rem, and the number, due,
- * money and status columns take their one-line content width (no fixed widths).
+ * Compact at 1024 px (F-43): Order hides under 60rem (both sidebar states at 1024 px) and shows
+ * the order number only, with the service as a hover title. Billed to is at most two lines. The
+ * number, due, money and status columns take their one-line content width (no fixed widths).
  */
 function invoiceColumns({ filter, serviceByOrderId }) {
     return [
@@ -78,17 +87,24 @@ function invoiceColumns({ filter, serviceByOrderId }) {
         {
             key: 'billedTo',
             header: 'Billed to',
-            // Priority width: 17% of the table, at most 12rem (from a ~1130 px table, 1440 px). The
-            // other visible columns are one-line, so any spare width also goes here.
-            minWidth: 'min(12rem, 17cqi)',
-            render: (i) => (
-                <span className="flex items-center gap-2">
-                    {i.billedTo && <ClientIcon type={i.billedTo.type} size="inline" />}
-                    <span className="break-words">{(i.billedTo && i.billedTo.name) || 'Unknown'}</span>
-                </span>
-            ),
+            // Priority width: 21% of the table, at most 14rem (from a ~1070 px table, 1440 px). The
+            // other visible columns are one-line, so any spare width also goes here. The icon hides
+            // under 56rem (1024 px, sidebar expanded) to give the name its room; the name wraps to
+            // at most two lines, the full name in its title.
+            minWidth: 'min(14rem, 21cqi)',
+            render: (i) => {
+                const name = (i.billedTo && i.billedTo.name) || 'Unknown';
+                return (
+                    <span className="flex items-center gap-2">
+                        {i.billedTo && <ClientIcon type={i.billedTo.type} size="inline" className="@max-[56rem]:hidden" />}
+                        <span className="line-clamp-2 break-words" title={name}>
+                            {name}
+                        </span>
+                    </span>
+                );
+            },
         },
-        { key: 'order', header: 'Order', hideNarrow: true, render: (i) => <OrderCell order={i.order} service={i.order ? serviceByOrderId.get(i.order.id) : null} /> },
+        { key: 'order', header: 'Order', hideNarrow: 'wide', nowrap: true, render: (i) => <OrderCell order={i.order} service={i.order ? serviceByOrderId.get(i.order.id) : null} /> },
         { key: 'due', header: 'Due', sortKey: 'due', nowrap: true, render: (i) => <DueCell invoice={i} /> },
         {
             key: 'total',
@@ -235,7 +251,7 @@ export default function InvoicesListPage() {
         <PageBody width="list">
             <PageHeader
                 title="Invoices"
-                search={all.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Search invoice, billed to or order' } : undefined}
+                search={all.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Invoice, client, order', label: 'Search invoices by number, billed to or order' } : undefined}
                 actions={
                     <Button icon="plus" to="/invoices/new" disabled={!online} aria-label="New invoice">
                         <span className="md:hidden">New</span>

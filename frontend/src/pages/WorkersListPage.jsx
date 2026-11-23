@@ -67,7 +67,7 @@ export default function WorkersListPage() {
         <PageBody width="list">
             <PageHeader
                 title="Workers"
-                search={all.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Search name or phone' } : undefined}
+                search={all.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Name or phone', label: 'Search workers by name, phone or designation' } : undefined}
                 actions={
                     <Button icon="plus" to="/workers/new" disabled={!online} aria-label="Add worker">
                         <span className="md:hidden">Add</span>

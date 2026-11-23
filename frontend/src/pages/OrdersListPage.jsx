@@ -176,7 +176,7 @@ export default function OrdersListPage() {
         <PageBody width="list">
             <PageHeader
                 title="Orders"
-                search={all.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Search orders, clients, services' } : undefined}
+                search={all.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Order, client, service', label: 'Search orders by number, client, service or owner' } : undefined}
                 actions={
                     <Button icon="plus" to="/orders/new" disabled={!online} aria-label="New order">
                         <span className="md:hidden">New</span>

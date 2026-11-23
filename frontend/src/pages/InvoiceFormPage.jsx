@@ -23,7 +23,7 @@ import { useOrder } from '../hooks/useOrders.js';
 import useSubmit from '../hooks/useSubmit.js';
 import useToast from '../hooks/useToast.js';
 import { addDays, todayLocal } from '../utils/dates.js';
-import { formatMoney } from '../utils/format.js';
+import { formatMoney, moneyInputValue } from '../utils/format.js';
 import { parseMoney } from '../utils/validation.js';
 
 const today = () => todayLocal();
@@ -52,8 +52,8 @@ function toForm(invoice) {
         invoiceDate: invoice.invoiceDate || '',
         dueDate: invoice.dueDate || '',
         description: invoice.description || '',
-        amount: invoice.amount === null || invoice.amount === undefined ? '' : String(invoice.amount),
-        tax: invoice.tax === null || invoice.tax === undefined ? '0' : String(invoice.tax),
+        amount: moneyInputValue(invoice.amount),
+        tax: invoice.tax === null || invoice.tax === undefined ? '0' : moneyInputValue(invoice.tax),
         status: invoice.baseStatus || 'DRAFT',
     };
 }
@@ -151,7 +151,7 @@ function useOrderPrefill(orderId, setForm) {
             order: f.order || orderPickerValue(o),
             billedTo: f.billedTo || party(o.client),
             description: f.description.trim() === '' ? o.serviceName || '' : f.description,
-            amount: String(f.amount).trim() === '' && unbilled !== null && unbilled > 0 ? String(unbilled) : f.amount,
+            amount: String(f.amount).trim() === '' && unbilled !== null && unbilled > 0 ? moneyInputValue(unbilled) : f.amount,
         }));
     }, [order.status, order.data, invoicesSettled, unbilled, setForm]);
     return { status: order.status, order: order.data || null, unbilled };
