@@ -8,6 +8,7 @@ import Money from '../components/Money.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
 import OrderBillingSection from '../components/orders/OrderBillingSection.jsx';
 import { orderBilling } from '../components/orders/orderBilling.js';
+import OrderTimelineSection from '../components/orders/OrderTimelineSection.jsx';
 import OrderWorkersSection from '../components/orders/OrderWorkersSection.jsx';
 import StatusControl from '../components/orders/StatusControl.jsx';
 import PageBody from '../components/PageBody.jsx';
@@ -158,6 +159,7 @@ function OrderDetail({ order, reload }) {
                             <TextSection title="Notes" text={order.notes} />
                         </div>
                     )}
+                    <OrderTimelineSection order={order} onOrderChange={reload} className="order-6 lg:order-none" />
                 </div>
                 <OrderBillingSection order={order} invoices={invoices} className="order-2 lg:order-none" />
             </div>
