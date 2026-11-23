@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import Button from '../components/Button.jsx';
+import DataView from '../components/DataView.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import FormFooter from '../components/FormFooter.jsx';
 import FormLayout, { FormHeading } from '../components/FormLayout.jsx';
@@ -11,16 +12,24 @@ import Switch from '../components/Switch.jsx';
 import TextField from '../components/TextField.jsx';
 import { TemporaryPasswordPanel } from '../components/users/TemporaryPasswordSheet.jsx';
 import WorkerLinkField, { linkableWorkers, WORKER_NEW, WORKER_NONE } from '../components/users/WorkerLinkField.jsx';
-import { createUser } from '../api/users.js';
+import { createUser, updateUser } from '../api/users.js';
 import { createWorker } from '../api/workers.js';
+import useAuth from '../hooks/useAuth.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import useSubmit from '../hooks/useSubmit.js';
-import { useUsers } from '../hooks/useUsers.js';
+import useToast from '../hooks/useToast.js';
+import { useUser, useUsers } from '../hooks/useUsers.js';
 import { useWorkers } from '../hooks/useWorkers.js';
 import { isValidEmail } from '../utils/validation.js';
 
 const ADMIN_HINT = 'Admins manage users, billing and every record. Members see only their assigned orders.';
 const WORKER_LINKED = 'This worker is linked to another user. Choose another.';
+const OWN_ADMIN_HINT = "You can't remove your own admin access.";
+// Admin-flag refusals are placed under the switch, whether or not the server names a field.
+const ADMIN_FLAG_ERRORS = {
+    LAST_ADMIN: 'There must be at least one admin.',
+    CANNOT_DEMOTE_SELF: OWN_ADMIN_HINT,
+};
 
 function validate(form) {
     const errors = {};
@@ -40,7 +49,18 @@ function placeServerErrors(fieldErrors, error) {
         placed.worker = error && error.code === 'WORKER_ALREADY_LINKED' ? WORKER_LINKED : placed.workerId;
         delete placed.workerId;
     }
+    const code = error && error.code;
+    if (code && ADMIN_FLAG_ERRORS[code]) placed.isAdmin = ADMIN_FLAG_ERRORS[code];
     return placed;
+}
+
+/** Field errors from an ApiError's details ({ [field]: message }, first message per field). */
+function detailErrors(error) {
+    const fields = {};
+    for (const d of (error && error.details) || []) {
+        if (d && d.field && !fields[d.field]) fields[d.field] = d.message;
+    }
+    return fields;
 }
 
 /**
@@ -91,11 +111,7 @@ function AddUserForm() {
             return createUser({ id: userId.current, name, email: form.email.trim(), isAdmin: form.isAdmin, workerId });
         });
         if (!result.ok) {
-            const fields = {};
-            for (const d of (result.error && result.error.details) || []) {
-                if (d && d.field && !fields[d.field]) fields[d.field] = d.message;
-            }
-            setServerErrors(placeServerErrors(fields, result.error));
+            setServerErrors(placeServerErrors(detailErrors(result.error), result.error));
             return;
         }
         const data = result.data || {};
@@ -173,8 +189,141 @@ function AddUserForm() {
     );
 }
 
-/** Add user (/users/new), F-49, admin only via the route guard. Online only. */
+/**
+ * Edit user form (F-52): PUT /auth/users/{id} with name, email, admin flag and Worker link (full set).
+ * "New worker" creates the Worker first (POST /workers, one id per form, idempotent), as in Add user.
+ * On your own record the Admin switch is disabled (the backend also refuses, CANNOT_DEMOTE_SELF). After
+ * saving your own record the session is refreshed, so the account menu, role and Worker link follow.
+ */
+function EditUserForm({ user, users }) {
+    const navigate = useNavigate();
+    const toast = useToast();
+    const { user: me, refreshMe } = useAuth();
+    const workers = useWorkers();
+    const newWorkerId = useRef(crypto.randomUUID());
+    const isYou = Boolean(me) && me.id === user.id;
+    const currentId = (user.worker && user.worker.id) || null;
+    const [form, setForm] = useState(() => ({
+        name: user.name || '',
+        email: user.email || '',
+        isAdmin: user.isAdmin !== false,
+        worker: currentId || WORKER_NONE,
+    }));
+    const [localErrors, setLocalErrors] = useState({});
+    const [serverErrors, setServerErrors] = useState({});
+    const { submit, submitting, formError } = useSubmit({ errorToast: true });
+
+    const options = useMemo(() => {
+        const list = linkableWorkers(workers.data, users, currentId);
+        // Keep the current Worker selectable even when it is missing from GET /workers.
+        if (currentId && !list.some((w) => w.id === currentId)) {
+            list.unshift({ id: currentId, name: user.worker.name || 'Unknown worker' });
+        }
+        return list;
+    }, [workers.data, users, currentId, user.worker]);
+
+    const set = (field) => (value) => {
+        setForm((f) => ({ ...f, [field]: value }));
+        if (localErrors[field]) setLocalErrors((e) => ({ ...e, [field]: undefined }));
+        if (serverErrors[field]) setServerErrors((e) => ({ ...e, [field]: undefined }));
+    };
+    const errorOf = (field) => localErrors[field] || serverErrors[field];
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        const errors = validate(form);
+        setLocalErrors(errors);
+        setServerErrors({});
+        if (Object.keys(errors).length) return;
+        const name = form.name.trim();
+        const result = await submit(async () => {
+            let workerId = null;
+            if (form.worker === WORKER_NEW) {
+                await createWorker({ id: newWorkerId.current, name, designation: 'OTHER' });
+                workerId = newWorkerId.current;
+            } else if (form.worker !== WORKER_NONE) {
+                workerId = form.worker;
+            }
+            return updateUser(user.id, {
+                name,
+                email: form.email.trim(),
+                // Your own flag is always sent unchanged (the switch is disabled).
+                isAdmin: isYou ? user.isAdmin !== false : form.isAdmin,
+                workerId,
+            });
+        });
+        if (!result.ok) {
+            setServerErrors(placeServerErrors(detailErrors(result.error), result.error));
+            return;
+        }
+        toast.success('Changes saved');
+        navigate(`/users/${user.id}`, { replace: true });
+        // Your own name or Worker link may have changed: refresh the session (account menu, scope).
+        if (isYou) refreshMe().catch(() => {});
+    };
+
+    return (
+        <FormLayout
+            title="Edit user"
+            meta={user.name}
+            error={formError}
+            onSubmit={handleSubmit}
+            footer={<FormFooter submitLabel="Save" submitting={submitting} cancelTo={`/users/${user.id}`} />}
+        >
+            <FormSection title="Account">
+                <TextField label="Name" required autoComplete="off" value={form.name} onChange={set('name')} error={errorOf('name')} />
+                <TextField
+                    label="Email"
+                    required
+                    type="email"
+                    inputMode="email"
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    value={form.email}
+                    onChange={set('email')}
+                    error={errorOf('email')}
+                />
+            </FormSection>
+            <FormSection title="Access">
+                <Switch
+                    label="Admin"
+                    checked={form.isAdmin}
+                    onChange={set('isAdmin')}
+                    disabled={isYou}
+                    hint={isYou ? OWN_ADMIN_HINT : ADMIN_HINT}
+                />
+                {errorOf('isAdmin') && <p className="text-sm text-danger">{errorOf('isAdmin')}</p>}
+            </FormSection>
+            <FormSection title="Worker">
+                <WorkerLinkField
+                    value={form.worker}
+                    onChange={set('worker')}
+                    name={form.name}
+                    workers={options}
+                    currentId={currentId}
+                    loading={workers.status === 'loading'}
+                    error={errorOf('worker')}
+                />
+            </FormSection>
+        </FormLayout>
+    );
+}
+
+/** Loads the user (from GET /auth/users; there is no single-user endpoint) for the edit form. */
+function EditUser({ userId }) {
+    const user = useUser(userId);
+    const users = useUsers();
+    return (
+        <DataView resource={user} skeleton="form" notFoundTitle="User not found">
+            {(u) => <EditUserForm user={u} users={users.data} />}
+        </DataView>
+    );
+}
+
+/** Add user (/users/new, F-49) and Edit user (/users/:userId/edit, F-52), admin only via the route guard. Online only. */
 export default function UserFormPage() {
+    const { userId } = useParams();
     const navigate = useNavigate();
     const { online } = useOnlineStatus();
     // A form opened while offline shows the "needs a connection" state until the app is online once.
@@ -183,21 +332,26 @@ export default function UserFormPage() {
         if (online) setEverOnline(true);
     }, [online]);
 
+    const isEdit = Boolean(userId);
+    const backTo = isEdit ? `/users/${userId}` : '/users';
+
     return (
         <PageBody width="form">
-            <PageHeader backTo="/users" backLabel="Users" />
-            {everOnline ? (
-                <AddUserForm />
-            ) : (
+            <PageHeader backTo={backTo} backLabel={isEdit ? 'User' : 'Users'} />
+            {!everOnline ? (
                 <>
-                    <FormHeading title="Add user" />
+                    <FormHeading title={isEdit ? 'Edit user' : 'Add user'} />
                     <EmptyState
                         icon="offline"
-                        title="Adding users needs a connection"
+                        title={isEdit ? 'Editing users needs a connection' : 'Adding users needs a connection'}
                         text="Connect to the internet and try again."
-                        action={{ label: 'Go back', onClick: () => navigate('/users') }}
+                        action={{ label: 'Go back', onClick: () => navigate(backTo) }}
                     />
                 </>
+            ) : isEdit ? (
+                <EditUser userId={userId} />
+            ) : (
+                <AddUserForm />
             )}
         </PageBody>
     );

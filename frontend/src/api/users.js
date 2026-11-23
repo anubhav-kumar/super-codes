@@ -47,3 +47,14 @@ export function createUser(body) {
 export function resetUserPassword(id) {
     return request(`/auth/users/${encodeURIComponent(id)}/reset-password`, { method: 'POST' });
 }
+
+/**
+ * PUT /auth/users/{id} (F-52): the full editable set; workerId null unlinks.
+ *   body { name, email, isAdmin, workerId: uuid | null }
+ * 200 -> data { user }. Password, status and sessions are untouched; changes apply on the user's next request.
+ * Errors: 400 VALIDATION_FAILED, 400 REFERENCE_NOT_FOUND (workerId), 404 NOT_FOUND, 409 EMAIL_TAKEN (email),
+ * 409 WORKER_ALREADY_LINKED / WORKER_INACTIVE (workerId), 409 CANNOT_DEMOTE_SELF, 409 LAST_ADMIN.
+ */
+export function updateUser(id, body) {
+    return request(`/auth/users/${encodeURIComponent(id)}`, { method: 'PUT', body });
+}

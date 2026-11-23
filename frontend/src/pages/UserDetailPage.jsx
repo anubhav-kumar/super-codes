@@ -39,6 +39,7 @@ function UserDetail({ user: u, reset }) {
     const { online } = useOnlineStatus();
     const { user: me } = useRole();
     const isYou = Boolean(me) && me.id === u.id;
+    const editTo = `/users/${u.id}/edit`;
 
     const facts = [
         { label: 'Email', value: u.email, href: `mailto:${u.email}`, icon: 'email' },
@@ -54,6 +55,7 @@ function UserDetail({ user: u, reset }) {
         },
         { label: 'Temporary password', value: temporaryPasswordText(u) },
     ];
+    const addLinks = [!u.worker && online ? { label: 'Link a worker', to: editTo } : null];
 
     return (
         <>
@@ -67,16 +69,21 @@ function UserDetail({ user: u, reset }) {
                     isYou ? <YouTag key="you" /> : null,
                 ]}
                 actions={
-                    // Reset password (F-51) is hidden on your own record: use Change password instead.
-                    isYou ? null : (
-                        <Button variant="secondary" icon="key" onClick={reset.ask} disabled={!online || reset.submitting}>
-                            Reset password
+                    <>
+                        <Button variant="secondary" icon="edit" to={editTo} disabled={!online}>
+                            Edit
                         </Button>
-                    )
+                        {/* Reset password (F-51) is hidden on your own record: use Change password instead. */}
+                        {!isYou && (
+                            <Button variant="secondary" icon="key" onClick={reset.ask} disabled={!online || reset.submitting}>
+                                Reset password
+                            </Button>
+                        )}
+                    </>
                 }
             />
             <Section id="details" title="Details" flush={false}>
-                <FactList items={facts} />
+                <FactList items={facts} addLinks={addLinks} />
             </Section>
             {reset.dialog}
         </>
@@ -86,7 +93,7 @@ function UserDetail({ user: u, reset }) {
 /**
  * User detail (F-48, admin only via the route guard): header with role tag, status badge and "You";
  * facts Email, Worker and the temporary password expiry. Loaded from GET /auth/users (no single-user
- * endpoint). Online only. Actions: Reset password (F-51); Edit and Delete come with F-52, F-53.
+ * endpoint). Online only. Actions: Edit (F-52), Reset password (F-51); Delete comes with F-53.
  */
 export default function UserDetailPage() {
     const { userId } = useParams();

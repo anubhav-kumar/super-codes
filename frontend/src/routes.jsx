@@ -50,6 +50,7 @@ export const ROUTES = [
     { path: '/users', adminOnly: true, Page: page(() => import('./pages/UsersListPage.jsx')) },
     { path: '/users/new', adminOnly: true, Page: page(() => import('./pages/UserFormPage.jsx')) },
     { path: '/users/:userId', adminOnly: true, Page: page(() => import('./pages/UserDetailPage.jsx')) },
+    { path: '/users/:userId/edit', adminOnly: true, Page: page(() => import('./pages/UserFormPage.jsx')) },
     { path: '/set-password', public: true, Page: page(() => import('./pages/SetPasswordPage.jsx')) },
 
 ];
