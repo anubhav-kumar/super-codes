@@ -46,4 +46,8 @@ export const ROUTES = [
 
     // P-06 Client profile
 
+    // P-25 User management
+    { path: '/users', adminOnly: true, Page: page(() => import('./pages/UsersListPage.jsx')) },
+    { path: '/users/:userId', adminOnly: true, Page: page(() => import('./pages/UserDetailPage.jsx')) },
+
 ];

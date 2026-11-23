@@ -25,8 +25,8 @@ function AccountHeader({ user, isAdmin, workerName }) {
 
 /**
  * Top-bar account menu. Header: "Signed in as", name, email (the only place it appears), role tag
- * (Admin or Member) and the linked Worker. Items: Change password (F-47, needs a connection),
- * Install app, Sign out.
+ * (Admin or Member) and the linked Worker. Items: Users (admins only, F-48; the phone way to reach
+ * Users, which is sidebar only), Change password (F-47, needs a connection), Install app, Sign out.
  */
 export default function AccountMenu() {
     const { signOut } = useAuth();
@@ -56,6 +56,7 @@ export default function AccountMenu() {
                 icon="account"
                 header={<AccountHeader user={user} isAdmin={isAdmin} workerName={workerName} />}
                 items={[
+                    isAdmin && { label: 'Users', icon: 'users', to: '/users' },
                     {
                         label: 'Change password',
                         icon: 'key',
