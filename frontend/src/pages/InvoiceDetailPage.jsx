@@ -22,6 +22,7 @@ import { clientPath } from '../constants/orders.js';
 import { useInvoice } from '../hooks/useInvoices.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import useRecordVisit from '../hooks/useRecordVisit.js';
+import useRole from '../hooks/useRole.js';
 import { useOrder } from '../hooks/useOrders.js';
 import useSubmit from '../hooks/useSubmit.js';
 import useToast from '../hooks/useToast.js';
@@ -87,6 +88,7 @@ function useStatusChange(invoice, reload) {
 
 function InvoiceDetail({ invoice, reload }) {
     const { online } = useOnlineStatus();
+    const { isAdmin } = useRole();
     const toBilledTo = clientPath(invoice.billedTo);
     const billedToName = (invoice.billedTo && invoice.billedTo.name) || 'Unknown';
     const look = outstandingLook(invoice);
@@ -134,26 +136,28 @@ function InvoiceDetail({ invoice, reload }) {
                     ) : null,
                 ]}
                 actions={
-                    <>
-                        {isDraft && (
-                            <Button icon="issue" onClick={() => status.ask('ISSUED')} disabled={busy}>
-                                Issue invoice
+                    isAdmin && (
+                        <>
+                            {isDraft && (
+                                <Button icon="issue" onClick={() => status.ask('ISSUED')} disabled={busy}>
+                                    Issue invoice
+                                </Button>
+                            )}
+                            {canRecordPayment && (
+                                <Button icon="payment" to={`/invoices/${invoice.id}/payments/new`} disabled={!online}>
+                                    Record payment
+                                </Button>
+                            )}
+                            <Button variant="secondary" icon="edit" to={`/invoices/${invoice.id}/edit`} disabled={!online}>
+                                Edit
                             </Button>
-                        )}
-                        {canRecordPayment && (
-                            <Button icon="payment" to={`/invoices/${invoice.id}/payments/new`} disabled={!online}>
-                                Record payment
-                            </Button>
-                        )}
-                        <Button variant="secondary" icon="edit" to={`/invoices/${invoice.id}/edit`} disabled={!online}>
-                            Edit
-                        </Button>
-                    </>
+                        </>
+                    )
                 }
-                more={[invoice.baseStatus !== 'CANCELLED' && { label: 'Cancel invoice', tone: 'danger', onSelect: () => status.ask('CANCELLED') }]}
+                more={isAdmin ? [invoice.baseStatus !== 'CANCELLED' && { label: 'Cancel invoice', tone: 'danger', onSelect: () => status.ask('CANCELLED') }] : undefined}
                 moreDisabled={busy}
             >
-                {!online && <OfflineActionHint />}
+                {isAdmin && !online && <OfflineActionHint />}
             </RecordHeader>
             {/*
               F-38, same split as order detail. Phones: one column in the order Details, Money summary,
@@ -173,7 +177,7 @@ function InvoiceDetail({ invoice, reload }) {
                             ]}
                         />
                     </Section>
-                    <InvoicePaymentsSection invoice={invoice} className="order-3 lg:order-none" />
+                    <InvoicePaymentsSection invoice={invoice} readOnly={!isAdmin} className="order-3 lg:order-none" />
                 </div>
                 <MoneySummary
                     amount={invoice.amount}
@@ -195,7 +199,9 @@ function InvoiceDetail({ invoice, reload }) {
  * Invoice detail (F-06, F-07, F-25, F-37, F-38): header with status, due label and state actions (Issue invoice
  * on a draft, Record payment while something is outstanding, Edit, More > Cancel invoice), facts, money
  * summary and payments. A settled invoice (paid or cancelled) shows no due label and no Record payment;
- * a paid one shows "Paid on <last Paid payment date>".
+ * a paid one shows "Paid on <last Paid payment date>". Members (P-26 F-56) see it read-only: no
+ * header actions, no More menu, payments are plain rows (the backend returns 404 for invoices
+ * outside their orders, shown as "Invoice not found").
  */
 export default function InvoiceDetailPage() {
     const { invoiceId } = useParams();
