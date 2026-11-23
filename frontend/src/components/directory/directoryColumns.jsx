@@ -11,7 +11,8 @@ const mono = (value) => (value ? <span className="tabular-nums">{value}</span> :
  * one line; quiet tags sit under the name instead of beside it.
  * Short columns (PAN, phone, entity type, outstanding) have no fixed width: they stay on one line and
  * take their content width, so both tables fit 736 px (1024 px with the sidebar expanded) and the
- * spare room at wider sizes goes to the name and text columns.
+ * spare room at wider sizes goes to the name and text columns. PAN hides under a 50rem table, so
+ * Companies keeps room at 734 px.
  */
 export const PEOPLE_COLUMNS = [
     {
@@ -26,7 +27,7 @@ export const PEOPLE_COLUMNS = [
             </>
         ),
     },
-    { key: 'pan', header: 'PAN', nowrap: true, render: (p) => mono(p.pan) },
+    { key: 'pan', header: 'PAN', nowrap: true, hideNarrow: true, render: (p) => mono(p.pan) },
     { key: 'phone', header: 'Phone', nowrap: true, render: (p) => (p.phone ? mono(p.phone) : <Missing>No phone</Missing>) },
     { key: 'companies', header: 'Companies', render: (p) => (p.companies.length > 0 ? <CompanyLinks person={p} /> : dash) },
     {
@@ -40,11 +41,14 @@ export const PEOPLE_COLUMNS = [
     },
 ];
 
-/** DataTable columns of the Companies list at lg+ (F-29): Name · Entity type · PAN · Main contact · Outstanding. */
+/**
+ * DataTable columns of the Companies list at lg+ (F-29): Name · Entity type · PAN · Main contact · Outstanding.
+ * PAN hides under a 50rem table, so "Proprietorship" and an "Authorized Signatory" tag still fit 734 px.
+ */
 export const COMPANY_COLUMNS = [
     { key: 'name', header: 'Name', sortKey: 'name', minWidth: '15rem', render: (c) => c.name },
     { key: 'entityType', header: 'Entity type', nowrap: true, render: (c) => entityTypeLabel(c.entityType) || dash },
-    { key: 'pan', header: 'PAN', nowrap: true, render: (c) => mono(c.pan) },
+    { key: 'pan', header: 'PAN', nowrap: true, hideNarrow: true, render: (c) => mono(c.pan) },
     {
         key: 'mainContact',
         header: 'Main contact',
