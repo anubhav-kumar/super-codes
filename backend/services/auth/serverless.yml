@@ -103,6 +103,15 @@ functions:
           path: auth/logout
           method: post
           cors: true
+  password:
+    handler: handlers/password.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: auth/password
+          method: post
+          cors: true
 
 resources:
   Resources:
