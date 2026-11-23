@@ -1,7 +1,9 @@
 import { Suspense, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { scopeKey } from '../auth/roles.js';
+import useRole from '../hooks/useRole.js';
 import useSidebarState from '../hooks/useSidebarState.js';
-import { activeNavItem, sortedNavItems } from '../navigation.js';
+import { activeNavItem, bottomNavItems, visibleNavItems } from '../navigation.js';
 import AccountMenu from './AccountMenu.jsx';
 import AppMark from './AppMark.jsx';
 import Icon from './Icon.jsx';
@@ -101,14 +103,17 @@ function BottomNav({ items, activeId }) {
 
 /**
  * Layout for signed-in screens. md+: collapsible left sidebar (240 px or a 64 px icon rail,
- * remembered per browser). Phones: bottom navigation. Both are built from NAV_ITEMS.
+ * remembered per browser). Phones: bottom navigation. Both show only the items the user's role may
+ * see (visibleNavItems); the bottom nav also drops sidebar-only items. Pages remount when the user,
+ * role or Worker link changes (Outlet key), so they refetch in the new scope.
  * The 56 px top bar holds a slot that the page fills through PageHeader (title or back button,
  * search, actions) followed by the account menu. Content has no max width; pages set it with PageBody.
  */
 export default function AppShell() {
     const location = useLocation();
-    const items = sortedNavItems();
-    const active = activeNavItem(location.pathname);
+    const { user, isAdmin } = useRole();
+    const items = visibleNavItems({ isAdmin });
+    const active = activeNavItem(location.pathname, items);
     const { collapsed, toggle } = useSidebarState();
     const [slot, setSlot] = useState(null);
 
@@ -131,11 +136,11 @@ export default function AppShell() {
                                 </PageBody>
                             }
                         >
-                            <Outlet />
+                            <Outlet key={scopeKey(user)} />
                         </Suspense>
                     </main>
 
-                    <BottomNav items={items} activeId={active?.id} />
+                    <BottomNav items={bottomNavItems(items)} activeId={active?.id} />
                 </div>
             </div>
         </ShellHeaderContext.Provider>

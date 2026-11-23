@@ -1,8 +1,10 @@
 /**
  * Top-level navigation (bottom nav on phones, sidebar on md+), sorted by `order`.
  * One line per item, under the marker of the pipeline that adds it; keep the blank line after
- * each marker. Optional: description and quickAction: { label, to } (shown on Home).
+ * each marker. Optional: description and quickAction: { label, to } (shown on Home),
+ * adminOnly: true (hidden for members), bottomNav: false (md+ sidebar only, not the phone bottom nav).
  * icon is an Icon name; match lists the path prefixes that keep the item highlighted.
+ * Screens use visibleNavItems({ isAdmin }), never NAV_ITEMS directly.
  */
 export const NAV_ITEMS = [
     // P-01 Sign in
@@ -24,11 +26,17 @@ export const NAV_ITEMS = [
 
 export const sortedNavItems = () => [...NAV_ITEMS].sort((a, b) => a.order - b.order);
 
-/** The nav item whose `match` prefixes cover `pathname` ("/" matches only itself). */
-export function activeNavItem(pathname) {
+/** Items the user may see, sorted: admin-only items are dropped for members. */
+export const visibleNavItems = ({ isAdmin }) => sortedNavItems().filter((item) => isAdmin || !item.adminOnly);
+
+/** The phone bottom nav: visible items without bottomNav: false. */
+export const bottomNavItems = (items) => items.filter((item) => item.bottomNav !== false);
+
+/** The nav item among `items` whose `match` prefixes cover `pathname` ("/" matches only itself). */
+export function activeNavItem(pathname, items = NAV_ITEMS) {
     let best = null;
     let bestLen = -1;
-    for (const item of NAV_ITEMS) {
+    for (const item of items) {
         for (const prefix of item.match || [item.to]) {
             const hit = prefix === '/' ? pathname === '/' : pathname === prefix || pathname.startsWith(`${prefix}/`);
             if (hit && prefix.length > bestLen) {

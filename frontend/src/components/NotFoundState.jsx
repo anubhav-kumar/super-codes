@@ -1,14 +1,16 @@
 import { useLocation } from 'react-router-dom';
-import { activeNavItem } from '../navigation.js';
+import useRole from '../hooks/useRole.js';
+import { activeNavItem, visibleNavItems } from '../navigation.js';
 import Button from './Button.jsx';
 import Icon from './Icon.jsx';
 
 /**
  * The list a stale link belongs to, from the nav item that covers `pathname`. Clients covers two
  * lists, so the matched prefix decides ("/companies/x" -> Companies). Null when no section or Home.
+ * Only sections the user's role may see count, so a member never gets "Go to Users".
  */
-function sectionList(pathname) {
-    const item = activeNavItem(pathname);
+function sectionList(pathname, items) {
+    const item = activeNavItem(pathname, items);
     if (!item || item.to === '/') return null;
     const prefix = (item.match || [item.to]).find((p) => pathname === p || pathname.startsWith(`${p}/`)) || item.to;
     if (prefix === item.to) return { to: item.to, label: item.label };
@@ -22,7 +24,8 @@ function sectionList(pathname) {
  */
 export default function NotFoundState({ title = 'Page not found', className = '' }) {
     const { pathname } = useLocation();
-    const list = sectionList(pathname);
+    const { isAdmin } = useRole();
+    const list = sectionList(pathname, visibleNavItems({ isAdmin }));
     return (
         <div className={`flex flex-col items-center gap-3 px-4 py-12 text-center md:py-16 ${className}`}>
             <span className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-muted text-ink-subtle">

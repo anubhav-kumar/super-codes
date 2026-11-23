@@ -9,7 +9,9 @@
  * Auth: every request sends `Authorization: Bearer <token>` from the stored session, unless
  * `auth: false` (sign-in, health). A 401 on an authenticated request calls the handler registered
  * with setUnauthorizedHandler (clears the session and returns to the sign-in screen), unless
- * `skipUnauthorized: true` (sign-out).
+ * `skipUnauthorized: true` (sign-out). A 403 PASSWORD_CHANGE_REQUIRED (temporary password still
+ * active) calls the handler registered with setPasswordChangeHandler, which sends the user to
+ * "Set a new password".
  */
 import { API_BASE_URL } from '../config.js';
 import { getToken } from '../auth/session.js';
@@ -34,6 +36,16 @@ export function setUnauthorizedHandler(handler) {
     unauthorizedHandler = handler;
     return () => {
         if (unauthorizedHandler === handler) unauthorizedHandler = null;
+    };
+}
+
+let passwordChangeHandler = null;
+
+/** Registers the function called on a 403 PASSWORD_CHANGE_REQUIRED. Returns an unregister function. */
+export function setPasswordChangeHandler(handler) {
+    passwordChangeHandler = handler;
+    return () => {
+        if (passwordChangeHandler === handler) passwordChangeHandler = null;
     };
 }
 
@@ -114,6 +126,9 @@ export async function request(
     if (!res.ok) {
         const error = toApiError(res, data);
         if (res.status === 401 && auth && !skipUnauthorized && unauthorizedHandler) unauthorizedHandler(error);
+        if (res.status === 403 && error.code === 'PASSWORD_CHANGE_REQUIRED' && auth && passwordChangeHandler) {
+            passwordChangeHandler(error);
+        }
         throw error;
     }
 

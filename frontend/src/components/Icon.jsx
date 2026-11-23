@@ -13,6 +13,7 @@ import {
     CircleUser,
     ClipboardList,
     Clock,
+    Copy,
     Download,
     Ellipsis,
     Eye,
@@ -21,6 +22,7 @@ import {
     FileText,
     History,
     IdCard,
+    KeyRound,
     Info,
     LayoutDashboard,
     Link,
@@ -35,11 +37,14 @@ import {
     Search,
     SearchX,
     Send,
+    ShieldCheck,
     TriangleAlert,
     Unlink,
     User,
     UserPlus,
+    UserX,
     Users,
+    UsersRound,
     Wallet,
     WifiOff,
     X,
@@ -98,6 +103,12 @@ const ICONS = {
     'not-found': SearchX,
     eye: Eye,
     'eye-off': EyeOff,
+    // FR1 (P-24): users and accounts
+    users: UsersRound,
+    key: KeyRound,
+    copy: Copy,
+    admin: ShieldCheck,
+    unlinked: UserX,
 };
 
 // Two sizes only: sm (16 px, inline with text) and md (20 px, navigation and buttons).
