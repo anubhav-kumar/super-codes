@@ -31,10 +31,14 @@ provider:
   iam:
     role:
       statements:
+        # Scan: named exception for the admin-only Users list and admin count (P-25).
         - Effect: Allow
           Action:
             - dynamodb:GetItem
+            - dynamodb:PutItem
             - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:Scan
           Resource:
             - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.usersTable}
         - Effect: Allow
@@ -58,6 +62,14 @@ provider:
         - Effect: Allow
           Action:
             - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:DeleteItem
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.workerLinksTable}
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:BatchGetItem
           Resource:
             - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.workersTable}
 
@@ -111,6 +123,15 @@ functions:
       - http:
           path: auth/password
           method: post
+          cors: true
+  listUsers:
+    handler: handlers/users/list.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: auth/users
+          method: get
           cors: true
 
 resources:

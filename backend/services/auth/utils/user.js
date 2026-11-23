@@ -3,6 +3,7 @@
 /**
  * Session user object shared by POST /auth/login, GET /auth/me and POST /auth/password:
  *   { id, email, name, isAdmin, workerId, workerName, mustChangePassword }
+ * User object of the admin user-management routes (/auth/users, P-25): see toUser.
  */
 
 const { GetCommand } = require('@aws-sdk/lib-dynamodb');
@@ -50,4 +51,39 @@ async function sessionUser(user) {
     return toSessionUser(u, await loadWorkerName(u.workerId));
 }
 
-module.exports = { isAdminItem, loadWorkerName, toSessionUser, sessionUser };
+/**
+ * Account status of a Users item: ACTIVE (no temporary password), MUST_SET_PASSWORD (temporary
+ * password not yet expired) or TEMP_PASSWORD_EXPIRED.
+ */
+function userStatus(item, now = Date.now()) {
+    if (!auth.hasTemporaryPassword(item)) return 'ACTIVE';
+    const expiresAt = item.tempPasswordExpiresAt ? Date.parse(item.tempPasswordExpiresAt) : NaN;
+    return expiresAt > now ? 'MUST_SET_PASSWORD' : 'TEMP_PASSWORD_EXPIRED';
+}
+
+/**
+ * User object of the admin routes. `workers` is a Map of workerId -> Workers item ({ id, name, status }).
+ *   { id, email, name, isAdmin,
+ *     worker: { id, name|null, status|null } | null,   name/status null only if the Worker is missing
+ *     status: ACTIVE | MUST_SET_PASSWORD | TEMP_PASSWORD_EXPIRED,
+ *     temporaryPasswordExpiresAt: ISO | null, createdAt, updatedAt }
+ * Never includes passwordHash.
+ */
+function toUser(item, workers = new Map(), now = Date.now()) {
+    const worker = item.workerId ? workers.get(item.workerId) : null;
+    return {
+        id: item.userId,
+        email: item.email,
+        name: item.name,
+        isAdmin: isAdminItem(item),
+        worker: item.workerId
+            ? { id: item.workerId, name: (worker && worker.name) || null, status: (worker && worker.status) || null }
+            : null,
+        status: userStatus(item, now),
+        temporaryPasswordExpiresAt: auth.hasTemporaryPassword(item) ? item.tempPasswordExpiresAt || null : null,
+        createdAt: item.createdAt || null,
+        updatedAt: item.updatedAt || item.createdAt || null,
+    };
+}
+
+module.exports = { isAdminItem, loadWorkerName, toSessionUser, sessionUser, userStatus, toUser };
