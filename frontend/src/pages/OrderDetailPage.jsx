@@ -1,21 +1,19 @@
 import { Link, useParams } from 'react-router-dom';
-import Badge from '../components/Badge.jsx';
 import Button from '../components/Button.jsx';
 import ClientIcon from '../components/ClientIcon.jsx';
 import DataView from '../components/DataView.jsx';
 import DueLabel from '../components/DueLabel.jsx';
 import FactList from '../components/FactList.jsx';
-import ListRow from '../components/ListRow.jsx';
 import Money from '../components/Money.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
 import OrderBillingSection from '../components/orders/OrderBillingSection.jsx';
+import OrderWorkersSection from '../components/orders/OrderWorkersSection.jsx';
 import StatusControl from '../components/orders/StatusControl.jsx';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import RecordHeader from '../components/RecordHeader.jsx';
 import RecordNo from '../components/RecordNo.jsx';
 import Section from '../components/Section.jsx';
-import Tag from '../components/Tag.jsx';
 import { orderUpdateBody, updateOrder } from '../api/orders.js';
 import { clientPath, orderStatusLabel } from '../constants/orders.js';
 import useInlineSave from '../hooks/useInlineSave.js';
@@ -44,32 +42,6 @@ function ClientLine({ client }) {
                 name
             )}
         </span>
-    );
-}
-
-function WorkersSection({ assignments }) {
-    return (
-        <Section title="Workers" count={assignments.length || ''}>
-            {assignments.length === 0 ? (
-                <p className="px-4 pb-4 text-sm text-ink-muted">No workers assigned.</p>
-            ) : (
-                <ul className="divide-y divide-line border-t border-line">
-                    {assignments.map((a) => (
-                        <li key={a.workerId}>
-                            <ListRow
-                                to={`/workers/${a.workerId}`}
-                                title={a.workerName || 'Unknown worker'}
-                                trailing={a.workerStatus === 'INACTIVE' ? <Badge>Inactive</Badge> : undefined}
-                                meta={[
-                                    a.isPrimary ? <Tag key="primary">Primary owner</Tag> : null,
-                                    a.assignedDate ? `Assigned ${formatDate(a.assignedDate)}` : null,
-                                ]}
-                            />
-                        </li>
-                    ))}
-                </ul>
-            )}
-        </Section>
     );
 }
 
@@ -142,15 +114,17 @@ function OrderDetail({ order, reload }) {
             {/*
               Phones: one column in the order Details, Billing, Workers, Description, Notes (the left
               column's wrapper is `contents`, so `order-*` interleaves Billing). lg+: two columns,
-              left Details / Workers / Description / Notes, right Billing.
+              left Details / Workers / Description / Notes, right Billing. The phone column is
+              minmax(0,1fr), not an implicit auto track, so Billing's size-container figures get the
+              full width and long content cannot widen the column.
             */}
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:items-start lg:gap-6">
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:items-start lg:gap-6">
                 <div className="contents lg:flex lg:flex-col lg:gap-4">
                     <Section title="Details" flush={false} className="order-1 lg:order-none">
                         <FactList items={facts} addLinks={addLinks} />
                     </Section>
                     <div className="order-3 lg:order-none">
-                        <WorkersSection assignments={order.assignments || []} />
+                        <OrderWorkersSection assignments={order.assignments || []} />
                     </div>
                     {present(order.description) && (
                         <div className="order-4 lg:order-none">

@@ -39,7 +39,9 @@ function BillingFigures({ figures }) {
     const share = amount > 0 ? Math.min(100, Math.round((billed / amount) * 100)) : null;
     return (
         <div className="px-4 pb-4">
+            {/* Section-size figures: 2 x 2 in the Billing column (327-382 px), each value shrinks to fit. */}
             <KeyFigures
+                size="section"
                 items={[
                     { key: 'billed', label: 'Billed', value: formatFigure(billed), sub: draft > 0 ? `incl. ${formatMoney(draft, { paise: 'none' })} draft` : undefined },
                     { key: 'received', label: 'Received', value: formatFigure(received) },

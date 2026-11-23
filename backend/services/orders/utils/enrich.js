@@ -9,7 +9,7 @@ const { database, validators } = require('common');
 
 const PERSON_FIELDS = ['name', 'isIndividualClient'];
 const COMPANY_FIELDS = ['name'];
-const WORKER_FIELDS = ['name', 'status'];
+const WORKER_FIELDS = ['name', 'status', 'designation'];
 
 /**
  * BatchGets the given ids. Returns { people, companies, workers }, each a Map id -> item.
@@ -78,6 +78,7 @@ function toAssignments(assignmentItems, workers) {
                 workerId: a.workerId,
                 workerName: w ? w.name : null,
                 workerStatus: w ? w.status : null,
+                workerDesignation: w ? w.designation ?? null : null,
                 isPrimary: a.isPrimary === true,
                 assignedDate: a.assignedDate,
             };
