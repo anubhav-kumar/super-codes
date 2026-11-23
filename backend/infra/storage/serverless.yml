@@ -1,0 +1,88 @@
+# Private files bucket for order documents (backend-architecture.md section 17, with the FR2
+# decision 14 exception: files are private, so there is no CloudFront, no public URL and no public
+# cache; downloads use short-lived pre-signed GET URLs issued by the files service after its scope
+# check). Declares no functions. Services read FilesBucketName via ${cf:ca-crm-storage-<stage>.*}.
+#
+# The bucket holds confidential client documents: DeletionPolicy and UpdateReplacePolicy are Retain,
+# and undeploy.js never empties or deletes it (FR2 reconciliation 2).
+#
+# CORS: backend/deploy.js passes the frontend's CloudFront origin as --param="filesCorsOrigin=..."
+# when the ca-crm-frontend-<stage> stack exists. Before the frontend's first deploy it falls back to
+# '*' (the pre-signed signature, not CORS, is what authorises a request).
+service: ca-crm-storage
+
+frameworkVersion: '3'
+
+params:
+  default:
+    filesCorsOrigin: '*'
+
+provider:
+  name: aws
+  stage: ${opt:stage, 'prod'}
+  region: ${opt:region, 'ap-southeast-1'}
+  deploymentMethod: direct
+
+resources:
+  Resources:
+    FilesBucket:
+      Type: AWS::S3::Bucket
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        BucketName: ${aws:accountId}-ca-crm
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        OwnershipControls:
+          Rules:
+            - ObjectOwnership: BucketOwnerEnforced
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: AES256
+        CorsConfiguration:
+          CorsRules:
+            - AllowedMethods: [PUT, GET, HEAD]
+              AllowedOrigins:
+                - ${param:filesCorsOrigin}
+                - http://localhost:5173
+              AllowedHeaders: [Content-Type, Cache-Control, If-None-Match]
+              ExposedHeaders: [ETag]
+              MaxAge: 3000
+        LifecycleConfiguration:
+          Rules:
+            - Id: abort-incomplete-multipart
+              Status: Enabled
+              AbortIncompleteMultipartUpload:
+                DaysAfterInitiation: 1
+
+    # HTTPS only. No Allow statement for anyone: access is only through the service roles' IAM
+    # and the short-lived URLs they sign.
+    FilesBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        Bucket: { Ref: FilesBucket }
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Sid: DenyInsecureTransport
+              Effect: Deny
+              Principal: '*'
+              Action: 's3:*'
+              Resource:
+                - { 'Fn::GetAtt': [FilesBucket, Arn] }
+                - 'Fn::Join': ['', [{ 'Fn::GetAtt': [FilesBucket, Arn] }, '/*']]
+              Condition:
+                Bool:
+                  'aws:SecureTransport': 'false'
+
+  Outputs:
+    FilesBucketName:
+      Value: { Ref: FilesBucket }
+    FilesBucketArn:
+      Value: { 'Fn::GetAtt': [FilesBucket, Arn] }

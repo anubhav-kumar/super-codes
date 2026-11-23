@@ -1,0 +1,11 @@
+{
+  "name": "ca-crm-files",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Files service: private order files (POST /files/orders/{orderId}/uploads, POST /files/orders/{orderId}/{fileId}/complete, GET /files/orders/{orderId}). Bundles the S3 SDK used by common/s3.",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1175.0",
+    "@aws-sdk/s3-request-presigner": "^3.1175.0"
+  }
+}

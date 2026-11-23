@@ -1,0 +1,145 @@
+# Files service. Private order files (FR2 P-28): upload (F-62). Owns the OrderFiles table.
+# Bytes live in the private storage-stack bucket (infra/storage) under files/<orderId>/; DynamoDB
+# stores the key, never a URL, and the key is never returned to clients. Reads orders' Orders
+# (admin scope) and OrderAssignments (member scope, ConditionCheck on writes) by their
+# deterministic names. The S3 SDK used by common/s3 is bundled from this service's node_modules
+# (backend/deploy.js runs npm ci here before deploying).
+service: ca-crm-files
+
+frameworkVersion: '3'
+
+custom:
+  filesTable: ca-crm-files-${sls:stage}-order-files
+  ordersTable: ca-crm-orders-${sls:stage}-orders
+  assignmentsTable: ca-crm-orders-${sls:stage}-order-assignments
+  sessionsTable: ca-crm-auth-${sls:stage}-sessions
+  usersTable: ca-crm-auth-${sls:stage}-users
+  filesBucket: ${cf:ca-crm-storage-${sls:stage}.FilesBucketName}
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  stage: ${opt:stage, 'prod'}
+  region: ${opt:region, 'ap-southeast-1'}
+  deploymentMethod: direct
+  memorySize: 256
+  timeout: 10
+  logRetentionInDays: 14
+  apiGateway:
+    restApiId: ${cf:ca-crm-api-gateway-${sls:stage}.RestApiId}
+    restApiRootResourceId: ${cf:ca-crm-api-gateway-${sls:stage}.RestApiRootResourceId}
+  environment:
+    FILES_TABLE: ${self:custom.filesTable}
+    FILES_BUCKET: ${self:custom.filesBucket}
+    ORDERS_TABLE: ${self:custom.ordersTable}
+    ASSIGNMENTS_TABLE: ${self:custom.assignmentsTable}
+    SESSIONS_TABLE: ${self:custom.sessionsTable}
+    USERS_TABLE: ${self:custom.usersTable}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:Query
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.filesTable}
+        # Admin scope: the order must exist.
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.ordersTable}
+        # Member scope: own assignment (read, and ConditionCheck inside write transactions).
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:ConditionCheckItem
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.assignmentsTable}
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.sessionsTable}
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:Query
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.usersTable}
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.usersTable}/index/*
+        # Own prefix only. PutObject signs upload URLs; GetObject backs HeadObject on complete.
+        # No s3:ListBucket and no bucket-wide resource.
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:GetObject
+          Resource:
+            - arn:aws:s3:::${self:custom.filesBucket}/files/*
+
+package:
+  patterns:
+    - '!tests/**'
+    - '!package-lock.json'
+
+layers:
+  common:
+    path: ../../libs/common
+    name: ${self:service}-${sls:stage}-common
+    description: ca-crm common layer (logger, http, errors, middleware, auth, database, validators, scope, s3)
+    compatibleRuntimes:
+      - nodejs20.x
+
+functions:
+  startUpload:
+    handler: handlers/startUpload.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: files/orders/{orderId}/uploads
+          method: post
+          cors: true
+  completeUpload:
+    handler: handlers/completeUpload.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: files/orders/{orderId}/{fileId}/complete
+          method: post
+          cors: true
+  list:
+    handler: handlers/list.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: files/orders/{orderId}
+          method: get
+          cors: true
+
+resources:
+  Resources:
+    OrderFilesTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        TableName: ${self:custom.filesTable}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: orderId
+            AttributeType: S
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: orderId
+            KeyType: HASH
+          - AttributeName: id
+            KeyType: RANGE
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
