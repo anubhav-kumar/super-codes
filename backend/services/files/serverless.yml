@@ -1,4 +1,4 @@
-# Files service. Private order files (FR2 P-28): upload (F-62). Owns the OrderFiles table.
+# Files service. Private order files (FR2 P-28): upload (F-62), open (F-63). Owns the OrderFiles table.
 # Bytes live in the private storage-stack bucket (infra/storage) under files/<orderId>/; DynamoDB
 # stores the key, never a URL, and the key is never returned to clients. Reads orders' Orders
 # (admin scope) and OrderAssignments (member scope, ConditionCheck on writes) by their
@@ -71,7 +71,8 @@ provider:
           Resource:
             - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.usersTable}
             - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.usersTable}/index/*
-        # Own prefix only. PutObject signs upload URLs; GetObject backs HeadObject on complete.
+        # Own prefix only. PutObject signs upload URLs; GetObject backs HeadObject on complete and
+        # the 5-minute download URLs (F-63).
         # No s3:ListBucket and no bucket-wide resource.
         - Effect: Allow
           Action:
@@ -119,6 +120,15 @@ functions:
     events:
       - http:
           path: files/orders/{orderId}
+          method: get
+          cors: true
+  downloadUrl:
+    handler: handlers/downloadUrl.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: files/orders/{orderId}/{fileId}/url
           method: get
           cors: true
 
