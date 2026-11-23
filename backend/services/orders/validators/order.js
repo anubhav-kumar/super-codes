@@ -78,10 +78,11 @@ function parseAssignments(details, value, { required }) {
  * { id?, serviceName, clientType, clientId, receivedFromId, orderDate, description, amountPaise,
  *   status, dueDate, notes, assignments }.
  * Create: status is ignored (always NEW), orderDate defaults to today IST, assignments default [].
- * Update: status, orderDate and assignments are required.
+ * Update: status, orderDate and assignments are required, unless assignmentsOptional (member
+ * update), where a missing/null assignments gives assignments: null (keep the current ones).
  * Throws 400 VALIDATION_FAILED listing every failing field.
  */
-function parseOrder(body, { isCreate }) {
+function parseOrder(body, { isCreate, assignmentsOptional = false }) {
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
         throw errors.validationFailed([{ field: 'body', message: 'Request body must be a JSON object' }]);
     }
@@ -124,7 +125,11 @@ function parseOrder(body, { isCreate }) {
     }
     out.dueDate = check(details, 'dueDate', () => parseDate(body.dueDate));
     out.notes = check(details, 'notes', () => normalizeString(body.notes, { max: 2000, label: 'Notes' }));
-    out.assignments = parseAssignments(details, body.assignments, { required: !isCreate });
+    if (assignmentsOptional && (body.assignments === undefined || body.assignments === null)) {
+        out.assignments = null;
+    } else {
+        out.assignments = parseAssignments(details, body.assignments, { required: !isCreate });
+    }
 
     if (details.length) throw errors.validationFailed(details);
     return out;

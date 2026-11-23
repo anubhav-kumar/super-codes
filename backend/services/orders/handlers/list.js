@@ -2,6 +2,7 @@
 
 const { QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { middleware, database, errors, validators, http } = require('common');
+const scope = require('common/scope');
 const { STATUSES } = require('../validators/order');
 const { ENTITY } = require('../models/order');
 const { enrichOrders } = require('../utils/enrich');
@@ -30,8 +31,11 @@ async function sendListQuery(command, startKey) {
     }
 }
 
-/** Orders the worker has an assignment on, newest first, each with that assignment. */
-async function ordersOfWorker(workerId) {
+/**
+ * Orders the worker has an assignment on, newest first, each with that assignment.
+ * `status` (optional) keeps only orders with that status.
+ */
+async function ordersOfWorker(workerId, { status } = {}) {
     const assignments = await database.queryAll({
         TableName: process.env.ASSIGNMENTS_TABLE,
         IndexName: 'byWorker',
@@ -42,7 +46,9 @@ async function ordersOfWorker(workerId) {
     if (assignments.length === 0) return [];
     const byOrder = new Map(assignments.map((a) => [a.orderId, a]));
     const orders = await database.batchGetByIds(process.env.ORDERS_TABLE, 'id', [...byOrder.keys()]);
-    const items = [...orders.values()].sort((a, b) => (a.sortKey < b.sortKey ? 1 : a.sortKey > b.sortKey ? -1 : 0));
+    const items = [...orders.values()]
+        .filter((o) => status === undefined || o.status === status)
+        .sort((a, b) => (a.sortKey < b.sortKey ? 1 : a.sortKey > b.sortKey ? -1 : 0));
     const enriched = await enrichOrders(items);
     return enriched.map((order) => {
         const a = byOrder.get(order.id);
@@ -61,8 +67,13 @@ async function ordersOfWorker(workerId) {
  * Sorted newest order date first, then highest order number first.
  * 200 { items: [Order], nextToken: string | null }, 400 VALIDATION_FAILED
  * List items carry primaryOwner but not assignments.
+ *
+ * Member (not admin) scope: only orders their linked Worker is assigned to, always unpaginated
+ * (limit/nextToken ignored, nextToken null). Unfiltered and ?status= items carry the member's own
+ * assignment { isPrimary, assignedDate }; ?clientId= / ?receivedFromId= keep only visible orders;
+ * ?workerId= other than their own gives []. No linked Worker: every list is [].
  */
-module.exports.handler = middleware.withHandler(async ({ event }) => {
+module.exports.handler = middleware.withHandler(async ({ event, user }) => {
     const query = event.queryStringParameters || {};
     const table = process.env.ORDERS_TABLE;
     const given = FILTERS.filter((f) => query[f] !== undefined);
@@ -73,11 +84,15 @@ module.exports.handler = middleware.withHandler(async ({ event }) => {
         );
     }
 
+    const member = scope.isMember(user);
+    const ownWorkerId = member ? scope.memberWorkerId(user) : null;
+
     if (query.workerId !== undefined) {
         const workerId = query.workerId;
         if (!validators.isUuidV4(workerId)) {
             throw errors.validationFailed([{ field: 'workerId', message: 'workerId must be a lowercase UUID v4' }]);
         }
+        if (member && workerId !== ownWorkerId) return http.ok({ items: [], nextToken: null });
         return http.ok({ items: await ordersOfWorker(workerId), nextToken: null });
     }
 
@@ -87,7 +102,10 @@ module.exports.handler = middleware.withHandler(async ({ event }) => {
         if (!validators.isUuidV4(id)) {
             throw errors.validationFailed([{ field: idFilter, message: `${idFilter} must be a lowercase UUID v4` }]);
         }
-        const items = await database.queryAll({
+        if (member && !ownWorkerId) return http.ok({ items: [], nextToken: null });
+        const visible = member ? await scope.visibleOrderIds(user) : null;
+        if (member && visible.size === 0) return http.ok({ items: [], nextToken: null });
+        const found = await database.queryAll({
             TableName: table,
             IndexName: ID_FILTER_INDEX[idFilter],
             KeyConditionExpression: '#key = :id',
@@ -95,12 +113,17 @@ module.exports.handler = middleware.withHandler(async ({ event }) => {
             ExpressionAttributeValues: { ':id': id },
             ScanIndexForward: false,
         });
+        const items = member ? found.filter((o) => visible.has(o.id)) : found;
         return http.ok({ items: await enrichOrders(items), nextToken: null });
     }
 
     if (query.status !== undefined) {
         if (!STATUSES.includes(query.status)) {
             throw errors.validationFailed([{ field: 'status', message: `Status must be one of ${STATUSES.join(', ')}` }]);
+        }
+        if (member) {
+            const items = ownWorkerId ? await ordersOfWorker(ownWorkerId, { status: query.status }) : [];
+            return http.ok({ items, nextToken: null });
         }
         const items = await database.queryAll({
             TableName: table,
@@ -111,6 +134,10 @@ module.exports.handler = middleware.withHandler(async ({ event }) => {
             ScanIndexForward: false,
         });
         return http.ok({ items: await enrichOrders(items), nextToken: null });
+    }
+
+    if (member) {
+        return http.ok({ items: ownWorkerId ? await ordersOfWorker(ownWorkerId) : [], nextToken: null });
     }
 
     const limit = parseLimit(query.limit);

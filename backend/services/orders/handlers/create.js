@@ -11,6 +11,7 @@ const { toOrderDetail } = require('../utils/enrich');
  * 201 Order detail (status NEW, orderNumber assigned)
  * 200 Order detail when an order with this id already exists (nothing written)
  * 400 VALIDATION_FAILED, 400 REFERENCE_NOT_FOUND, 400 CLIENT_NOT_ELIGIBLE, 409 WORKER_INACTIVE
+ * Admin only: a member gets 404 NOT_FOUND.
  *
  * Flow: validate -> GetItem id -> check references -> increment counter -> one TransactWriteItems
  * (order with attribute_not_exists(id) + each assignment). A counter number lost to a failed or
@@ -56,4 +57,4 @@ module.exports.handler = middleware.withHandler(async ({ body }) => {
 
     logger.info('order created', { orderId: id, orderNumber: order.orderNumber, assignments: assignments.length });
     return http.created(toOrderDetail(order, assignments, lookups));
-});
+}, { adminOnly: true });
