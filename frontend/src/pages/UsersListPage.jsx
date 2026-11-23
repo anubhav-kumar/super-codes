@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import Button from '../components/Button.jsx';
 import DataView from '../components/DataView.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ListToolbar from '../components/ListToolbar.jsx';
@@ -40,6 +41,12 @@ export default function UsersListPage() {
             <PageHeader
                 title="Users"
                 search={!offline && users.data && users.data.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Name or email', label: 'Search users by name or email' } : undefined}
+                actions={
+                    <Button icon="plus" to="/users/new" disabled={!online} aria-label="Add user">
+                        <span className="md:hidden">Add</span>
+                        <span className="hidden md:inline">Add user</span>
+                    </Button>
+                }
             />
             {offline ? (
                 <UsersOfflineState onRetry={users.reload} />

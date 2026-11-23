@@ -26,3 +26,15 @@ export async function getUser(id, { signal } = {}) {
     if (!user) throw new ApiError('User not found', { status: 404, code: 'NOT_FOUND' });
     return { ...res, data: user };
 }
+
+/**
+ * POST /auth/users (F-49) with a client-generated UUID v4 in body.id (becomes the user id).
+ *   body { id, name, email, isAdmin, workerId: uuid | null }
+ * 201 -> data { user, temporaryPassword, temporaryPasswordExpiresAt }: the only time the password is sent.
+ * 200 -> same shape with temporaryPassword null: a user with this id already exists (retry).
+ * Errors: 400 VALIDATION_FAILED, 400 REFERENCE_NOT_FOUND (workerId), 409 EMAIL_TAKEN (email),
+ * 409 WORKER_INACTIVE / WORKER_ALREADY_LINKED (workerId).
+ */
+export function createUser(body) {
+    return request('/auth/users', { method: 'POST', body });
+}
