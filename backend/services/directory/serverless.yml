@@ -10,6 +10,7 @@ custom:
   companiesTable: ca-crm-directory-${sls:stage}-companies
   associationsTable: ca-crm-directory-${sls:stage}-company-associations
   sessionsTable: ca-crm-auth-${sls:stage}-sessions
+  usersTable: ca-crm-auth-${sls:stage}-users
   # Owned by the billing stack; read-only here (F-29 list outstanding).
   invoicesTable: ca-crm-billing-${sls:stage}-invoices
 
@@ -30,6 +31,7 @@ provider:
     COMPANIES_TABLE: ${self:custom.companiesTable}
     ASSOCIATIONS_TABLE: ${self:custom.associationsTable}
     SESSIONS_TABLE: ${self:custom.sessionsTable}
+    USERS_TABLE: ${self:custom.usersTable}
     INVOICES_TABLE: ${self:custom.invoicesTable}
   iam:
     role:
@@ -55,6 +57,13 @@ provider:
             - dynamodb:GetItem
           Resource:
             - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.sessionsTable}
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:Query
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.usersTable}
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.usersTable}/index/*
         - Effect: Allow
           Action:
             - dynamodb:Query
