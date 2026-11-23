@@ -16,6 +16,7 @@ import TextField from '../components/TextField.jsx';
 import { createCompany, updateCompany } from '../api/companies.js';
 import { COMPANY_LIMITS, ENTITY_TYPES, RELATIONSHIP_TYPES } from '../constants/clients.js';
 import { useCompany } from '../hooks/useCompanies.js';
+import useRole from '../hooks/useRole.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import useSubmit from '../hooks/useSubmit.js';
 import useToast from '../hooks/useToast.js';
@@ -55,15 +56,18 @@ const toBody = (v) => ({
     notes: orNull(v.notes),
 });
 
-function validate(v) {
+function validate(v, panLocked) {
     const errors = {};
     const name = v.name.trim();
     if (!name) errors.name = 'Enter the company name';
     else if (name.length > COMPANY_LIMITS.name) errors.name = `Name can be at most ${COMPANY_LIMITS.name} characters`;
 
+    // A locked PAN (member edit) is the stored value and is sent back unchanged, so it is not checked.
     const pan = normalizePan(v.pan);
-    if (!pan) errors.pan = 'Enter the PAN';
-    else if (!isValidPan(pan)) errors.pan = 'PAN must look like ABCDE1234F';
+    if (!panLocked) {
+        if (!pan) errors.pan = 'Enter the PAN';
+        else if (!isValidPan(pan)) errors.pan = 'PAN must look like ABCDE1234F';
+    }
 
     if (!v.entityType) errors.entityType = 'Choose an entity type';
 
@@ -179,6 +183,9 @@ function AssociationRows({ rows, setRows, rowErrors, fieldErrors, blockError }) 
 function CompanyForm({ company }) {
     const navigate = useNavigate();
     const isEdit = Boolean(company);
+    const { isAdmin } = useRole();
+    // Members may edit a company but not its PAN (FR1 brief #11); their saves send the stored PAN unchanged.
+    const panLocked = isEdit && !isAdmin;
     // Client-generated id, kept for the life of the form so a retried create is idempotent.
     const [newId] = useState(() => crypto.randomUUID());
     const [values, setValues] = useState(() => (company ? toValues(company) : EMPTY));
@@ -202,7 +209,7 @@ function CompanyForm({ company }) {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        const errors = validate(values);
+        const errors = validate(values, panLocked);
         const assoc = isEdit ? { rows: {}, block: null } : validateRows(rows);
         setLocalErrors(errors);
         setRowErrors(assoc);
@@ -210,6 +217,7 @@ function CompanyForm({ company }) {
         if (Object.keys(errors).length || Object.keys(assoc.rows).length || assoc.block) return;
 
         const body = toBody(values);
+        if (panLocked) body.pan = company.pan;
         const result = await submit(() =>
             isEdit
                 ? updateCompany(company.id, body)
@@ -260,10 +268,12 @@ function CompanyForm({ company }) {
                         autoComplete="off"
                         spellCheck={false}
                         maxLength={10}
-                        className="[&_input]:font-mono"
+                        className={`[&_input]:font-mono ${panLocked ? '[&_input]:bg-surface-subtle [&_input]:text-ink-muted' : ''}`}
                         value={values.pan}
                         onChange={set('pan')}
+                        readOnly={panLocked}
                         error={panError}
+                        hint={panLocked ? 'Only an admin can change PAN.' : undefined}
                     />
                     <SelectField
                         label="Entity type"

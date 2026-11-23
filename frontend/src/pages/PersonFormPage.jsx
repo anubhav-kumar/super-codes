@@ -14,6 +14,7 @@ import { createPerson, updatePerson } from '../api/people.js';
 import { PERSON_LIMITS } from '../constants/clients.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { usePerson } from '../hooks/usePeople.js';
+import useRole from '../hooks/useRole.js';
 import useSubmit from '../hooks/useSubmit.js';
 import useToast from '../hooks/useToast.js';
 import { isValidEmail, isValidPan, isValidPhone, normalizePan } from '../utils/validation.js';
@@ -46,7 +47,7 @@ const toBody = (v) => ({
     notes: orNull(v.notes),
 });
 
-function validate(v) {
+function validate(v, panLocked) {
     const errors = {};
     const name = v.name.trim();
     if (!name) errors.name = 'Enter a name';
@@ -54,8 +55,8 @@ function validate(v) {
 
     const pan = normalizePan(v.pan);
     if (!pan) {
-        if (v.isIndividualClient) errors.pan = 'PAN is required for individual clients';
-    } else if (!isValidPan(pan)) {
+        if (v.isIndividualClient) errors.pan = panLocked ? 'PAN is required for individual clients. Ask an admin to add it.' : 'PAN is required for individual clients';
+    } else if (!panLocked && !isValidPan(pan)) {
         errors.pan = 'PAN must look like ABCDE1234F';
     }
 
@@ -71,6 +72,9 @@ function validate(v) {
 function PersonForm({ person }) {
     const navigate = useNavigate();
     const isEdit = Boolean(person);
+    const { isAdmin } = useRole();
+    // Members may edit a person but not its PAN (FR1 brief #11); their saves send the stored PAN unchanged.
+    const panLocked = isEdit && !isAdmin;
     // Client-generated id, kept for the life of the form so a retried create is idempotent.
     const [newId] = useState(() => crypto.randomUUID());
     const [values, setValues] = useState(() => (person ? toValues(person) : EMPTY));
@@ -88,12 +92,13 @@ function PersonForm({ person }) {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        const errors = validate(values);
+        const errors = validate(values, panLocked);
         setLocalErrors(errors);
         setPanTaken(null);
         if (Object.keys(errors).length) return;
 
         const body = toBody(values);
+        if (panLocked) body.pan = person.pan || null;
         const result = await submit(() => (isEdit ? updatePerson(person.id, body) : createPerson({ id: newId, ...body })));
         if (result.ok) {
             const id = (result.data && result.data.id) || (isEdit ? person.id : newId);
@@ -141,11 +146,12 @@ function PersonForm({ person }) {
                     autoComplete="off"
                     spellCheck={false}
                     maxLength={10}
-                    className="[&_input]:font-mono"
+                    className={`[&_input]:font-mono ${panLocked ? '[&_input]:bg-surface-subtle [&_input]:text-ink-muted' : ''}`}
                     value={values.pan}
                     onChange={set('pan')}
+                    readOnly={panLocked}
                     error={panError}
-                    hint={values.isIndividualClient ? undefined : 'Optional for company contacts.'}
+                    hint={panLocked ? 'Only an admin can change PAN.' : values.isIndividualClient ? undefined : 'Optional for company contacts.'}
                 />
             </FormSection>
             <FormSection title="Contact">
