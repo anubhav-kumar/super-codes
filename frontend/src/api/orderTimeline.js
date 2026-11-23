@@ -20,3 +20,16 @@ export async function listOrderTimeline(orderId, { signal } = {}) {
         },
     };
 }
+
+/**
+ * POST /timeline/orders/{orderId}/comments (F-60) with { id, text, status? }.
+ * `id` is a client-generated UUID v4 (same id on a retry of the same post: the server answers 200 with
+ * the existing comment). `status` turns the comment into a progress update.
+ * -> data = { comment: Entry, statusEvent: Entry | null, order: { id, status, updatedAt } }.
+ * Errors: 400 VALIDATION_FAILED (id | text | status), 404 NOT_FOUND, 409 ID_CONFLICT, 409 ORDER_CHANGED.
+ */
+export function postOrderComment(orderId, { id, text, status = null }) {
+    const body = { id, text };
+    if (status) body.status = status;
+    return request(`/timeline/orders/${enc(orderId)}/comments`, { method: 'POST', body });
+}

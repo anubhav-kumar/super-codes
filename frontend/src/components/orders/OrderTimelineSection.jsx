@@ -4,8 +4,11 @@ import DataView from '../DataView.jsx';
 import EmptyState from '../EmptyState.jsx';
 import Section from '../Section.jsx';
 import TimelineList, { TIMELINE_VISIBLE } from '../timeline/TimelineList.jsx';
+import CommentComposer from '../timeline/CommentComposer.jsx';
 import { visibleEntries } from '../timeline/eventText.js';
+import { orderStatusLabel } from '../../constants/orders.js';
 import useOrderTimeline from '../../hooks/useOrderTimeline.js';
+import useToast from '../../hooks/useToast.js';
 
 const FLASH_MS = 2000;
 const NO_ITEMS = [];
@@ -22,9 +25,11 @@ const NO_ITEMS = [];
  * Deep links: #timeline scrolls the section into view; #comment-<id> reveals earlier entries when
  * needed, centres that comment and flashes it for 2 s.
  *
- * `onOrderChange` (the page's order reload) is used by the comment box (F-60).
+ * Comment box (F-60) at the bottom: after a post the timeline reloads and the list scrolls to the new
+ * comment; after a progress update `onOrderChange` (the page's order reload) runs so the header
+ * status, due label and billing follow.
  */
-export default function OrderTimelineSection({ order, className = '' }) {
+export default function OrderTimelineSection({ order, onOrderChange, className = '' }) {
     const timeline = useOrderTimeline(order.id);
     const { reload } = timeline;
     const items = (timeline.data && timeline.data.items) || NO_ITEMS;
@@ -33,6 +38,8 @@ export default function OrderTimelineSection({ order, className = '' }) {
 
     const [showAll, setShowAll] = useState(false);
     const [flashId, setFlashId] = useState(null);
+    const [postedId, setPostedId] = useState(null);
+    const toast = useToast();
 
     // Reload on a later activity change; the first render already loads.
     const activity = `${order.latestActivityAt || ''}|${order.updatedAt || ''}`;
@@ -72,6 +79,24 @@ export default function OrderTimelineSection({ order, className = '' }) {
         return () => clearTimeout(t);
     }, [flashId]);
 
+    // After the user's own post: scroll to the new comment once the reload has it.
+    useEffect(() => {
+        if (!postedId || !entries.some((e) => e.id === postedId)) return;
+        const el = document.getElementById(`comment-${postedId}`);
+        if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        setPostedId(null);
+    }, [postedId, entries]);
+
+    function onPosted({ comment, order: saved }) {
+        if (comment && comment.id) setPostedId(comment.id);
+        reload();
+        const change = comment && comment.statusChange;
+        if (change || (saved && saved.status && saved.status !== order.status)) {
+            toast.success(`Status changed to ${orderStatusLabel((change && change.to) || saved.status)}`);
+            if (onOrderChange) onOrderChange();
+        }
+    }
+
     return (
         <Section id="timeline" title="Timeline" count={commentCount || ''} flush={false} className={className}>
             <DataView resource={timeline} compact>
@@ -83,6 +108,7 @@ export default function OrderTimelineSection({ order, className = '' }) {
                     )
                 }
             </DataView>
+            <CommentComposer order={order} onPosted={onPosted} onOrderChanged={onOrderChange} />
         </Section>
     );
 }
