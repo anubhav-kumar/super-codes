@@ -9,12 +9,31 @@ import { APP_NAME } from '../config.js';
 import useAuth from '../hooks/useAuth.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import useSubmit from '../hooks/useSubmit.js';
+import { holdTemporaryPassword } from '../utils/temporaryPassword.js';
 import { isValidEmail } from '../utils/validation.js';
+
+const SET_PASSWORD_PATH = '/set-password';
+const TEMPORARY_EXPIRED_MESSAGE = 'Your temporary password has expired. Ask an admin to reset it.';
 
 /** Only same-app paths are allowed as the post-sign-in destination. */
 function safeNext(next) {
-    if (!next || !next.startsWith('/') || next.startsWith('//') || next.startsWith('/sign-in')) return '/';
+    if (
+        !next ||
+        !next.startsWith('/') ||
+        next.startsWith('//') ||
+        next.startsWith('/sign-in') ||
+        next.startsWith(SET_PASSWORD_PATH)
+    ) {
+        return '/';
+    }
     return next;
+}
+
+const mustSetPassword = (session) => Boolean(session && session.user && session.user.mustChangePassword === true);
+
+/** A temporary password must be replaced before anything else (F-50). */
+function afterSignIn(session, next) {
+    return mustSetPassword(session) ? `${SET_PASSWORD_PATH}?next=${encodeURIComponent(next)}` : next;
 }
 
 function validate({ email, password }) {
@@ -37,17 +56,27 @@ export default function SignInPage() {
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [localErrors, setLocalErrors] = useState({});
-    const { submit, submitting, formError, fieldErrors } = useSubmit();
+    const { submit, submitting, formError, fieldErrors, setFormError } = useSubmit();
 
-    if (session) return <Navigate to={next} replace />;
+    if (session) return <Navigate to={afterSignIn(session, next)} replace />;
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         const errors = validate({ email, password });
         setLocalErrors(errors);
         if (Object.keys(errors).length) return;
-        const result = await submit(() => signIn({ email: email.trim(), password }));
-        if (result.ok) navigate(next, { replace: true });
+        const result = await submit(async () => {
+            const signedIn = await signIn({ email: email.trim(), password });
+            // Signed in with a temporary password: "Set a new password" sends it as the current
+            // password, so it is handed over in memory only (before the next render reads it).
+            if (mustSetPassword(signedIn)) holdTemporaryPassword(password);
+            return signedIn;
+        });
+        if (result.ok) {
+            navigate(afterSignIn(result.data, next), { replace: true });
+            return;
+        }
+        if (result.error && result.error.code === 'TEMPORARY_PASSWORD_EXPIRED') setFormError(TEMPORARY_EXPIRED_MESSAGE);
     };
 
     // Field-level server errors show under the field; anything else (e.g. "Incorrect email or password") in the banner.

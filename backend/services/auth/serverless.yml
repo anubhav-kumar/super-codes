@@ -31,10 +31,16 @@ provider:
   iam:
     role:
       statements:
+        # Scan: named exception for the admin-only Users list and admin count (P-25).
+        # ConditionCheckItem: login re-checks the verified password state when it writes the session.
         - Effect: Allow
           Action:
             - dynamodb:GetItem
+            - dynamodb:PutItem
             - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:Scan
+            - dynamodb:ConditionCheckItem
           Resource:
             - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.usersTable}
         - Effect: Allow
@@ -58,6 +64,14 @@ provider:
         - Effect: Allow
           Action:
             - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:DeleteItem
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.workerLinksTable}
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:BatchGetItem
           Resource:
             - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.workersTable}
 
@@ -110,6 +124,51 @@ functions:
     events:
       - http:
           path: auth/password
+          method: post
+          cors: true
+  listUsers:
+    handler: handlers/users/list.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: auth/users
+          method: get
+          cors: true
+  createUser:
+    handler: handlers/users/create.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: auth/users
+          method: post
+          cors: true
+  updateUser:
+    handler: handlers/users/update.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: auth/users/{id}
+          method: put
+          cors: true
+  deleteUser:
+    handler: handlers/users/delete.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: auth/users/{id}
+          method: delete
+          cors: true
+  resetPassword:
+    handler: handlers/users/resetPassword.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: auth/users/{id}/reset-password
           method: post
           cors: true
 

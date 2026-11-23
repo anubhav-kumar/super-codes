@@ -22,6 +22,9 @@ export const NAV_ITEMS = [
     // P-05 Invoices and payments
     { id: 'invoices', label: 'Invoices', to: '/invoices', match: ['/invoices'], icon: 'invoices', order: 40, description: 'What the firm has billed, to whom and its status.', quickAction: { label: 'New invoice', to: '/invoices/new' } },
 
+    // P-25 User management
+    { id: 'users', label: 'Users', to: '/users', match: ['/users'], icon: 'users', order: 60, adminOnly: true, bottomNav: false },
+
 ];
 
 export const sortedNavItems = () => [...NAV_ITEMS].sort((a, b) => a.order - b.order);

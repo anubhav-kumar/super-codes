@@ -10,7 +10,9 @@
  */
 import { request } from './client.js';
 
-/** POST /auth/login -> { token, expiresAt, user: Session user }. 401 INVALID_CREDENTIALS on a wrong email or password. */
+/** POST /auth/login -> { token, expiresAt, user: Session user }. 401 INVALID_CREDENTIALS on a wrong email or password.
+ * 401 TEMPORARY_PASSWORD_EXPIRED: right temporary password, issued more than 2 hours ago (F-50). With a valid
+ * temporary password the user has mustChangePassword true and expiresAt is the temporary password's expiry. */
 export function login({ email, password }, { signal } = {}) {
     return request('/auth/login', { method: 'POST', body: { email, password }, auth: false, signal });
 }
@@ -38,4 +40,19 @@ export function logout(token) {
  */
 export function changePassword({ currentPassword, newPassword }) {
     return request('/auth/password', { method: 'POST', body: { currentPassword, newPassword } });
+}
+
+/**
+ * Replace a temporary password (F-50): POST /auth/password with the temporary password as
+ * currentPassword -> { user: Session user (mustChangePassword false), expiresAt }.
+ * 400 field "currentPassword" (wrong temporary password) or "newPassword" (too short, same as temporary).
+ * A 401 comes back to the caller instead of signing out at once (skipUnauthorized), so the screen can
+ * say the temporary password expired and offer Sign out.
+ */
+export function setNewPassword({ temporaryPassword, newPassword }) {
+    return request('/auth/password', {
+        method: 'POST',
+        body: { currentPassword: temporaryPassword, newPassword },
+        skipUnauthorized: true,
+    });
 }
