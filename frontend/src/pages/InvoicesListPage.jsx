@@ -5,6 +5,7 @@ import Button from '../components/Button.jsx';
 import ClientIcon from '../components/ClientIcon.jsx';
 import DataView from '../components/DataView.jsx';
 import DueLabel from '../components/DueLabel.jsx';
+import { isInvoiceSettled } from '../components/invoices/invoiceSettlement.js';
 import EmptyState from '../components/EmptyState.jsx';
 import InvoiceRow from '../components/InvoiceRow.jsx';
 import ListToolbar from '../components/ListToolbar.jsx';
@@ -41,18 +42,25 @@ const statusHidden = (invoice, filter) => (INVOICE_FILTER_IMPLIED_STATUS[filter]
 const rowKey = (i) => i.id;
 const rowHref = (i) => `/invoices/${i.id}`;
 
-/** Due cell: relative label for issued invoices, the plain date for drafts, nothing for cancelled. */
+const NOTHING = (
+    <span className="text-ink-subtle">
+        <span aria-hidden="true">—</span>
+        <span className="sr-only">Nothing outstanding</span>
+    </span>
+);
+
+/** Due cell: relative label for open invoices, the plain date for drafts, "—" for closed (Paid / Cancelled). */
 function DueCell({ invoice }) {
-    if (invoice.baseStatus === 'CANCELLED') return <span className="text-ink-subtle">—</span>;
+    if (isInvoiceSettled(invoice)) return <span className="text-ink-subtle">—</span>;
     if (invoice.baseStatus === 'DRAFT') return <DueLabel dueDate={invoice.dueDate} open={false} compact />;
     const open = isInvoiceOpen(invoice);
     return <DueLabel dueDate={invoice.dueDate} open={open} overdue={open ? Boolean(invoice.isOverdue) : undefined} compact />;
 }
 
-/** Outstanding cell: red when overdue, "Paid" when nothing is owed; drafts and cancelled owe nothing. */
+/** Outstanding cell: the amount for open invoices (red when overdue); drafts and closed invoices show "—". */
 function OutstandingCell({ invoice }) {
-    if (invoice.baseStatus !== 'ISSUED') return <span className="text-ink-subtle">—</span>;
-    return <Money value={invoice.outstanding ?? 0} overdue={Boolean(invoice.isOverdue)} strong paidLabel />;
+    if (!isInvoiceOpen(invoice)) return NOTHING;
+    return <Money value={invoice.outstanding} overdue={Boolean(invoice.isOverdue)} strong />;
 }
 
 function OrderCell({ order, service }) {
