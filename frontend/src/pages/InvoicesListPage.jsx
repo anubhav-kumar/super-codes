@@ -68,17 +68,18 @@ function OrderCell({ order, service }) {
     return (
         <Link
             to={`/orders/${order.id}`}
-            className="relative z-10 inline-flex flex-col rounded-control hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            title={service || undefined}
+            className="relative z-10 inline-flex rounded-control whitespace-nowrap hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
             <RecordNo>{order.orderNumber || 'Order'}</RecordNo>
-            {service && <span className="text-[13px]/[18px] break-words text-ink-muted">{service}</span>}
         </Link>
     );
 }
 
 /**
- * Fits a 734 px table (1024 px, sidebar expanded): Order hides under 50rem, and the number, due,
- * money and status columns take their one-line content width (no fixed widths).
+ * Compact at 1024 px (F-43): Order hides under 60rem (both sidebar states at 1024 px) and shows
+ * the order number only, with the service as a hover title. Billed to is at most two lines. The
+ * number, due, money and status columns take their one-line content width (no fixed widths).
  */
 function invoiceColumns({ filter, serviceByOrderId }) {
     return [
@@ -86,17 +87,24 @@ function invoiceColumns({ filter, serviceByOrderId }) {
         {
             key: 'billedTo',
             header: 'Billed to',
-            // Priority width: 17% of the table, at most 12rem (from a ~1130 px table, 1440 px). The
-            // other visible columns are one-line, so any spare width also goes here.
-            minWidth: 'min(12rem, 17cqi)',
-            render: (i) => (
-                <span className="flex items-center gap-2">
-                    {i.billedTo && <ClientIcon type={i.billedTo.type} size="inline" />}
-                    <span className="break-words">{(i.billedTo && i.billedTo.name) || 'Unknown'}</span>
-                </span>
-            ),
+            // Priority width: 21% of the table, at most 14rem (from a ~1070 px table, 1440 px). The
+            // other visible columns are one-line, so any spare width also goes here. The icon hides
+            // under 56rem (1024 px, sidebar expanded) to give the name its room; the name wraps to
+            // at most two lines, the full name in its title.
+            minWidth: 'min(14rem, 21cqi)',
+            render: (i) => {
+                const name = (i.billedTo && i.billedTo.name) || 'Unknown';
+                return (
+                    <span className="flex items-center gap-2">
+                        {i.billedTo && <ClientIcon type={i.billedTo.type} size="inline" className="@max-[56rem]:hidden" />}
+                        <span className="line-clamp-2 break-words" title={name}>
+                            {name}
+                        </span>
+                    </span>
+                );
+            },
         },
-        { key: 'order', header: 'Order', hideNarrow: true, render: (i) => <OrderCell order={i.order} service={i.order ? serviceByOrderId.get(i.order.id) : null} /> },
+        { key: 'order', header: 'Order', hideNarrow: 'wide', nowrap: true, render: (i) => <OrderCell order={i.order} service={i.order ? serviceByOrderId.get(i.order.id) : null} /> },
         { key: 'due', header: 'Due', sortKey: 'due', nowrap: true, render: (i) => <DueCell invoice={i} /> },
         {
             key: 'total',

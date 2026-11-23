@@ -8,9 +8,10 @@ const ALIGN = { left: 'text-left', right: 'text-right', center: 'text-center' };
 // wide (the table wrapper is a size container), so a crowded table can still wrap that column.
 const NOWRAP = { true: 'whitespace-nowrap', wide: '@min-[56rem]:whitespace-nowrap' };
 
-// `hideNarrow` drops a low-priority column while the table is under 50rem (1024 px with the sidebar
-// expanded); cell padding tightens under 56rem. Both follow the table's width, not the viewport.
-const HIDE_NARROW = '@max-[50rem]:hidden';
+// `hideNarrow` drops a low-priority column while the table is under a threshold: true = 50rem (only
+// 1024 px with the sidebar expanded), 'wide' = 60rem (1024 px in both sidebar states). Cell padding
+// tightens under 56rem. All follow the table's width, not the viewport.
+const HIDE = { true: '@max-[50rem]:hidden', wide: '@max-[60rem]:hidden' };
 const CELL_X = 'px-4 @max-[56rem]:px-2.5';
 
 /**
@@ -67,8 +68,8 @@ function headerContent(col, sort, onSortChange) {
  *     cell, because min-width on th / td is unreliable in auto-layout tables. Use it on name columns
  *     so short names stay on one line while other columns have room.
  *   - nowrap: true | 'wide' (see NOWRAP).
- *   - hideNarrow: true hides the column while the table is under 50rem (see HIDE_NARROW). Never on
- *     status or money columns.
+ *   - hideNarrow: true hides the column while the table is under 50rem, 'wide' under 60rem (see
+ *     HIDE). Never on status or money columns.
  *   - width is border-box (it includes the cell padding) and acts as a column minimum; prefer
  *     nowrap or a cqi-based minWidth so tables still fit 734 px (1024 px, sidebar expanded).
  *   rows, rowKey(row), rowHref(row), sort ('due' / '-amount', from useListSort), onSortChange(next), caption (screen readers)
@@ -97,7 +98,7 @@ export default function DataTable({ columns, rows, rowKey, rowHref, sort, onSort
                                     scope="col"
                                     style={col.width ? { width: col.width } : undefined}
                                     aria-sort={sorted ? (sortedDesc ? 'descending' : 'ascending') : undefined}
-                                    className={`sticky top-0 z-10 h-10 border-b border-line bg-surface-subtle ${CELL_X} text-xs font-medium whitespace-nowrap text-ink-muted first:rounded-tl-card last:rounded-tr-card ${ALIGN[col.align] || ALIGN.left} ${col.hideNarrow ? HIDE_NARROW : ''}`}
+                                    className={`sticky top-0 z-10 h-10 border-b border-line bg-surface-subtle ${CELL_X} text-xs font-medium whitespace-nowrap text-ink-muted first:rounded-tl-card last:rounded-tr-card ${ALIGN[col.align] || ALIGN.left} ${HIDE[col.hideNarrow] || ''}`}
                                 >
                                     {col.minWidth ? (
                                         <div style={{ minWidth: col.minWidth }}>{headerContent(col, sort, onSortChange)}</div>
@@ -120,7 +121,7 @@ export default function DataTable({ columns, rows, rowKey, rowHref, sort, onSort
                                     return (
                                         <td
                                             key={col.key}
-                                            className={`h-11 ${CELL_X} py-2 align-middle text-ink ${last ? '' : 'border-b border-line'} ${col.align === 'right' ? 'text-right tabular-nums' : 'text-left'} ${NOWRAP[col.nowrap] || ''} ${col.hideNarrow ? HIDE_NARROW : ''} ${col.className || ''}`}
+                                            className={`h-11 ${CELL_X} py-2 align-middle text-ink ${last ? '' : 'border-b border-line'} ${col.align === 'right' ? 'text-right tabular-nums' : 'text-left'} ${NOWRAP[col.nowrap] || ''} ${HIDE[col.hideNarrow] || ''} ${col.className || ''}`}
                                         >
                                             {c === 0 && href ? (
                                                 <Link
