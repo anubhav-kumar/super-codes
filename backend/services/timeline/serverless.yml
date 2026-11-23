@@ -95,6 +95,15 @@ functions:
           path: timeline/orders/{orderId}
           method: get
           cors: true
+  createComment:
+    handler: handlers/comments/create.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: timeline/orders/{orderId}/comments
+          method: post
+          cors: true
 
 resources:
   Resources:
