@@ -8,6 +8,7 @@ const { sessionUser } = require('../utils/user');
 
 const SESSION_DAYS = 30;
 const INVALID_CREDENTIALS = 'Incorrect email or password';
+const TEMPORARY_PASSWORD_EXPIRED = 'This temporary password has expired. Ask an admin to reset your password.';
 
 function validate(body) {
     const details = [];
@@ -37,7 +38,11 @@ function validate(body) {
  * POST /auth/login  (no Authorization)
  * 200 { token, expiresAt, user: { id, email, name, isAdmin, workerId, workerName, mustChangePassword } }
  * Users without an isAdmin attribute (written before FR1) are admins.
- * 400 VALIDATION_FAILED, 401 INVALID_CREDENTIALS
+ * Temporary password (F-50): the session ends when the temporary password expires
+ * (expiresAt = tempPasswordExpiresAt) and user.mustChangePassword is true.
+ * 400 VALIDATION_FAILED, 401 INVALID_CREDENTIALS,
+ * 401 TEMPORARY_PASSWORD_EXPIRED (correct but expired temporary password; checked only after the
+ *   password matched, so a wrong password never reveals that the email holds a temporary password)
  */
 module.exports.handler = middleware.withHandler(
     async ({ body }) => {
@@ -57,9 +62,18 @@ module.exports.handler = middleware.withHandler(
         }
         if (!ok) throw new errors.ApiError(401, 'INVALID_CREDENTIALS', INVALID_CREDENTIALS);
 
-        const token = crypto.randomBytes(32).toString('base64url');
         const now = new Date();
-        const expires = new Date(now.getTime() + SESSION_DAYS * 24 * 60 * 60 * 1000);
+        let expires = new Date(now.getTime() + SESSION_DAYS * 24 * 60 * 60 * 1000);
+        if (auth.hasTemporaryPassword(user)) {
+            const tempExpiresMs = user.tempPasswordExpiresAt ? Date.parse(user.tempPasswordExpiresAt) : NaN;
+            // A missing or unreadable expiry counts as expired, as in the common request gate.
+            if (!(tempExpiresMs > now.getTime())) {
+                throw new errors.ApiError(401, 'TEMPORARY_PASSWORD_EXPIRED', TEMPORARY_PASSWORD_EXPIRED);
+            }
+            if (tempExpiresMs < expires.getTime()) expires = new Date(tempExpiresMs);
+        }
+
+        const token = crypto.randomBytes(32).toString('base64url');
         const expiresAt = expires.toISOString();
 
         await database.doc.send(
@@ -78,7 +92,7 @@ module.exports.handler = middleware.withHandler(
             })
         );
 
-        logger.info('signed in', { userId: user.userId });
+        logger.info('signed in', { userId: user.userId, temporaryPassword: auth.hasTemporaryPassword(user) });
         return http.ok(
             { token, expiresAt, user: await sessionUser(user) },
             { 'Cache-Control': 'no-store' }
