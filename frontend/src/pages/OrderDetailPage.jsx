@@ -142,9 +142,11 @@ function OrderDetail({ order, reload }) {
             {/*
               Phones: one column in the order Details, Billing, Workers, Description, Notes (the left
               column's wrapper is `contents`, so `order-*` interleaves Billing). lg+: two columns,
-              left Details / Workers / Description / Notes, right Billing.
+              left Details / Workers / Description / Notes, right Billing. The phone column is
+              minmax(0,1fr), not an implicit auto track, so Billing's size-container figures get the
+              full width and long content cannot widen the column.
             */}
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:items-start lg:gap-6">
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:items-start lg:gap-6">
                 <div className="contents lg:flex lg:flex-col lg:gap-4">
                     <Section title="Details" flush={false} className="order-1 lg:order-none">
                         <FactList items={facts} addLinks={addLinks} />
