@@ -243,7 +243,7 @@ export default function InvoicesListPage() {
         <PageBody width="list">
             <PageHeader
                 title="Invoices"
-                search={all.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Search invoice, billed to or order' } : undefined}
+                search={all.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Invoice, client, order', label: 'Search invoices by number, billed to or order' } : undefined}
                 actions={
                     <Button icon="plus" to="/invoices/new" disabled={!online} aria-label="New invoice">
                         <span className="md:hidden">New</span>

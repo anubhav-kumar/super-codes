@@ -39,7 +39,7 @@ export default function CompaniesListPage() {
             <PageHeader
                 title="Companies"
                 titleSlot={<ClientsTabs value="/companies" className={CLIENTS_TABS_CLASS} />}
-                search={companies.data && companies.data.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Search name, PAN or phone' } : undefined}
+                search={companies.data && companies.data.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Name, PAN, phone', label: 'Search companies by name, PAN, phone or main contact' } : undefined}
                 actions={
                     <Button icon="plus" to="/companies/new" disabled={!online} aria-label="Add company" className={ADD_BUTTON_CLASS}>
                         <span className="md:hidden">Add</span>

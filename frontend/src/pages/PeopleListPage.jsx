@@ -39,7 +39,7 @@ export default function PeopleListPage() {
             <PageHeader
                 title="People"
                 titleSlot={<ClientsTabs value="/people" className={CLIENTS_TABS_CLASS} />}
-                search={people.data && people.data.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Search name, PAN or phone' } : undefined}
+                search={people.data && people.data.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Name, PAN, phone', label: 'Search people by name, PAN, phone or company' } : undefined}
                 actions={
                     <Button icon="plus" to="/people/new" disabled={!online} aria-label="Add person" className={ADD_BUTTON_CLASS}>
                         <span className="md:hidden">Add</span>
