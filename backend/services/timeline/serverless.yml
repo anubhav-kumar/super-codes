@@ -1,0 +1,131 @@
+# Timeline service. An order's timeline: comments, progress updates and events (status changes; in
+# later features assignment and file events). Owns the Entries table. Reads and updates orders'
+# Orders (status and updatedAt only) and reads orders' OrderAssignments (member scope) by their
+# deterministic names. Other services write events into Entries through common/timeline.
+service: ca-crm-timeline
+
+frameworkVersion: '3'
+
+custom:
+  entriesTable: ca-crm-timeline-${sls:stage}-entries
+  ordersTable: ca-crm-orders-${sls:stage}-orders
+  assignmentsTable: ca-crm-orders-${sls:stage}-order-assignments
+  sessionsTable: ca-crm-auth-${sls:stage}-sessions
+  usersTable: ca-crm-auth-${sls:stage}-users
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  stage: ${opt:stage, 'prod'}
+  region: ${opt:region, 'ap-southeast-1'}
+  deploymentMethod: direct
+  memorySize: 256
+  timeout: 10
+  logRetentionInDays: 14
+  apiGateway:
+    restApiId: ${cf:ca-crm-api-gateway-${sls:stage}.RestApiId}
+    restApiRootResourceId: ${cf:ca-crm-api-gateway-${sls:stage}.RestApiRootResourceId}
+  environment:
+    TIMELINE_TABLE: ${self:custom.entriesTable}
+    ORDERS_TABLE: ${self:custom.ordersTable}
+    ASSIGNMENTS_TABLE: ${self:custom.assignmentsTable}
+    SESSIONS_TABLE: ${self:custom.sessionsTable}
+    USERS_TABLE: ${self:custom.usersTable}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:Query
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.entriesTable}
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.entriesTable}/index/*
+        # Progress updates (F-60) change only the order's status and updatedAt.
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:UpdateItem
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.ordersTable}
+        # Member scope: is the member's Worker assigned (read, and checked again inside writes).
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:ConditionCheckItem
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.assignmentsTable}
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.sessionsTable}
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:Query
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.usersTable}
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.usersTable}/index/*
+
+package:
+  patterns:
+    - '!node_modules/**'
+    - '!tests/**'
+    - '!package-lock.json'
+
+layers:
+  common:
+    path: ../../libs/common
+    name: ${self:service}-${sls:stage}-common
+    description: ca-crm common layer (logger, http, errors, middleware, auth, database, validators, scope, timeline)
+    compatibleRuntimes:
+      - nodejs20.x
+
+functions:
+  list:
+    handler: handlers/list.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: timeline/orders/{orderId}
+          method: get
+          cors: true
+
+resources:
+  Resources:
+    # The byTime LSI can only be created with the table, so it is part of the first deploy.
+    EntriesTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        TableName: ${self:custom.entriesTable}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: orderId
+            AttributeType: S
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: timeKey
+            AttributeType: S
+        KeySchema:
+          - AttributeName: orderId
+            KeyType: HASH
+          - AttributeName: id
+            KeyType: RANGE
+        LocalSecondaryIndexes:
+          - IndexName: byTime
+            KeySchema:
+              - AttributeName: orderId
+                KeyType: HASH
+              - AttributeName: timeKey
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true

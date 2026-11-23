@@ -20,3 +20,9 @@ assume CoderAnubhav95 --exec "node scripts/create-user.js --stage prod --email a
 - It writes to the DynamoDB tables `ca-crm-auth-<stage>-users` and `ca-crm-auth-<stage>-worker-links` (one transaction), reads `ca-crm-workers-<stage>-workers`, and only runs under the `CoderAnubhav95` profile.
 
 Sessions last 30 days from sign-in. Signing out deletes the session.
+
+## Order timeline (P-27)
+
+- New service `timeline` (stack `ca-crm-timeline-<stage>`, routes under `/timeline`) owns the table `ca-crm-timeline-<stage>-entries` (comments and events of an order; LSI `byTime` for time order, created with the table; Retain, PITR).
+- `PUT /orders/{id}` writes a `STATUS_CHANGED` timeline entry in the same transaction when the status changes, so the `orders` service needs the `timeline` stack. **Deploy all services together** (the default `node deploy.js`). If `orders` is deployed without `timeline`, every order edit that changes the status fails until `timeline` exists.
+- Existing orders start with an empty timeline (no back-fill).

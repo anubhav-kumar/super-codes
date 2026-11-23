@@ -3,6 +3,7 @@
 const { TransactWriteCommand } = require('@aws-sdk/lib-dynamodb');
 const { middleware, database, errors, validators, http, logger } = require('common');
 const scope = require('common/scope');
+const timeline = require('common/timeline');
 const { parseOrder } = require('../validators/order');
 const { buildOrderItem, getOrder, getAssignments, checkReferences } = require('../models/order');
 const { toOrderDetail } = require('../utils/enrich');
@@ -44,7 +45,8 @@ async function assertMemberClientChange(user, existing, fields) {
  *
  * orderNumber never changes. Already assigned workers keep their assignedDate (even if inactive);
  * removed assignments are deleted; new ones get today (IST). One TransactWriteItems:
- * Put order (attribute_exists(id)) + Put new/changed assignments + Delete removed ones.
+ * Put order (attribute_exists(id)) + Put new/changed assignments + Delete removed ones + (when the
+ * status changes) Put a STATUS_CHANGED timeline event (F-59).
  *
  * Member (not admin): 404 NOT_FOUND unless their linked Worker is assigned to the order (checked
  * again inside the transaction). "assignments" may be omitted (current ones kept) or equal the
@@ -110,6 +112,21 @@ module.exports.handler = middleware.withHandler(async ({ event, body, user }) =>
             Delete: { TableName: process.env.ASSIGNMENTS_TABLE, Key: { orderId: id, workerId: a.workerId } },
         })),
     ];
+    const statusChanged = fields.status !== existing.status;
+    if (statusChanged) {
+        // F-59: the timeline records every status change, in the same transaction as the order Put.
+        transactItems.push(
+            timeline.eventPut(
+                timeline.buildEvent({
+                    orderId: id,
+                    type: 'STATUS_CHANGED',
+                    user,
+                    details: { from: existing.status, to: fields.status, commentId: null },
+                    at: now,
+                })
+            )
+        );
+    }
     if (member) {
         // The member must still be assigned when the write lands (an admin may unassign them meanwhile).
         // A member never puts or deletes assignments, so this key is not touched twice in the transaction.
@@ -135,6 +152,7 @@ module.exports.handler = middleware.withHandler(async ({ event, body, user }) =>
         status: order.status,
         assignmentsPut: puts.length,
         assignmentsRemoved: removed.length,
+        statusChanged,
     });
     return http.ok(toOrderDetail(order, desired, lookups));
 });
