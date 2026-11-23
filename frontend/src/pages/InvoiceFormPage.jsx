@@ -10,6 +10,7 @@ import FormLayout, { FormHeading } from '../components/FormLayout.jsx';
 import FormSection, { FormRow } from '../components/FormSection.jsx';
 import MoneyField from '../components/MoneyField.jsx';
 import OrderPicker, { orderPickerValue } from '../components/OrderPicker.jsx';
+import { orderBilling } from '../components/orders/orderBilling.js';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import SelectField from '../components/SelectField.jsx';
@@ -118,22 +119,11 @@ function serverError(fieldErrors, field) {
     return undefined;
 }
 
-const paise = (v) => Math.round(Number(v || 0) * 100);
-
-/**
- * Not yet billed on an order = order amount - totals of its non-cancelled invoices, never below 0
- * (product revision, order billing). null when the order has no amount.
- */
-function notYetBilled(order, invoices) {
-    if (!order || order.amount === null || order.amount === undefined || order.amount === '') return null;
-    const billed = (invoices || []).filter((i) => i.baseStatus !== 'CANCELLED').reduce((sum, i) => sum + paise(i.total), 0);
-    return Math.max(0, paise(order.amount) - billed) / 100;
-}
-
 /**
  * Prefills the form from ?orderId= once, when the order and its invoices have settled (F-25):
  * related order, billed to (the order's client, never "received from"), description (the service)
- * and amount (not yet billed, when the order has an amount and its invoices loaded). Fields the user
+ * and amount (not yet billed before tax, the same orderBilling() figure as order Billing, F-44; tax
+ * is left for the user), when the order has an amount and its invoices loaded. Fields the user
  * already filled while loading are kept. Returns { order, unbilled } for the hints.
  */
 function useOrderPrefill(orderId, setForm) {
@@ -141,7 +131,7 @@ function useOrderPrefill(orderId, setForm) {
     const invoices = useOrderInvoices(orderId);
     const applied = useRef(false);
     const invoicesSettled = invoices.status !== 'loading';
-    const unbilled = order.data && invoices.status === 'loaded' ? notYetBilled(order.data, invoices.data) : null;
+    const unbilled = order.data && invoices.status === 'loaded' ? orderBilling(order.data, invoices.data).notBilled : null;
     useEffect(() => {
         if (applied.current || order.status !== 'loaded' || !order.data || !invoicesSettled) return;
         applied.current = true;
@@ -249,7 +239,7 @@ function InvoiceForm({ invoice, prefillOrderId, preselect }) {
     if (prefillOrder && prefill.unbilled !== null) {
         amountHint =
             prefill.unbilled > 0
-                ? `Not yet billed on ${prefillOrder.orderNumber}: ${formatMoney(prefill.unbilled)}`
+                ? `Not yet billed on ${prefillOrder.orderNumber} (before tax): ${formatMoney(prefill.unbilled)}`
                 : `${prefillOrder.orderNumber} is fully billed.`;
     }
 
