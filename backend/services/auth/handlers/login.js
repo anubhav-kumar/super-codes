@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { GetCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
 const { middleware, database, errors, auth, http, logger } = require('common');
 const { verifyPassword, dummyHash } = require('../utils/password');
+const { sessionUser } = require('../utils/user');
 
 const SESSION_DAYS = 30;
 const INVALID_CREDENTIALS = 'Incorrect email or password';
@@ -34,7 +35,8 @@ function validate(body) {
 
 /**
  * POST /auth/login  (no Authorization)
- * 200 { token, expiresAt, user: { id, email, name } }
+ * 200 { token, expiresAt, user: { id, email, name, isAdmin, workerId, workerName, mustChangePassword } }
+ * Users without an isAdmin attribute (written before FR1) are admins.
  * 400 VALIDATION_FAILED, 401 INVALID_CREDENTIALS
  */
 module.exports.handler = middleware.withHandler(
@@ -42,7 +44,7 @@ module.exports.handler = middleware.withHandler(
         const { email, password } = validate(body);
 
         const res = await database.doc.send(
-            new GetCommand({ TableName: process.env.USERS_TABLE, Key: { email } })
+            new GetCommand({ TableName: process.env.USERS_TABLE, Key: { email }, ConsistentRead: true })
         );
         const user = res.Item;
 
@@ -78,7 +80,7 @@ module.exports.handler = middleware.withHandler(
 
         logger.info('signed in', { userId: user.userId });
         return http.ok(
-            { token, expiresAt, user: { id: user.userId, email: user.email, name: user.name } },
+            { token, expiresAt, user: await sessionUser(user) },
             { 'Cache-Control': 'no-store' }
         );
     },

@@ -1,6 +1,8 @@
 /**
  * The signed-in session, kept in localStorage so it survives closing the app.
- * Shape: { token, expiresAt, user: { id, email, name } }.
+ * Shape: { token, expiresAt, user }, user = { id, email, name, isAdmin, workerId, workerName, mustChangePassword }
+ * (POST /auth/login and GET /auth/me). Sessions stored before FR1 have no isAdmin, workerId or
+ * mustChangePassword until /auth/me answers; a missing isAdmin means admin (auth/roles.js).
  */
 const KEY = 'ca-crm.session';
 

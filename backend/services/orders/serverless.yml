@@ -13,6 +13,7 @@ custom:
   companiesTable: ca-crm-directory-${sls:stage}-companies
   workersTable: ca-crm-workers-${sls:stage}-workers
   sessionsTable: ca-crm-auth-${sls:stage}-sessions
+  usersTable: ca-crm-auth-${sls:stage}-users
 
 provider:
   name: aws
@@ -34,6 +35,7 @@ provider:
     COMPANIES_TABLE: ${self:custom.companiesTable}
     WORKERS_TABLE: ${self:custom.workersTable}
     SESSIONS_TABLE: ${self:custom.sessionsTable}
+    USERS_TABLE: ${self:custom.usersTable}
   iam:
     role:
       statements:
@@ -69,6 +71,13 @@ provider:
             - dynamodb:GetItem
           Resource:
             - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.sessionsTable}
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:Query
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.usersTable}
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.usersTable}/index/*
 
 package:
   patterns:

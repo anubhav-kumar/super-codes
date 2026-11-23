@@ -34,6 +34,11 @@ export async function setData(key, value) {
     return (await getDb()).put('data', value, key);
 }
 
+/** Clears the data store only; queued writes stay (e.g. the same user's role changed). */
+export async function clearData() {
+    return (await getDb()).clear('data');
+}
+
 /** Clears all locally stored data and queued writes (e.g. on logout). */
 export async function clearAll() {
     const db = await getDb();

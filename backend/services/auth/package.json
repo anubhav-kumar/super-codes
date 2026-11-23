@@ -2,6 +2,6 @@
   "name": "ca-crm-auth",
   "version": "0.1.0",
   "private": true,
-  "description": "Auth service: POST /auth/login, GET /auth/me, POST /auth/logout",
+  "description": "Auth service: sign-in, sessions, user roles and Worker links",
   "license": "UNLICENSED"
 }

@@ -1,5 +1,6 @@
 # Auth service. Staff accounts (Users), sessions (Sessions), sign-in and sign-out.
-# Owns the Users and Sessions tables; every other service reads Sessions by its deterministic name.
+# Owns the Users, Sessions and WorkerLinks tables; every other service reads Sessions and Users
+# (requireUser in the common layer) by their deterministic names.
 service: ca-crm-auth
 
 frameworkVersion: '3'
@@ -7,6 +8,8 @@ frameworkVersion: '3'
 custom:
   usersTable: ca-crm-auth-${sls:stage}-users
   sessionsTable: ca-crm-auth-${sls:stage}-sessions
+  workerLinksTable: ca-crm-auth-${sls:stage}-worker-links
+  workersTable: ca-crm-workers-${sls:stage}-workers
 
 provider:
   name: aws
@@ -23,21 +26,40 @@ provider:
   environment:
     USERS_TABLE: ${self:custom.usersTable}
     SESSIONS_TABLE: ${self:custom.sessionsTable}
+    WORKER_LINKS_TABLE: ${self:custom.workerLinksTable}
+    WORKERS_TABLE: ${self:custom.workersTable}
   iam:
     role:
       statements:
         - Effect: Allow
           Action:
             - dynamodb:GetItem
+            - dynamodb:UpdateItem
           Resource:
             - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.usersTable}
         - Effect: Allow
           Action:
+            - dynamodb:Query
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.usersTable}/index/*
+        - Effect: Allow
+          Action:
             - dynamodb:GetItem
             - dynamodb:PutItem
+            - dynamodb:UpdateItem
             - dynamodb:DeleteItem
           Resource:
             - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.sessionsTable}
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.sessionsTable}/index/*
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.workersTable}
 
 package:
   patterns:
@@ -81,6 +103,15 @@ functions:
           path: auth/logout
           method: post
           cors: true
+  password:
+    handler: handlers/password.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: auth/password
+          method: post
+          cors: true
 
 resources:
   Resources:
@@ -94,9 +125,19 @@ resources:
         AttributeDefinitions:
           - AttributeName: email
             AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
         KeySchema:
           - AttributeName: email
             KeyType: HASH
+        # Only one GSI may be added per table per deploy (CloudFormation limit).
+        GlobalSecondaryIndexes:
+          - IndexName: byUserId
+            KeySchema:
+              - AttributeName: userId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
         PointInTimeRecoverySpecification:
           PointInTimeRecoveryEnabled: true
 
@@ -110,11 +151,38 @@ resources:
         AttributeDefinitions:
           - AttributeName: tokenHash
             AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
         KeySchema:
           - AttributeName: tokenHash
             KeyType: HASH
+        # Only one GSI may be added per table per deploy (CloudFormation limit).
+        GlobalSecondaryIndexes:
+          - IndexName: byUserId
+            KeySchema:
+              - AttributeName: userId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
         TimeToLiveSpecification:
           AttributeName: ttl
           Enabled: true
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+
+    # One item per linked Worker: makes "a Worker is linked to at most one user" a conditional write.
+    WorkerLinksTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        TableName: ${self:custom.workerLinksTable}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: workerId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: workerId
+            KeyType: HASH
         PointInTimeRecoverySpecification:
           PointInTimeRecoveryEnabled: true

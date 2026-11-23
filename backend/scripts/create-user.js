@@ -5,9 +5,15 @@
  *
  *   cd backend
  *   assume CoderAnubhav95 --exec "node scripts/create-user.js --stage prod --email a@firm.in --name 'Asha Rao'"
+ *   ... [--member] [--worker-id <uuid>] [--overwrite]
  *
  * The password is read from the terminal twice with echo off; it is never taken as an argument.
- * --overwrite replaces name and password of an existing account and keeps its userId.
+ * New accounts are admins unless --member is given.
+ * --overwrite replaces name and password of an existing account, clears any temporary password and
+ * keeps its userId, createdAt, role and Worker link. --member makes it a member; --worker-id replaces
+ * the link. There is no flag to promote: use the Users screen.
+ * --worker-id links the account to an existing ACTIVE Worker that is not linked to another account.
+ * The user item and the WorkerLinks items are written in one transaction.
  */
 
 const crypto = require('crypto');
@@ -15,9 +21,18 @@ const { SLUG, assertProfile, callerAccount } = require('./common');
 const { hashPassword } = require('../services/auth/utils/password');
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 function parseArgs(argv) {
-    const out = { stage: 'prod', region: 'ap-southeast-1', email: null, name: null, overwrite: false };
+    const out = {
+        stage: 'prod',
+        region: 'ap-southeast-1',
+        email: null,
+        name: null,
+        overwrite: false,
+        member: false,
+        workerId: null,
+    };
     for (let i = 0; i < argv.length; i += 1) {
         const arg = argv[i];
         const [key, inline] = arg.startsWith('--') && arg.includes('=') ? arg.split(/=(.*)/s) : [arg, undefined];
@@ -27,6 +42,8 @@ function parseArgs(argv) {
         else if (key === '--email') out.email = value();
         else if (key === '--name') out.name = value();
         else if (key === '--overwrite') out.overwrite = true;
+        else if (key === '--member') out.member = true;
+        else if (key === '--worker-id') out.workerId = value();
         else if (key === '--password') throw new Error('The password is never accepted as an argument; you will be prompted');
         else throw new Error(`Unknown argument: ${arg}`);
     }
@@ -35,6 +52,10 @@ function parseArgs(argv) {
     out.name = (out.name || '').trim();
     if (!out.email || out.email.length > 254 || !EMAIL.test(out.email)) throw new Error('--email must be a valid email');
     if (!out.name || out.name.length > 100) throw new Error('--name is required (1-100 characters)');
+    if (out.workerId !== null) {
+        out.workerId = String(out.workerId || '').trim();
+        if (!UUID_V4.test(out.workerId)) throw new Error('--worker-id must be a lowercase UUID v4');
+    }
     return out;
 }
 
@@ -83,33 +104,112 @@ async function main() {
 
     const account = await callerAccount(args.region);
     const tableName = `${SLUG}-auth-${args.stage}-users`;
+    const linksTable = `${SLUG}-auth-${args.stage}-worker-links`;
+    const workersTable = `${SLUG}-workers-${args.stage}-workers`;
     console.log(`Account ${account}, region ${args.region}, table ${tableName}`);
 
     const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-    const { DynamoDBDocumentClient, GetCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
+    const { DynamoDBDocumentClient, GetCommand, QueryCommand, TransactWriteCommand } = require('@aws-sdk/lib-dynamodb');
     const doc = DynamoDBDocumentClient.from(new DynamoDBClient({ region: args.region }));
 
     const existing = (await doc.send(new GetCommand({ TableName: tableName, Key: { email: args.email }, ConsistentRead: true })))
         .Item;
     if (existing && !args.overwrite) throw new Error(`An account for ${args.email} already exists (use --overwrite to reset it)`);
 
+    const userId = existing ? existing.userId : crypto.randomUUID();
+    // Users written before FR1 have no isAdmin and are admins; --overwrite keeps the role unless --member.
+    const isAdmin = args.member ? false : existing ? existing.isAdmin !== false : true;
+    const oldWorkerId = (existing && existing.workerId) || null;
+    const workerId = args.workerId || oldWorkerId;
+
+    if (args.workerId) {
+        const worker = (
+            await doc.send(new GetCommand({ TableName: workersTable, Key: { id: args.workerId }, ConsistentRead: true }))
+        ).Item;
+        if (!worker) throw new Error(`Worker ${args.workerId} not found`);
+        if (worker.status === 'INACTIVE' && args.workerId !== oldWorkerId) throw new Error(`Worker ${args.workerId} is inactive`);
+        const link = (
+            await doc.send(new GetCommand({ TableName: linksTable, Key: { workerId: args.workerId }, ConsistentRead: true }))
+        ).Item;
+        if (link && link.userId !== userId) {
+            const other = await doc.send(
+                new QueryCommand({
+                    TableName: tableName,
+                    IndexName: 'byUserId',
+                    KeyConditionExpression: 'userId = :id',
+                    ExpressionAttributeValues: { ':id': link.userId },
+                    ProjectionExpression: 'email',
+                })
+            );
+            const otherEmail = (other.Items && other.Items[0] && other.Items[0].email) || `user ${link.userId}`;
+            throw new Error(`Worker ${args.workerId} is already linked to ${otherEmail}`);
+        }
+    }
+
     const now = new Date().toISOString();
     const item = {
         email: args.email,
-        userId: existing ? existing.userId : crypto.randomUUID(),
+        userId,
         name: args.name,
         passwordHash: await hashPassword(password),
+        isAdmin,
+        entity: 'USER',
         createdAt: existing ? existing.createdAt : now,
         updatedAt: now,
     };
-    await doc.send(
-        new PutCommand({
-            TableName: tableName,
-            Item: item,
-            ...(existing ? {} : { ConditionExpression: 'attribute_not_exists(email)' }),
-        })
+    if (workerId) item.workerId = workerId;
+    // passwordState / tempPasswordExpiresAt are left out: a full Put clears any temporary password.
+
+    const items = [
+        {
+            Put: {
+                TableName: tableName,
+                Item: item,
+                ...(existing
+                    ? { ConditionExpression: 'userId = :me', ExpressionAttributeValues: { ':me': userId } }
+                    : { ConditionExpression: 'attribute_not_exists(email)' }),
+            },
+        },
+    ];
+    if (workerId) {
+        const linkItem = { workerId, userId, createdAt: now, updatedAt: now };
+        items.push({
+            Put: {
+                TableName: linksTable,
+                Item: linkItem,
+                ConditionExpression: 'attribute_not_exists(workerId) OR userId = :me',
+                ExpressionAttributeValues: { ':me': userId },
+            },
+        });
+    }
+    if (oldWorkerId && oldWorkerId !== workerId) {
+        items.push({
+            Delete: {
+                TableName: linksTable,
+                Key: { workerId: oldWorkerId },
+                ConditionExpression: 'attribute_not_exists(workerId) OR userId = :me',
+                ExpressionAttributeValues: { ':me': userId },
+            },
+        });
+    }
+
+    try {
+        await doc.send(new TransactWriteCommand({ TransactItems: items }));
+    } catch (err) {
+        if (err.name === 'TransactionCanceledException') {
+            const reasons = (err.CancellationReasons || []).map((r) => r && r.Code);
+            if (reasons[0] === 'ConditionalCheckFailed') {
+                throw new Error(existing ? 'The account was changed by someone else just now; run again' : 'The account was created by someone else just now');
+            }
+            if (reasons[1] === 'ConditionalCheckFailed') throw new Error(`Worker ${workerId} is already linked to another account`);
+            if (reasons[2] === 'ConditionalCheckFailed') throw new Error('The old Worker link was changed by someone else just now; run again');
+        }
+        throw err;
+    }
+    console.log(
+        `${existing ? 'Updated' : 'Created'} account ${args.email} (userId ${userId}, ${isAdmin ? 'admin' : 'member'}, ` +
+            `${workerId ? `worker ${workerId}` : 'no worker'})`
     );
-    console.log(`${existing ? 'Updated' : 'Created'} account ${args.email} (userId ${item.userId})`);
 }
 
 main().catch((err) => {

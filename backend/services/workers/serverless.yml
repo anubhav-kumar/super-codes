@@ -8,6 +8,7 @@ frameworkVersion: '3'
 custom:
   workersTable: ca-crm-workers-${sls:stage}-workers
   sessionsTable: ca-crm-auth-${sls:stage}-sessions
+  usersTable: ca-crm-auth-${sls:stage}-users
   ordersTable: ca-crm-orders-${sls:stage}-orders
   assignmentsTable: ca-crm-orders-${sls:stage}-order-assignments
 
@@ -26,6 +27,7 @@ provider:
   environment:
     WORKERS_TABLE: ${self:custom.workersTable}
     SESSIONS_TABLE: ${self:custom.sessionsTable}
+    USERS_TABLE: ${self:custom.usersTable}
     ORDERS_TABLE: ${self:custom.ordersTable}
     ASSIGNMENTS_TABLE: ${self:custom.assignmentsTable}
   iam:
@@ -45,6 +47,13 @@ provider:
             - dynamodb:GetItem
           Resource:
             - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.sessionsTable}
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:Query
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.usersTable}
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.usersTable}/index/*
         - Effect: Allow
           Action:
             - dynamodb:Query

@@ -5,6 +5,7 @@ import OfflineBanner from './components/offline/OfflineBanner.jsx';
 import UpdatePrompt from './components/offline/UpdatePrompt.jsx';
 import PageLoader from './components/PageLoader.jsx';
 import ToastProvider from './components/ToastProvider.jsx';
+import RequireAdmin from './auth/RequireAdmin.jsx';
 import RequireAuth from './auth/RequireAuth.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 import { ROUTES } from './routes.jsx';
@@ -31,8 +32,20 @@ export default function App() {
                                     </RequireAuth>
                                 }
                             >
-                                {privateRoutes.map(({ path, Page }) => (
-                                    <Route key={path} path={path} element={<Page />} />
+                                {privateRoutes.map(({ path, Page, adminOnly }) => (
+                                    <Route
+                                        key={path}
+                                        path={path}
+                                        element={
+                                            adminOnly ? (
+                                                <RequireAdmin>
+                                                    <Page />
+                                                </RequireAdmin>
+                                            ) : (
+                                                <Page />
+                                            )
+                                        }
+                                    />
                                 ))}
                                 <Route path="*" element={<NotFoundPage />} />
                             </Route>
