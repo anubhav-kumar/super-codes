@@ -133,6 +133,15 @@ functions:
           path: auth/users
           method: get
           cors: true
+  createUser:
+    handler: handlers/users/create.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: auth/users
+          method: post
+          cors: true
 
 resources:
   Resources:
