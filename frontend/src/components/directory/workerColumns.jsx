@@ -24,6 +24,6 @@ export function workerColumns({ hideStatus = false } = {}) {
             render: (w) => <OpenOrders worker={w} compact />,
         },
     ];
-    if (!hideStatus) columns.push({ key: 'status', header: 'Status', width: '9rem', render: (w) => <WorkerStatus worker={w} /> });
+    if (!hideStatus) columns.push({ key: 'status', header: 'Status', nowrap: true, render: (w) => <WorkerStatus worker={w} /> });
     return columns;
 }

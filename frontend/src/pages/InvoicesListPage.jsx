@@ -68,15 +68,19 @@ function OrderCell({ order, service }) {
     );
 }
 
+/**
+ * Fits a 734 px table (1024 px, sidebar expanded): Order hides under 50rem, and the number, due,
+ * money and status columns take their one-line content width (no fixed widths).
+ */
 function invoiceColumns({ filter, serviceByOrderId }) {
     return [
         { key: 'number', header: 'Number', nowrap: true, render: (i) => <span className="whitespace-nowrap tabular-nums">{i.invoiceNumber}</span> },
         {
             key: 'billedTo',
             header: 'Billed to',
-            // Priority width: 12rem from a ~1310 px table (1440 px), 15% of the table below that,
-            // so the Order column keeps room at 1024 px.
-            minWidth: 'min(12rem, 15cqi)',
+            // Priority width: 17% of the table, at most 12rem (from a ~1130 px table, 1440 px). The
+            // other visible columns are one-line, so any spare width also goes here.
+            minWidth: 'min(12rem, 17cqi)',
             render: (i) => (
                 <span className="flex items-center gap-2">
                     {i.billedTo && <ClientIcon type={i.billedTo.type} size="inline" />}
@@ -84,7 +88,7 @@ function invoiceColumns({ filter, serviceByOrderId }) {
                 </span>
             ),
         },
-        { key: 'order', header: 'Order', render: (i) => <OrderCell order={i.order} service={i.order ? serviceByOrderId.get(i.order.id) : null} /> },
+        { key: 'order', header: 'Order', hideNarrow: true, render: (i) => <OrderCell order={i.order} service={i.order ? serviceByOrderId.get(i.order.id) : null} /> },
         { key: 'due', header: 'Due', sortKey: 'due', nowrap: true, render: (i) => <DueCell invoice={i} /> },
         {
             key: 'total',
@@ -92,7 +96,7 @@ function invoiceColumns({ filter, serviceByOrderId }) {
             align: 'right',
             sortKey: 'total',
             sortDesc: true,
-            width: '8rem',
+            nowrap: true,
             render: (i) =>
                 i.baseStatus === 'CANCELLED' ? (
                     <span className="whitespace-nowrap text-ink-subtle tabular-nums">{formatMoney(i.total, { paise: 'none' })}</span>
@@ -106,7 +110,7 @@ function invoiceColumns({ filter, serviceByOrderId }) {
             align: 'right',
             sortKey: 'outstanding',
             sortDesc: true,
-            width: '8.5rem',
+            nowrap: true,
             render: (i) => <OutstandingCell invoice={i} />,
         },
         {

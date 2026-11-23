@@ -33,14 +33,19 @@ const SEARCH_FIELDS = [
 // Phones sort through a menu (due, order date, amount); number and client sort from table headers.
 const MENU_SORTS = ORDER_SORTS.filter((o) => o.menu);
 
-/** Desktop table columns (lg+). The Status column is dropped when a status chip already says it. */
+/**
+ * Desktop table columns (lg+). The Status column is dropped when a status chip already says it.
+ * Fits a 734 px table (1024 px, sidebar expanded): Owner hides under 50rem, Number takes its content
+ * width, and Client keeps 9.5rem (11rem from a ~1070 px table) so short client names stay on one line.
+ */
 function tableColumns(hideStatus) {
     const columns = [
-        { key: 'number', header: 'Number', sortKey: 'number', width: '7.5rem', nowrap: true, render: (o) => <RecordNo className="text-sm">{o.orderNumber}</RecordNo> },
+        { key: 'number', header: 'Number', sortKey: 'number', nowrap: true, render: (o) => <RecordNo className="text-sm">{o.orderNumber}</RecordNo> },
         {
             key: 'client',
             header: 'Client',
             sortKey: 'client',
+            minWidth: 'clamp(9.5rem, 16.5cqi, 11rem)',
             render: (o) => (
                 <span className="flex items-start gap-2 font-medium break-words">
                     {o.client && <ClientIcon type={o.client.type} size="inline" className="mt-0.5" />}
@@ -52,8 +57,9 @@ function tableColumns(hideStatus) {
         {
             key: 'owner',
             header: 'Owner',
-            // One line once the table has room (56rem: 1024 px with the rail); wraps in a narrower table.
+            // One line once the table has room (56rem: 1024 px with the rail); hidden under 50rem.
             nowrap: 'wide',
+            hideNarrow: true,
             render: (o) =>
                 o.primaryOwner && o.primaryOwner.name ? (
                     <span className="text-ink-muted">{o.primaryOwner.name}</span>
@@ -62,7 +68,7 @@ function tableColumns(hideStatus) {
                 ),
         },
         { key: 'due', header: 'Due', sortKey: 'due', nowrap: true, render: (o) => <DueLabel dueDate={o.dueDate} open={isOrderOpen(o)} compact /> },
-        { key: 'amount', header: 'Amount', align: 'right', sortKey: 'amount', sortDesc: true, render: (o) => <Money value={o.amount} /> },
+        { key: 'amount', header: 'Amount', align: 'right', nowrap: true, sortKey: 'amount', sortDesc: true, render: (o) => <Money value={o.amount} /> },
     ];
     if (!hideStatus) {
         columns.push({
