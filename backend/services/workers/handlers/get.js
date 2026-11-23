@@ -7,10 +7,12 @@ const { toWorker } = require('../models/worker');
 /**
  * GET /workers/{id}
  * 200 Worker, 404 NOT_FOUND (also for an id that is not a UUID v4)
+ * A member may open only their own linked Worker; any other id is 404.
  */
-module.exports.handler = middleware.withHandler(async ({ event }) => {
+module.exports.handler = middleware.withHandler(async ({ event, user }) => {
     const id = event.pathParameters && event.pathParameters.id;
     if (!validators.isUuidV4(id)) throw errors.notFound();
+    if (!user.isAdmin && id !== user.workerId) throw errors.notFound();
 
     const res = await database.doc.send(new GetCommand({ TableName: process.env.WORKERS_TABLE, Key: { id } }));
     if (!res.Item) throw errors.notFound();

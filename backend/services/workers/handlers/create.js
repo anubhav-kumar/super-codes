@@ -16,6 +16,7 @@ async function getById(id) {
  * POST /workers
  * 201 Worker, or 200 Worker when a worker with this id already exists (idempotent retry).
  * 400 VALIDATION_FAILED
+ * Admin only: a member gets 404 NOT_FOUND.
  */
 module.exports.handler = middleware.withHandler(async ({ body }) => {
     const fields = parseWorker(body, { isCreate: true });
@@ -42,4 +43,4 @@ module.exports.handler = middleware.withHandler(async ({ body }) => {
 
     logger.info('worker created', { workerId: item.id });
     return http.created(toWorker(item));
-});
+}, { adminOnly: true });

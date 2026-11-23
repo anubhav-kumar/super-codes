@@ -12,6 +12,7 @@ import Tag from '../components/Tag.jsx';
 import WorkerOrdersSection from '../components/directory/WorkerOrdersSection.jsx';
 import { designationLabel, WORKER_STATUS_TONE, workerStatusLabel } from '../constants/workers.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
+import useRole from '../hooks/useRole.js';
 import { useWorker } from '../hooks/useWorkers.js';
 import useRecordVisit from '../hooks/useRecordVisit.js';
 import { formatDate } from '../utils/format.js';
@@ -21,11 +22,13 @@ const telHref = (phone) => `tel:${String(phone).replace(/[^\d+]/g, '')}`;
 /**
  * Worker detail (F-04, F-30): header with designation and status (each shown once), compact facts
  * (empty ones hidden, "Add" links instead), and the worker's orders with relative due dates, open
- * first. Edit only; there is no delete (set Inactive instead).
+ * first. Edit only; there is no delete (set Inactive instead). Members (P-26 F-57) can open only their
+ * own Worker (others are 404 -> "Worker not found") and see it read-only: no Edit, no Add links.
  */
 export default function WorkerDetailPage() {
     const { workerId } = useParams();
     const { online } = useOnlineStatus();
+    const { isAdmin } = useRole();
     const worker = useWorker(workerId);
     useRecordVisit('worker', workerId, worker);
 
@@ -41,7 +44,7 @@ export default function WorkerDetailPage() {
                         { label: 'Joining date', value: w.joiningDate ? formatDate(w.joiningDate) : null },
                         { label: 'Notes', value: w.notes, span: true },
                     ];
-                    const addLinks = online
+                    const addLinks = isAdmin && online
                         ? [!w.phone && { label: 'Add phone', to: editTo }, !w.email && { label: 'Add email', to: editTo }]
                         : [];
                     const hasFacts = facts.some((f) => f.value) || addLinks.some(Boolean);
@@ -62,12 +65,14 @@ export default function WorkerDetailPage() {
                                     </Badge>,
                                 ]}
                                 actions={
-                                    <Button variant="secondary" icon="edit" to={editTo} disabled={!online}>
-                                        Edit
-                                    </Button>
+                                    isAdmin && (
+                                        <Button variant="secondary" icon="edit" to={editTo} disabled={!online}>
+                                            Edit
+                                        </Button>
+                                    )
                                 }
                             >
-                                {!online && <OfflineActionHint />}
+                                {isAdmin && !online && <OfflineActionHint />}
                             </RecordHeader>
                             <div className="flex flex-col gap-4">
                                 {hasFacts && (

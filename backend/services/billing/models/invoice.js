@@ -160,13 +160,16 @@ async function checkReferences(fields) {
     return lookups;
 }
 
-/** Reads an invoice's payments and linked records and returns the API Invoice detail. */
-async function loadInvoiceDetail(item, { consistent = false } = {}) {
+/**
+ * Reads an invoice's payments and linked records and returns the API Invoice detail.
+ * `clients`: a member's visible clients (sets billedTo.canOpen); null for admins (always true).
+ */
+async function loadInvoiceDetail(item, { consistent = false, clients = null } = {}) {
     const [payments, lookups] = await Promise.all([
         getPayments(item.id, { consistent }),
         loadLookups(idsFor([item])),
     ]);
-    return toInvoiceDetail(item, payments, lookups);
+    return toInvoiceDetail(item, payments, lookups, clients);
 }
 
 module.exports = {

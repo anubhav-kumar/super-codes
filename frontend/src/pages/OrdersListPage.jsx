@@ -7,6 +7,7 @@ import DataView from '../components/DataView.jsx';
 import DueLabel from '../components/DueLabel.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ListToolbar from '../components/ListToolbar.jsx';
+import NoWorkerState from '../components/NoWorkerState.jsx';
 import Money from '../components/Money.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
 import OrderRow from '../components/OrderRow.jsx';
@@ -20,6 +21,7 @@ import useListSort from '../hooks/useListSort.js';
 import useMediaQuery from '../hooks/useMediaQuery.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useOrders } from '../hooks/useOrders.js';
+import useRole from '../hooks/useRole.js';
 import { todayLocal } from '../utils/dates.js';
 import { isOrderOpen } from '../utils/due.js';
 
@@ -87,8 +89,11 @@ function FilterEmpty({ filter }) {
     return <EmptyState icon="orders" title={`No ${filter.label.toLowerCase()} orders.`} />;
 }
 
-function OrderRows({ orders, rows, query, setQuery, filter, list, addDisabled }) {
+function OrderRows({ orders, rows, query, setQuery, filter, list, addDisabled, role }) {
     if (orders.length === 0) {
+        // Members cannot create orders (F-54): their own empty states, without an action.
+        if (role.isMember && !role.hasWorker) return <NoWorkerState />;
+        if (role.isMember) return <EmptyState icon="orders" title="No orders assigned to you" text="Orders an admin assigns to you show here." />;
         return (
             <EmptyState
                 icon="orders"
@@ -132,6 +137,7 @@ function OrderRows({ orders, rows, query, setQuery, filter, list, addDisabled })
  */
 export default function OrdersListPage() {
     const { online } = useOnlineStatus();
+    const role = useRole();
     const orders = useOrders();
     const wide = useMediaQuery('(min-width: 1024px)');
     const [params, setParams] = useSearchParams();
@@ -178,20 +184,23 @@ export default function OrdersListPage() {
                 title="Orders"
                 search={all.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Order, client, service', label: 'Search orders by number, client, service or owner' } : undefined}
                 actions={
-                    <Button icon="plus" to="/orders/new" disabled={!online} aria-label="New order">
-                        <span className="md:hidden">New</span>
-                        <span className="hidden md:inline">New order</span>
-                    </Button>
+                    // New order is admin only (F-54); the route itself is guarded too.
+                    role.isAdmin ? (
+                        <Button icon="plus" to="/orders/new" disabled={!online} aria-label="New order">
+                            <span className="md:hidden">New</span>
+                            <span className="hidden md:inline">New order</span>
+                        </Button>
+                    ) : undefined
                 }
             />
-            {!online && <OfflineActionHint className="mb-4" />}
+            {!online && role.isAdmin && <OfflineActionHint className="mb-4" />}
             <ListToolbar
                 filter={{ label: 'Filter orders', options: filterOptions, value: filter.value, onChange: setFilter }}
                 sort={{ ...list, options: MENU_SORTS }}
             />
             <DataView resource={orders} skeleton={wide ? 'table' : 'rows'}>
                 {(data) => (
-                    <OrderRows orders={data || []} rows={rows} query={query} setQuery={setQuery} filter={filter} list={list} addDisabled={!online} />
+                    <OrderRows orders={data || []} rows={rows} query={query} setQuery={setQuery} filter={filter} list={list} addDisabled={!online} role={role} />
                 )}
             </DataView>
         </PageBody>

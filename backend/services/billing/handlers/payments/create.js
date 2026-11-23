@@ -12,6 +12,7 @@ const { toPayment } = require('../../utils/enrich');
  * 201 Payment object
  * 200 Payment object when a payment with this id already exists on this invoice (nothing written)
  * 400 VALIDATION_FAILED, 404 NOT_FOUND (invoice), 409 INVOICE_NOT_ISSUED
+ * Admin only: a member gets 404 NOT_FOUND.
  *
  * Flow: validate -> GetItem invoice -> GetItem payment (idempotent retry) -> base status must be
  * ISSUED -> increment PAYMENT counter -> PutItem with attribute_not_exists(id) -> recompute the
@@ -57,4 +58,4 @@ module.exports.handler = middleware.withHandler(async ({ event, body }) => {
 
     logger.info('payment created', { invoiceId, paymentId: item.id, paymentNumber: item.paymentNumber, status: item.status });
     return http.created(toPayment(item));
-});
+}, { adminOnly: true });

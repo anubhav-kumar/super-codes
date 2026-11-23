@@ -9,6 +9,7 @@ const { toInvoiceDetail } = require('../../utils/enrich');
  * PUT /billing/invoices/{id}   full editable field set
  * 200 Invoice detail
  * 400 VALIDATION_FAILED, 400 REFERENCE_NOT_FOUND, 404 NOT_FOUND
+ * Admin only: a member gets 404 NOT_FOUND.
  *
  * invoiceNumber never changes and receivedPaise is not touched (UpdateItem, not Put). Any base
  * status change is allowed. Recomputes totalPaise, sortKey and dueSortKey; REMOVEs orderId and
@@ -33,4 +34,4 @@ module.exports.handler = middleware.withHandler(async ({ event, body }) => {
 
     logger.info('invoice updated', { invoiceId: id, baseStatus: item.baseStatus });
     return http.ok(toInvoiceDetail(item, payments, lookups));
-});
+}, { adminOnly: true });

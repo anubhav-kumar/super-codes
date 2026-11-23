@@ -12,9 +12,10 @@ const { deriveInvoiceStatus } = require('./invoiceStatus');
 
 /**
  * ids: person or company ids of the current page.
+ * orderIds (optional Set, member scope F-55): when given, only invoices whose orderId is in it count.
  * Returns Map id -> { outstandingPaise, hasOverdueInvoice } for ids that have ISSUED invoices.
  */
-async function outstandingByBilledTo(ids) {
+async function outstandingByBilledTo(ids, orderIds) {
     const result = new Map();
     const wanted = new Set(ids);
     if (wanted.size === 0) return result;
@@ -29,14 +30,16 @@ async function outstandingByBilledTo(ids) {
             '#totalPaise': 'totalPaise',
             '#receivedPaise': 'receivedPaise',
             '#dueDate': 'dueDate',
+            '#orderId': 'orderId',
         },
         ExpressionAttributeValues: { ':issued': 'ISSUED' },
-        ProjectionExpression: '#billedToId, #baseStatus, #totalPaise, #receivedPaise, #dueDate',
+        ProjectionExpression: '#billedToId, #baseStatus, #totalPaise, #receivedPaise, #dueDate, #orderId',
     });
 
     const today = validators.todayIst();
     for (const item of items) {
         if (!wanted.has(item.billedToId)) continue;
+        if (orderIds && !orderIds.has(item.orderId)) continue;
         const { outstandingPaise, isOverdue } = deriveInvoiceStatus(item, today);
         const entry = result.get(item.billedToId) || { outstandingPaise: 0, hasOverdueInvoice: false };
         entry.outstandingPaise += outstandingPaise;

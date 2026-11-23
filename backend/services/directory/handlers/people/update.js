@@ -4,24 +4,34 @@ const { PutCommand } = require('@aws-sdk/lib-dynamodb');
 const { middleware, database, errors, validators, http, logger } = require('common');
 const { parsePersonBody } = require('../../validators/person');
 const { toPerson, buildItem, getPerson, assertPanFree } = require('../../models/person');
+const { loadClientScope, canOpenPerson } = require('../../utils/scope');
 
 /**
  * PUT /directory/people/{id}   full editable field set; omitted or null optional fields are cleared
  * 200 Person object
  * 400 VALIDATION_FAILED, 404 NOT_FOUND, 409 PAN_TAKEN
+ * A member may update only a visible client; any other id is 404 before the body is validated.
+ * A member may not change pan: a body PAN that differs from the stored one is 400 VALIDATION_FAILED
+ * (field pan), checked before the PAN uniqueness check.
  *
  * The item is replaced as a whole (keeping id and createdAt), so a cleared pan or a false
  * isIndividualClient removes the sparse GSI keys pan / individualKey.
  */
-module.exports.handler = middleware.withHandler(async ({ event, body }) => {
+module.exports.handler = middleware.withHandler(async ({ event, body, user }) => {
     const id = event.pathParameters && event.pathParameters.id;
     if (!validators.isUuidV4(id)) throw errors.notFound();
+
+    const clientScope = await loadClientScope(user);
+    if (!canOpenPerson(clientScope, id)) throw errors.notFound();
 
     const fields = parsePersonBody(body, { withId: false });
 
     const existing = await getPerson(id);
     if (!existing) throw errors.notFound();
 
+    if (!user.isAdmin && (fields.pan || null) !== (existing.pan || null)) {
+        throw errors.validationFailed([{ field: 'pan', message: 'Only an admin can change PAN' }]);
+    }
     await assertPanFree(fields.pan, id);
 
     const item = buildItem(id, fields, { createdAt: existing.createdAt, updatedAt: new Date().toISOString() });

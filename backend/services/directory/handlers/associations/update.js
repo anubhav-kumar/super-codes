@@ -11,6 +11,7 @@ const { toAssociation } = require('../../models/company');
  * Body: { relationshipType }
  * 200 Association object
  * 400 VALIDATION_FAILED, 404 NOT_FOUND (company or association does not exist)
+ * Admin only: a member gets 404 NOT_FOUND (F-55).
  */
 module.exports.handler = middleware.withHandler(async ({ event, body }) => {
     const params = event.pathParameters || {};
@@ -42,4 +43,4 @@ module.exports.handler = middleware.withHandler(async ({ event, body }) => {
     const person = await getPerson(personId);
     logger.info('association updated', { companyId, personId });
     return http.ok(toAssociation(item, person));
-});
+}, { adminOnly: true });

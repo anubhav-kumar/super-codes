@@ -5,6 +5,7 @@ const { middleware, database, errors, http } = require('common');
 const { toCompany } = require('../../models/company');
 const { mapLimit } = require('../../utils/mapLimit');
 const { outstandingByBilledTo, outstandingFields } = require('../../utils/outstanding');
+const { loadClientScope, canOpenPerson } = require('../../utils/scope');
 
 const CONCURRENCY = 16;
 const PRINCIPAL_TYPES = new Set(['DIRECTOR', 'PARTNER', 'PROPRIETOR']);
@@ -48,8 +49,18 @@ function byMainContact(a, b) {
     return a.personId < b.personId ? -1 : a.personId > b.personId ? 1 : 0;
 }
 
-/** Main contact of each company: Map companyId -> { personId, personName, personPhone, relationshipType } | null. */
-async function mainContacts(companyIds) {
+/** By nameSort, then id (member list order, same as the byName index). */
+function byNameSort(a, b) {
+    if (a.nameSort !== b.nameSort) return (a.nameSort || '') < (b.nameSort || '') ? -1 : 1;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+/**
+ * Main contact of each company: Map companyId -> { personId, personName, personPhone, relationshipType, canOpen } | null.
+ * clientScope: null for an admin (canOpen always true). For a member, a contact who is not a visible
+ * client has canOpen false and personPhone null.
+ */
+async function mainContacts(companyIds, clientScope) {
     const picked = await mapLimit(companyIds, CONCURRENCY, async (id) => {
         const associations = await database.queryAll({
             TableName: process.env.ASSOCIATIONS_TABLE,
@@ -73,21 +84,29 @@ async function mainContacts(companyIds) {
             return;
         }
         const person = people.get(a.personId);
+        const canOpen = canOpenPerson(clientScope, a.personId);
         result.set(id, {
             personId: a.personId,
             personName: person ? person.name : null,
-            personPhone: person ? person.phone || null : null,
+            personPhone: canOpen && person ? person.phone || null : null,
             relationshipType: a.relationshipType,
+            canOpen,
         });
     });
     return result;
 }
 
-/** Companies items -> Company list items (Company object + mainContact, outstanding, hasOverdueInvoice). */
-async function toListItems(items) {
+/**
+ * Companies items -> Company list items (Company object + mainContact, outstanding, hasOverdueInvoice).
+ * For a member, outstanding counts only invoices of visible orders.
+ */
+async function toListItems(items, clientScope) {
     if (items.length === 0) return [];
     const ids = items.map((item) => item.id);
-    const [contacts, owed] = await Promise.all([mainContacts(ids), outstandingByBilledTo(ids)]);
+    const [contacts, owed] = await Promise.all([
+        mainContacts(ids, clientScope),
+        outstandingByBilledTo(ids, clientScope ? clientScope.orderIds : undefined),
+    ]);
     return items.map((item) => ({
         ...toCompany(item),
         mainContact: contacts.get(item.id) || null,
@@ -98,12 +117,22 @@ async function toListItems(items) {
 /**
  * GET /directory/companies?limit=&nextToken=      paginated, sorted by name A-Z
  * 200 { items: [Company list item], nextToken: string | null }
- *     Company list item = Company object + mainContact { personId, personName, personPhone, relationshipType } | null,
+ *     Company list item = Company object + mainContact { personId, personName, personPhone, relationshipType, canOpen } | null,
  *     outstanding (INR, ISSUED invoices billed to this company), hasOverdueInvoice
- * 400 VALIDATION_FAILED  bad limit / nextToken
+ * 400 VALIDATION_FAILED  bad limit / nextToken (admin only)
+ *
+ * Member (F-55): only visible clients, sorted by name, unpaginated (limit and nextToken ignored,
+ * nextToken null); outstanding counts only invoices of visible orders.
  */
-module.exports.handler = middleware.withHandler(async ({ event }) => {
+module.exports.handler = middleware.withHandler(async ({ event, user }) => {
     const query = event.queryStringParameters || {};
+
+    const clientScope = await loadClientScope(user);
+    if (clientScope) {
+        const companies = await database.batchGetByIds(process.env.COMPANIES_TABLE, 'id', [...clientScope.companyIds]);
+        const items = [...companies.values()].sort(byNameSort);
+        return http.ok({ items: await toListItems(items, clientScope), nextToken: null });
+    }
     const limit = parseLimit(query.limit);
     const startKey = parseNextToken(query.nextToken);
 
@@ -120,7 +149,7 @@ module.exports.handler = middleware.withHandler(async ({ event }) => {
     );
 
     return http.ok({
-        items: await toListItems(res.Items || []),
+        items: await toListItems(res.Items || [], null),
         nextToken: database.encodeToken(res.LastEvaluatedKey),
     });
 });

@@ -1,10 +1,12 @@
 'use strict';
 
 const { middleware, database, errors, http, validators } = require('common');
+const scope = require('common/scope');
 const { deriveInvoiceStatus } = require('../utils/invoiceStatus');
 const { mapLimit } = require('../utils/mapLimit');
 
 const OPEN_STATUSES = ['NEW', 'ACCEPTED', 'IN_PROGRESS', 'ON_HOLD'];
+const ALL_STATUSES = ['NEW', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED', 'ON_HOLD', 'CANCELLED'];
 const LIST_LIMIT = 10;
 const DUE_SOON_DAYS = 7;
 const TODAY_MESSAGE = 'today must be a date in the format YYYY-MM-DD';
@@ -96,17 +98,116 @@ async function openOrders() {
     return lists.flat();
 }
 
+/** Member: every visible order (all statuses), with ORDER_FIELDS. [] when no Worker is linked. */
+async function memberOrders(user) {
+    const ids = await scope.visibleOrderIds(user);
+    if (ids.size === 0) return [];
+    const found = await database.batchGetByIds(process.env.ORDERS_TABLE, 'id', [...ids], ORDER_FIELDS);
+    return [...found.values()];
+}
+
+/** Count of orders per status; every status key is always present. */
+function countByStatus(items) {
+    const byStatus = Object.fromEntries(ALL_STATUSES.map((s) => [s, 0]));
+    for (const item of items) if (Object.hasOwn(byStatus, item.status)) byStatus[item.status] += 1;
+    return byStatus;
+}
+
+/** Overdue / due-soon counts and the 10 most overdue of the given open orders. */
+function summarizeOrders(openItems, today, dueSoonEnd) {
+    let overdueCount = 0;
+    let dueSoonCount = 0;
+    const overdue = [];
+    for (const item of openItems) {
+        if (!item.dueDate) continue;
+        if (item.dueDate < today) {
+            overdueCount += 1;
+            overdue.push({ item, daysOverdue: daysBetween(item.dueDate, today) });
+        } else if (item.dueDate <= dueSoonEnd) {
+            dueSoonCount += 1;
+        }
+    }
+    overdue.sort(
+        (a, b) =>
+            b.daysOverdue - a.daysOverdue ||
+            (Number(a.item.orderSeq) || 0) - (Number(b.item.orderSeq) || 0) ||
+            String(a.item.orderNumber).localeCompare(String(b.item.orderNumber))
+    );
+    return { overdueCount, dueSoonCount, topOrders: overdue.slice(0, LIST_LIMIT) };
+}
+
+/** One BatchGet round for the names of the listed items only. Returns { nameOf, workers }. */
+async function loadNames(topInvoices, topOrders) {
+    const personIds = [];
+    const companyIds = [];
+    const workerIds = [];
+    for (const { item } of topInvoices) {
+        (item.billedToType === 'COMPANY' ? companyIds : personIds).push(item.billedToId);
+    }
+    for (const { item } of topOrders) {
+        (item.clientType === 'COMPANY' ? companyIds : personIds).push(item.clientId);
+        if (item.primaryWorkerId) workerIds.push(item.primaryWorkerId);
+    }
+    const [people, companies, workers] = await Promise.all([
+        database.batchGetByIds(process.env.PEOPLE_TABLE, 'id', personIds, ['name']),
+        database.batchGetByIds(process.env.COMPANIES_TABLE, 'id', companyIds, ['name']),
+        database.batchGetByIds(process.env.WORKERS_TABLE, 'id', workerIds, ['name']),
+    ]);
+    const nameOf = (type, id) => {
+        const rec = (type === 'COMPANY' ? companies : people).get(id);
+        return rec ? rec.name : null;
+    };
+    return { nameOf, workers };
+}
+
+function toOverdueOrder({ item, daysOverdue }, { nameOf, workers }) {
+    const owner = item.primaryWorkerId ? workers.get(item.primaryWorkerId) : null;
+    return {
+        id: item.id,
+        orderNumber: item.orderNumber,
+        serviceName: item.serviceName,
+        client: { type: item.clientType, id: item.clientId, name: nameOf(item.clientType, item.clientId) },
+        primaryOwner: item.primaryWorkerId ? { id: item.primaryWorkerId, name: owner ? owner.name : null } : null,
+        dueDate: item.dueDate,
+        daysOverdue,
+        status: item.status,
+    };
+}
+
+/**
+ * Member home (FR1 decision 10): only the member's own orders (assigned to their linked Worker).
+ * No firm money: invoices null, overdueInvoices []; Invoices are never queried. No Worker: zeros.
+ */
+async function memberSummary(user, today, dueSoonEnd) {
+    const items = await memberOrders(user);
+    const open = items.filter((i) => OPEN_STATUSES.includes(i.status));
+    const { overdueCount, dueSoonCount, topOrders } = summarizeOrders(open, today, dueSoonEnd);
+    const names = await loadNames([], topOrders);
+    return {
+        today,
+        scope: 'MEMBER',
+        invoices: null,
+        orders: { overdueCount, dueSoonCount, byStatus: countByStatus(items) },
+        overdueInvoices: [],
+        overdueOrders: topOrders.map((o) => toOverdueOrder(o, names)),
+        generatedAt: new Date().toISOString(),
+    };
+}
+
 /**
  * GET /dashboard/summary?today=YYYY-MM-DD
- * Firm summary for Home: invoice and order counts/totals over all records, plus the 10 most overdue
- * invoices and the 10 most overdue open orders. Every overdue / due-soon decision uses `today`
- * (device local date when given, else today IST).
+ * Admin: firm summary for Home: invoice and order counts/totals over all records, plus the 10 most
+ * overdue invoices and the 10 most overdue open orders; scope "FIRM", orders.byStatus null.
+ * Member: scope "MEMBER", own orders only (see memberSummary).
+ * Every overdue / due-soon decision uses `today` (device local date when given, else today IST).
  * 200 summary, 400 VALIDATION_FAILED (today).
  */
-module.exports.handler = middleware.withHandler(async ({ event }) => {
+module.exports.handler = middleware.withHandler(async ({ event, user }) => {
     const query = event.queryStringParameters || {};
     const today = parseToday(query.today);
     const dueSoonEnd = addDays(today, DUE_SOON_DAYS);
+
+    if (scope.isMember(user)) return http.ok(await memberSummary(user, today, dueSoonEnd));
 
     const [invoiceItems, orderItems] = await Promise.all([issuedInvoices(), openOrders()]);
 
@@ -138,47 +239,14 @@ module.exports.handler = middleware.withHandler(async ({ event }) => {
     const topInvoices = overdueInvoices.slice(0, LIST_LIMIT);
 
     // Orders: open only (the queries); orders without dueDate are never overdue or due soon.
-    let overdueOrderCount = 0;
-    let dueSoonCount = 0;
-    const overdueOrders = [];
-    for (const item of orderItems) {
-        if (!item.dueDate) continue;
-        if (item.dueDate < today) {
-            overdueOrderCount += 1;
-            overdueOrders.push({ item, daysOverdue: daysBetween(item.dueDate, today) });
-        } else if (item.dueDate <= dueSoonEnd) {
-            dueSoonCount += 1;
-        }
-    }
-    overdueOrders.sort(
-        (a, b) =>
-            b.daysOverdue - a.daysOverdue ||
-            (Number(a.item.orderSeq) || 0) - (Number(b.item.orderSeq) || 0) ||
-            String(a.item.orderNumber).localeCompare(String(b.item.orderNumber))
-    );
-    const topOrders = overdueOrders.slice(0, LIST_LIMIT);
+    const orders = summarizeOrders(orderItems, today, dueSoonEnd);
+    const { topOrders } = orders;
 
-    // One BatchGet round for the names of the listed items only.
-    const personIds = [];
-    const companyIds = [];
-    const workerIds = [];
-    for (const { item } of topInvoices) (item.billedToType === 'COMPANY' ? companyIds : personIds).push(item.billedToId);
-    for (const { item } of topOrders) {
-        (item.clientType === 'COMPANY' ? companyIds : personIds).push(item.clientId);
-        if (item.primaryWorkerId) workerIds.push(item.primaryWorkerId);
-    }
-    const [people, companies, workers] = await Promise.all([
-        database.batchGetByIds(process.env.PEOPLE_TABLE, 'id', personIds, ['name']),
-        database.batchGetByIds(process.env.COMPANIES_TABLE, 'id', companyIds, ['name']),
-        database.batchGetByIds(process.env.WORKERS_TABLE, 'id', workerIds, ['name']),
-    ]);
-    const nameOf = (type, id) => {
-        const rec = (type === 'COMPANY' ? companies : people).get(id);
-        return rec ? rec.name : null;
-    };
+    const names = await loadNames(topInvoices, topOrders);
 
     return http.ok({
         today,
+        scope: 'FIRM',
         invoices: {
             outstandingTotal: validators.toInr(outstandingPaise),
             unpaidCount,
@@ -186,34 +254,25 @@ module.exports.handler = middleware.withHandler(async ({ event }) => {
             overdueCount: overdueInvoiceCount,
         },
         orders: {
-            overdueCount: overdueOrderCount,
-            dueSoonCount,
+            overdueCount: orders.overdueCount,
+            dueSoonCount: orders.dueSoonCount,
+            byStatus: null,
         },
         overdueInvoices: topInvoices.map(({ item, derived, daysOverdue }) => ({
             id: item.id,
             invoiceNumber: item.invoiceNumber,
-            billedTo: { type: item.billedToType, id: item.billedToId, name: nameOf(item.billedToType, item.billedToId) },
+            billedTo: {
+                type: item.billedToType,
+                id: item.billedToId,
+                name: names.nameOf(item.billedToType, item.billedToId),
+            },
             dueDate: item.dueDate,
             daysOverdue,
             total: validators.toInr(Number(item.totalPaise) || 0),
             outstanding: validators.toInr(derived.outstandingPaise),
             displayedStatus: derived.displayedStatus,
         })),
-        overdueOrders: topOrders.map(({ item, daysOverdue }) => {
-            const owner = item.primaryWorkerId ? workers.get(item.primaryWorkerId) : null;
-            return {
-                id: item.id,
-                orderNumber: item.orderNumber,
-                serviceName: item.serviceName,
-                client: { type: item.clientType, id: item.clientId, name: nameOf(item.clientType, item.clientId) },
-                primaryOwner: item.primaryWorkerId
-                    ? { id: item.primaryWorkerId, name: owner ? owner.name : null }
-                    : null,
-                dueDate: item.dueDate,
-                daysOverdue,
-                status: item.status,
-            };
-        }),
+        overdueOrders: topOrders.map((o) => toOverdueOrder(o, names)),
         generatedAt: new Date().toISOString(),
     });
 });

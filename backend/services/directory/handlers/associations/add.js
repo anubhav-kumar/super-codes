@@ -30,6 +30,7 @@ async function putAssociation(item) {
  * Body: { personId, relationshipType } or { person: { id, name, phone, email }, relationshipType }
  * 201 Association object
  * 400 VALIDATION_FAILED, 400 REFERENCE_NOT_FOUND, 404 NOT_FOUND, 409 ASSOCIATION_EXISTS
+ * Admin only: a member gets 404 NOT_FOUND (F-55).
  */
 module.exports.handler = middleware.withHandler(async ({ event, body }) => {
     const companyId = event.pathParameters && event.pathParameters.id;
@@ -97,4 +98,4 @@ module.exports.handler = middleware.withHandler(async ({ event, body }) => {
 
     logger.info('association added', { companyId, personId: input.personId, quickAdded: Boolean(newPerson) });
     return http.created(toAssociation(item, person));
-});
+}, { adminOnly: true });

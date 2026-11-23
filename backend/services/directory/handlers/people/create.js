@@ -10,6 +10,7 @@ const { toPerson, buildItem, getPerson, assertPanFree } = require('../../models/
  * 201 Person object
  * 200 Person object when a person with this id already exists (nothing written)
  * 400 VALIDATION_FAILED, 409 PAN_TAKEN
+ * Admin only: a member gets 404 NOT_FOUND (F-55).
  */
 module.exports.handler = middleware.withHandler(async ({ body }) => {
     const fields = parsePersonBody(body, { withId: true });
@@ -40,4 +41,4 @@ module.exports.handler = middleware.withHandler(async ({ body }) => {
 
     logger.info('person created', { personId: id });
     return http.created(toPerson(item));
-});
+}, { adminOnly: true });

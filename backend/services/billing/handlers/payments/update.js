@@ -10,6 +10,7 @@ const { toPayment } = require('../../utils/enrich');
  * PUT /billing/invoices/{id}/payments/{paymentId}   full editable field set, status required
  * 200 Payment object
  * 400 VALIDATION_FAILED, 404 NOT_FOUND (invoice or payment)
+ * Admin only: a member gets 404 NOT_FOUND.
  *
  * Allowed whatever the invoice's base status. paymentNumber and createdDate never change.
  * Recomputes the invoice's receivedPaise. Never touches Orders.
@@ -33,4 +34,4 @@ module.exports.handler = middleware.withHandler(async ({ event, body }) => {
 
     logger.info('payment updated', { invoiceId, paymentId, status: item.status });
     return http.ok(toPayment(item));
-});
+}, { adminOnly: true });

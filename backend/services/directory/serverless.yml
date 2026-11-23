@@ -13,6 +13,9 @@ custom:
   usersTable: ca-crm-auth-${sls:stage}-users
   # Owned by the billing stack; read-only here (F-29 list outstanding).
   invoicesTable: ca-crm-billing-${sls:stage}-invoices
+  # Owned by the orders stack; read-only here (F-55 member scope, common/scope).
+  ordersTable: ca-crm-orders-${sls:stage}-orders
+  assignmentsTable: ca-crm-orders-${sls:stage}-order-assignments
 
 provider:
   name: aws
@@ -33,6 +36,8 @@ provider:
     SESSIONS_TABLE: ${self:custom.sessionsTable}
     USERS_TABLE: ${self:custom.usersTable}
     INVOICES_TABLE: ${self:custom.invoicesTable}
+    ORDERS_TABLE: ${self:custom.ordersTable}
+    ASSIGNMENTS_TABLE: ${self:custom.assignmentsTable}
   iam:
     role:
       statements:
@@ -70,6 +75,16 @@ provider:
           Resource:
             - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.invoicesTable}
             - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.invoicesTable}/index/*
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.assignmentsTable}/index/*
+        - Effect: Allow
+          Action:
+            - dynamodb:BatchGetItem
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.ordersTable}
 
 package:
   patterns:

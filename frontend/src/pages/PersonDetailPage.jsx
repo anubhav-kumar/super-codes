@@ -20,6 +20,7 @@ import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useClientOrders } from '../hooks/useOrders.js';
 import { usePerson } from '../hooks/usePeople.js';
 import useRecordVisit from '../hooks/useRecordVisit.js';
+import useRole from '../hooks/useRole.js';
 
 /** Contact facts; empty ones are hidden and offered as "Add …" links instead. PAN stays in the header. */
 function PersonDetails({ person: p }) {
@@ -48,10 +49,12 @@ function PersonDetails({ person: p }) {
  * then Open orders, Invoices, Companies, Orders requested and Details.
  * Phones: one column in that order. lg+: figures in one full-width row, then details and companies left; orders and invoices right.
  * Orders and invoices load once here and feed both the figures and their sections.
+ * Members (P-26 F-55): no New order / New invoice; Edit stays; figures come from their scoped orders and invoices.
  */
 export default function PersonDetailPage() {
     const { personId } = useParams();
     const { online } = useOnlineStatus();
+    const { isAdmin } = useRole();
     const person = usePerson(personId);
     useRecordVisit('person', personId, person);
     const orders = useClientOrders(personId);
@@ -79,22 +82,24 @@ export default function PersonDetailPage() {
                                 title={p.name}
                                 meta={p.pan ? <span className="font-mono text-[13px] text-ink-muted">PAN {p.pan}</span> : null}
                                 actions={
-                                    <>
-                                        {/* The order client picker only offers individual clients, so New order is hidden otherwise. */}
-                                        {p.isIndividualClient && (
-                                            <Button icon="plus" to={`/orders/new?${preselect}`} disabled={!online}>
-                                                New order
+                                    isAdmin && (
+                                        <>
+                                            {/* The order client picker only offers individual clients, so New order is hidden otherwise. */}
+                                            {p.isIndividualClient && (
+                                                <Button icon="plus" to={`/orders/new?${preselect}`} disabled={!online}>
+                                                    New order
+                                                </Button>
+                                            )}
+                                            <Button
+                                                variant={p.isIndividualClient ? 'secondary' : 'primary'}
+                                                icon="raise-invoice"
+                                                to={`/invoices/new?${preselect}`}
+                                                disabled={!online}
+                                            >
+                                                New invoice
                                             </Button>
-                                        )}
-                                        <Button
-                                            variant={p.isIndividualClient ? 'secondary' : 'primary'}
-                                            icon="raise-invoice"
-                                            to={`/invoices/new?${preselect}`}
-                                            disabled={!online}
-                                        >
-                                            New invoice
-                                        </Button>
-                                    </>
+                                        </>
+                                    )
                                 }
                                 more={[{ label: 'Edit', icon: 'edit', to: `/people/${p.id}/edit`, disabled: !online }]}
                             >

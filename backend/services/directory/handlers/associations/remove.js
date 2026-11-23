@@ -9,6 +9,7 @@ const { getAssociation } = require('../../models/company');
  * 204 (empty)
  * 404 NOT_FOUND         association does not exist
  * 409 LAST_ASSOCIATION  the company has only this association
+ * Admin only: a member gets 404 NOT_FOUND (F-55).
  * The person record is never deleted.
  */
 module.exports.handler = middleware.withHandler(async ({ event }) => {
@@ -50,4 +51,4 @@ module.exports.handler = middleware.withHandler(async ({ event }) => {
 
     logger.info('association removed', { companyId, personId });
     return http.noContent();
-});
+}, { adminOnly: true });

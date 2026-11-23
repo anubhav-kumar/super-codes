@@ -91,7 +91,7 @@ function QuickAddRows({ online, onAdd }) {
     );
 }
 
-function ClientSheet({ title, initialTab, anyPerson, onPick, onClose }) {
+function ClientSheet({ title, initialTab, anyPerson, allowCreate, onPick, onClose }) {
     const people = usePeople();
     const companies = useCompanies();
     const { online } = useOnlineStatus();
@@ -107,7 +107,7 @@ function ClientSheet({ title, initialTab, anyPerson, onPick, onClose }) {
         onPick(client);
     };
 
-    if (adding) {
+    if (adding && allowCreate) {
         // Typed search text is a good first guess for the name.
         const initialName = query.trim();
         return (
@@ -123,7 +123,7 @@ function ClientSheet({ title, initialTab, anyPerson, onPick, onClose }) {
 
     return (
         <Sheet open title={title} onClose={onClose}>
-            <QuickAddRows online={online} onAdd={setAdding} />
+            {allowCreate && <QuickAddRows online={online} onAdd={setAdding} />}
             <div className="sticky top-0 z-10 -mx-4 flex flex-col gap-2 border-y border-line bg-surface px-4 py-3 md:-mx-5 md:px-5">
                 <SegmentedControl label="Client type" options={TABS} value={tab} onChange={setTab} />
                 <SearchInput
@@ -176,6 +176,7 @@ function ClientSheet({ title, initialTab, anyPerson, onPick, onClose }) {
  *   value / onChange  { type: 'PERSON' | 'COMPANY', id, name } (null when empty)
  *   anyPerson         offer every person, not only individual clients (invoice billed-to)
  *   loading           shows "Loading client…" and disables the field (preselect from the URL)
+ *   allowCreate       show the quick add rows (default true; false for members, who cannot create clients)
  * Quick add only returns the new client through onChange; the parent form keeps all its state.
  */
 export default function ClientPicker({
@@ -189,6 +190,7 @@ export default function ClientPicker({
     loading = false,
     sheetTitle = 'Choose a client',
     anyPerson = false,
+    allowCreate = true,
     className = '',
 }) {
     const fieldId = useId();
@@ -230,6 +232,7 @@ export default function ClientPicker({
                     title={sheetTitle}
                     initialTab={value ? value.type : 'PERSON'}
                     anyPerson={anyPerson}
+                    allowCreate={allowCreate}
                     onClose={() => setOpen(false)}
                     onPick={(picked) => {
                         setOpen(false);

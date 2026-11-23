@@ -22,13 +22,13 @@ function dateOf(p) {
  * A payment as a two-line row. Line 1: kind and amount (bold when Paid, since only Paid counts as
  * received; gray otherwise). Line 2: PAY number · status badge · date · reference.
  */
-function PaymentRow({ invoiceId, payment: p }) {
+function PaymentRow({ invoiceId, payment: p, readOnly }) {
     const counted = p.status === 'PAID';
     const reference = p.transactionReference || p.link;
     const date = dateOf(p);
     return (
         <ListRow
-            to={`/invoices/${invoiceId}/payments/${p.id}/edit`}
+            to={readOnly ? undefined : `/invoices/${invoiceId}/payments/${p.id}/edit`}
             title={counted ? 'Payment received' : 'Payment request'}
             trailing={
                 counted ? (
@@ -58,16 +58,17 @@ function PaymentRow({ invoiceId, payment: p }) {
  * each opening its edit form. Payments come inside the invoice detail response, so this section
  * shares the page's loading and offline state. The section action "Record payment" shows only on an
  * issued invoice with something outstanding (F-37) and is disabled offline. A paid invoice's footer
- * reads "Fully paid." when no other note applies.
+ * reads "Fully paid." when no other note applies. `readOnly` (members, P-26 F-56): rows are not
+ * links, no Record payment action, no notes that invite an action.
  */
-export default function InvoicePaymentsSection({ invoice, className = 'mt-4' }) {
+export default function InvoicePaymentsSection({ invoice, readOnly = false, className = 'mt-4' }) {
     const { online } = useOnlineStatus();
     const payments = Array.isArray(invoice.payments) ? invoice.payments : [];
     // Record payment only while something is owed (F-37): never on a paid or cancelled invoice.
-    const canRecord = invoice.baseStatus === 'ISSUED' && Number(invoice.outstanding) > 0;
+    const canRecord = !readOnly && invoice.baseStatus === 'ISSUED' && Number(invoice.outstanding) > 0;
 
     let note = null;
-    if (invoice.baseStatus === 'DRAFT') note = 'Issue the invoice to record payments.';
+    if (invoice.baseStatus === 'DRAFT') note = readOnly ? 'Not issued yet.' : 'Issue the invoice to record payments.';
     else if (invoice.baseStatus === 'CANCELLED') note = 'Cancelled invoices take no new payments.';
     else if (payments.some((p) => p.status !== 'PAID')) note = 'Only Paid payments count as received.';
     else if (isInvoicePaid(invoice)) note = 'Fully paid.';
@@ -92,7 +93,7 @@ export default function InvoicePaymentsSection({ invoice, className = 'mt-4' }) 
                 <ul className="divide-y divide-line border-t border-line">
                     {payments.map((p) => (
                         <li key={p.id}>
-                            <PaymentRow invoiceId={invoice.id} payment={p} />
+                            <PaymentRow invoiceId={invoice.id} payment={p} readOnly={readOnly} />
                         </li>
                     ))}
                 </ul>

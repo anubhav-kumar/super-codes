@@ -4,6 +4,7 @@ import Button from '../components/Button.jsx';
 import DataView from '../components/DataView.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ListToolbar from '../components/ListToolbar.jsx';
+import NoWorkerState from '../components/NoWorkerState.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
@@ -15,6 +16,7 @@ import useListFilter from '../hooks/useListFilter.js';
 import useListSort from '../hooks/useListSort.js';
 import useMediaQuery from '../hooks/useMediaQuery.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
+import useRole from '../hooks/useRole.js';
 import { useWorkers } from '../hooks/useWorkers.js';
 
 const EMPTY_FILTER_TEXT = { ACTIVE: 'No active workers.', INACTIVE: 'No inactive workers.' };
@@ -23,15 +25,18 @@ const SEARCH_FIELDS = ['name', 'phone', (w) => designationLabel(w.designation)];
 /**
  * Workers list (F-04, F-30): Active / Inactive / All chips with counts (default Active), two-line rows
  * with the open order count, a sortable table from 1024 px (Name, Open orders). Search by name,
- * phone and designation on the device.
+ * phone and designation on the device. Members (P-26 F-57): the backend sends only their own Worker,
+ * so there is no Add worker, no status chips or search (all statuses shown), and NoWorkerState when
+ * no Worker is linked.
  */
 export default function WorkersListPage() {
     const { online } = useOnlineStatus();
+    const { isAdmin } = useRole();
     const wide = useMediaQuery('(min-width: 1024px)');
     const workers = useWorkers();
     const [params, setParams] = useSearchParams();
     const requested = params.get('status');
-    const filter = WORKER_FILTERS.some((f) => f.value === requested) ? requested : 'ACTIVE';
+    const filter = !isAdmin ? 'ALL' : WORKER_FILTERS.some((f) => f.value === requested) ? requested : 'ACTIVE';
     const list = useListSort(WORKER_LIST_SORTS, 'name');
 
     const setFilter = (value) => {
@@ -67,27 +72,33 @@ export default function WorkersListPage() {
         <PageBody width="list">
             <PageHeader
                 title="Workers"
-                search={all.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Name or phone', label: 'Search workers by name, phone or designation' } : undefined}
+                search={isAdmin && all.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Name or phone', label: 'Search workers by name, phone or designation' } : undefined}
                 actions={
-                    <Button icon="plus" to="/workers/new" disabled={!online} aria-label="Add worker">
-                        <span className="md:hidden">Add</span>
-                        <span className="hidden md:inline">Add worker</span>
-                    </Button>
+                    isAdmin && (
+                        <Button icon="plus" to="/workers/new" disabled={!online} aria-label="Add worker">
+                            <span className="md:hidden">Add</span>
+                            <span className="hidden md:inline">Add worker</span>
+                        </Button>
+                    )
                 }
             />
-            {!online && <OfflineActionHint className="mb-4" />}
+            {isAdmin && !online && <OfflineActionHint className="mb-4" />}
             <DataView resource={workers} skeleton={wide ? 'table' : 'rows'}>
                 {(data) =>
                     !data || data.length === 0 ? (
-                        <EmptyState
-                            icon="workers"
-                            title="No workers yet"
-                            text="Add the people in your firm so orders can be assigned to them."
-                            action={online ? { label: 'Add worker', to: '/workers/new', icon: 'plus' } : undefined}
-                        />
+                        isAdmin ? (
+                            <EmptyState
+                                icon="workers"
+                                title="No workers yet"
+                                text="Add the people in your firm so orders can be assigned to them."
+                                action={online ? { label: 'Add worker', to: '/workers/new', icon: 'plus' } : undefined}
+                            />
+                        ) : (
+                            <NoWorkerState />
+                        )
                     ) : (
                         <>
-                            <ListToolbar filter={{ label: 'Status', options: filterOptions, value: filter, onChange: setFilter }} sort={list} />
+                            {isAdmin && <ListToolbar filter={{ label: 'Status', options: filterOptions, value: filter, onChange: setFilter }} sort={list} />}
                             {rows.length === 0 ? (
                                 query.trim() ? (
                                     <EmptyState

@@ -10,6 +10,7 @@ import EmptyState from '../components/EmptyState.jsx';
 import InvoiceRow from '../components/InvoiceRow.jsx';
 import ListToolbar from '../components/ListToolbar.jsx';
 import Money from '../components/Money.jsx';
+import NoWorkerState from '../components/NoWorkerState.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
@@ -30,6 +31,7 @@ import useListFilter from '../hooks/useListFilter.js';
 import useListSort from '../hooks/useListSort.js';
 import useMediaQuery from '../hooks/useMediaQuery.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
+import useRole from '../hooks/useRole.js';
 import { useOrders } from '../hooks/useOrders.js';
 import { isInvoiceOpen } from '../utils/due.js';
 import { formatMoney } from '../utils/format.js';
@@ -162,8 +164,10 @@ function InvoiceTable({ rows, filter, sort }) {
     );
 }
 
-function InvoiceResults({ invoices, rows, query, setQuery, filter, sort, wide, addDisabled }) {
+function InvoiceResults({ invoices, rows, query, setQuery, filter, sort, wide, addDisabled, member }) {
     if (invoices.length === 0) {
+        if (member === 'no-worker') return <NoWorkerState />;
+        if (member) return <EmptyState icon="invoices" title="No invoices yet" text="Invoices for your orders show here." />;
         return (
             <EmptyState
                 icon="invoices"
@@ -204,10 +208,14 @@ function summaryItems(rows, filter) {
 /**
  * Invoices list (F-24): who owes what. Filter chips with counts (?filter=, values kept for Home),
  * a summary of what is owed for the invoices in view, sort (?sort=), search on the device.
- * Phones and tablets: two-line InvoiceRow; lg+: sortable table.
+ * Phones and tablets: two-line InvoiceRow; lg+: sortable table. Members (P-26 F-56): read-only, no
+ * New invoice; the backend sends only invoices of their orders, so the summary covers only those;
+ * empty list says so, or shows NoWorkerState without a linked Worker.
  */
 export default function InvoicesListPage() {
     const { online } = useOnlineStatus();
+    const { isAdmin, hasWorker } = useRole();
+    const member = isAdmin ? null : hasWorker ? 'worker' : 'no-worker';
     const wide = useMediaQuery(WIDE);
     const invoices = useInvoices();
     const [params, setParams] = useSearchParams();
@@ -253,13 +261,15 @@ export default function InvoicesListPage() {
                 title="Invoices"
                 search={all.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Invoice, client, order', label: 'Search invoices by number, billed to or order' } : undefined}
                 actions={
-                    <Button icon="plus" to="/invoices/new" disabled={!online} aria-label="New invoice">
-                        <span className="md:hidden">New</span>
-                        <span className="hidden md:inline">New invoice</span>
-                    </Button>
+                    isAdmin && (
+                        <Button icon="plus" to="/invoices/new" disabled={!online} aria-label="New invoice">
+                            <span className="md:hidden">New</span>
+                            <span className="hidden md:inline">New invoice</span>
+                        </Button>
+                    )
                 }
             />
-            {!online && <OfflineActionHint className="mb-4" />}
+            {isAdmin && !online && <OfflineActionHint className="mb-4" />}
             <ListToolbar
                 filter={{ label: 'Filter invoices', options: filterOptions, value: filter, onChange: setFilter }}
                 sort={all.length > 1 ? phoneSort : undefined}
@@ -276,6 +286,7 @@ export default function InvoicesListPage() {
                         sort={sort}
                         wide={wide}
                         addDisabled={!online}
+                        member={member}
                     />
                 )}
             </DataView>

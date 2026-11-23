@@ -4,6 +4,7 @@ import ClientsTabs from '../components/ClientsTabs.jsx';
 import DataView from '../components/DataView.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ListToolbar from '../components/ListToolbar.jsx';
+import NoWorkerState from '../components/NoWorkerState.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
 import PageBody from '../components/PageBody.jsx';
 import PageHeader from '../components/PageHeader.jsx';
@@ -17,6 +18,7 @@ import useListFilter from '../hooks/useListFilter.js';
 import useListSort from '../hooks/useListSort.js';
 import useMediaQuery from '../hooks/useMediaQuery.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
+import useRole from '../hooks/useRole.js';
 
 const contactName = (company) => (company.mainContact && company.mainContact.personName) || '';
 const SEARCH_FIELDS = ['name', 'pan', 'phone', contactName];
@@ -24,10 +26,12 @@ const SEARCH_FIELDS = ['name', 'pan', 'phone', contactName];
 /**
  * Companies list (F-03, F-29): two-line rows with entity type, main contact and outstanding money
  * (red only when an invoice is overdue); a sortable table from 1024 px. Search by name, PAN, phone
- * (and main contact) on the device.
+ * (and main contact) on the device. Members (P-26 F-55): no Add company; the backend sends only the
+ * clients of their orders; empty list says so, or shows NoWorkerState without a linked Worker.
  */
 export default function CompaniesListPage() {
     const { online } = useOnlineStatus();
+    const { isAdmin, hasWorker } = useRole();
     const wide = useMediaQuery('(min-width: 1024px)');
     const companies = useCompanies();
     const list = useListSort(CLIENT_LIST_SORTS, 'name');
@@ -41,23 +45,31 @@ export default function CompaniesListPage() {
                 titleSlot={<ClientsTabs value="/companies" className={CLIENTS_TABS_CLASS} />}
                 search={companies.data && companies.data.length > 0 ? { value: query, onChange: setQuery, placeholder: 'Name, PAN, phone', label: 'Search companies by name, PAN, phone or main contact' } : undefined}
                 actions={
-                    <Button icon="plus" to="/companies/new" disabled={!online} aria-label="Add company" className={ADD_BUTTON_CLASS}>
-                        <span className="md:hidden">Add</span>
-                        <span className="hidden md:inline">Add company</span>
-                    </Button>
+                    isAdmin && (
+                        <Button icon="plus" to="/companies/new" disabled={!online} aria-label="Add company" className={ADD_BUTTON_CLASS}>
+                            <span className="md:hidden">Add</span>
+                            <span className="hidden md:inline">Add company</span>
+                        </Button>
+                    )
                 }
             />
-            {!online && <OfflineActionHint className="mb-4" />}
+            {isAdmin && !online && <OfflineActionHint className="mb-4" />}
 
             <DataView resource={companies} skeleton={wide ? 'table' : 'rows'}>
                 {(items) =>
                     !items || items.length === 0 ? (
-                        <EmptyState
-                            icon="clients"
-                            title="No companies yet"
-                            text="Add the companies the firm works for, with the people who represent them."
-                            action={online ? { label: 'Add company', to: '/companies/new', icon: 'plus' } : undefined}
-                        />
+                        !isAdmin && !hasWorker ? (
+                            <NoWorkerState />
+                        ) : !isAdmin ? (
+                            <EmptyState icon="clients" title="No clients yet" text="Clients of your orders show here." />
+                        ) : (
+                            <EmptyState
+                                icon="clients"
+                                title="No companies yet"
+                                text="Add the companies the firm works for, with the people who represent them."
+                                action={online ? { label: 'Add company', to: '/companies/new', icon: 'plus' } : undefined}
+                            />
+                        )
                     ) : rows.length === 0 ? (
                         <EmptyState
                             icon="search"
