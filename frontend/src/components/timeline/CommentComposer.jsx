@@ -10,12 +10,12 @@ import useOnlineStatus from '../../hooks/useOnlineStatus.js';
 import useSubmit from '../../hooks/useSubmit.js';
 
 export const COMMENT_MAX = 5000;
-const COUNTER_FROM = 4500;
+export const COUNTER_FROM = 4500;
 const MAX_ROWS = 8;
-const numberFormat = new Intl.NumberFormat('en-US');
+export const numberFormat = new Intl.NumberFormat('en-US');
 
 /** Grow the text area with its content, from its `rows` up to MAX_ROWS, then scroll. */
-function fitHeight(el) {
+export function fitHeight(el) {
     if (!el) return;
     const style = window.getComputedStyle(el);
     const px = (v) => parseFloat(v) || 0;

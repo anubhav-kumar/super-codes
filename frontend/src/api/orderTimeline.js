@@ -33,3 +33,22 @@ export function postOrderComment(orderId, { id, text, status = null }) {
     if (status) body.status = status;
     return request(`/timeline/orders/${enc(orderId)}/comments`, { method: 'POST', body });
 }
+
+/**
+ * PUT /timeline/orders/{orderId}/comments/{commentId} (F-61) with { text } only (never a status).
+ * Author only (admins too edit only their own). -> data = { comment: Entry } with editedAt set
+ * (unchanged text: nothing written, editedAt unchanged).
+ * Errors: 400 VALIDATION_FAILED (text), 403 NOT_COMMENT_AUTHOR, 404 NOT_FOUND (scope, unknown or deleted id).
+ */
+export function updateOrderComment(orderId, commentId, { text }) {
+    return request(`/timeline/orders/${enc(orderId)}/comments/${enc(commentId)}`, { method: 'PUT', body: { text } });
+}
+
+/**
+ * DELETE /timeline/orders/{orderId}/comments/{commentId} (F-61). 204, empty body; also 204 when the
+ * comment is already gone. Author, or any admin. The order status and a progress update's status
+ * changed event stay. Errors: 403 NOT_COMMENT_AUTHOR (member, another user's comment), 404 NOT_FOUND.
+ */
+export function deleteOrderComment(orderId, commentId) {
+    return request(`/timeline/orders/${enc(orderId)}/comments/${enc(commentId)}`, { method: 'DELETE' });
+}

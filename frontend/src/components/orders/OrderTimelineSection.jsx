@@ -104,7 +104,14 @@ export default function OrderTimelineSection({ order, onOrderChange, className =
                     entries.length === 0 ? (
                         <EmptyState icon="comment" compact title="No activity yet" text="Comments and status changes show here." />
                     ) : (
-                        <TimelineList entries={entries} showAll={showAll} onShowAll={() => setShowAll(true)} highlightId={flashId} />
+                        <TimelineList
+                            entries={entries}
+                            showAll={showAll}
+                            onShowAll={() => setShowAll(true)}
+                            highlightId={flashId}
+                            orderId={order.id}
+                            onCommentChanged={reload}
+                        />
                     )
                 }
             </DataView>

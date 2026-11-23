@@ -19,8 +19,9 @@ function DayDivider({ iso }) {
 /**
  * Timeline entries oldest first (newest last), with a day divider before each new local day.
  * Shows the newest TIMELINE_VISIBLE unless `showAll`; the rest sit behind a "Show earlier (n)" button.
+ * `orderId` and `onCommentChanged` enable the comment edit / delete actions (F-61).
  */
-export default function TimelineList({ entries, showAll = false, onShowAll, highlightId }) {
+export default function TimelineList({ entries, showAll = false, onShowAll, highlightId, orderId, onCommentChanged }) {
     const hidden = showAll ? 0 : Math.max(0, entries.length - TIMELINE_VISIBLE);
     const shown = hidden ? entries.slice(hidden) : entries;
     return (
@@ -43,7 +44,12 @@ export default function TimelineList({ entries, showAll = false, onShowAll, high
                             {newDay && <DayDivider iso={entry.createdAt} />}
                             <li>
                                 {entry.kind === 'COMMENT' ? (
-                                    <CommentEntry entry={entry} highlight={entry.id === highlightId} />
+                                    <CommentEntry
+                                        entry={entry}
+                                        orderId={orderId}
+                                        onChanged={onCommentChanged}
+                                        highlight={entry.id === highlightId}
+                                    />
                                 ) : (
                                     <EventEntry entry={entry} />
                                 )}
