@@ -60,7 +60,10 @@ function ChangePasswordForm({ formId, onDone, setSubmitting }) {
         onDone();
     };
 
-    const currentError = localErrors.currentPassword || (fieldErrors.currentPassword ? WRONG_CURRENT : undefined);
+    const serverCurrent = fieldErrors.currentPassword;
+    const currentError =
+        localErrors.currentPassword ||
+        (serverCurrent === 'Current password is incorrect' ? WRONG_CURRENT : serverCurrent);
     const newError = localErrors.newPassword || fieldErrors.newPassword;
     const hasFieldError = Boolean(fieldErrors.currentPassword || fieldErrors.newPassword);
     const banner = formError && !hasFieldError ? formError : null;
