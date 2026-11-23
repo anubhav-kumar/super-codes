@@ -1,6 +1,6 @@
 'use strict';
 
-const { GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+const { GetCommand, UpdateCommand, TransactWriteCommand } = require('@aws-sdk/lib-dynamodb');
 const { middleware, database, errors, http, logger } = require('common');
 const { hashPassword, verifyPassword } = require('../utils/password');
 const { sessionUser } = require('../utils/user');
@@ -32,12 +32,39 @@ function validate(body) {
 }
 
 /**
+ * Sets the caller's own session expiry. A session deleted meanwhile (sign-out elsewhere) gives
+ * 401 UNAUTHORIZED: sign in again.
+ */
+async function extendOwnSession(tokenHash, expires) {
+    try {
+        await database.doc.send(
+            new UpdateCommand({
+                TableName: process.env.SESSIONS_TABLE,
+                Key: { tokenHash },
+                UpdateExpression: 'SET expiresAt = :exp, #ttl = :ttl',
+                ConditionExpression: 'attribute_exists(tokenHash)',
+                ExpressionAttributeNames: { '#ttl': 'ttl' },
+                ExpressionAttributeValues: {
+                    ':exp': expires.toISOString(),
+                    ':ttl': Math.floor(expires.getTime() / 1000),
+                },
+            })
+        );
+    } catch (err) {
+        if (err && err.name === 'ConditionalCheckFailedException') throw errors.unauthorized();
+        throw err;
+    }
+}
+
+/**
  * POST /auth/password  (allowed while a temporary password is active; this is also the forced
  * "Set a new password" route, where currentPassword is the temporary password)
  * Body { currentPassword, newPassword }
  * 200 { user: session user object (mustChangePassword false), expiresAt }
- *   Sets the new password, clears the temporary-password state, ends every other session of the
- *   user and extends this session to now + 30 days.
+ *   Sets the new password, clears the temporary-password state, sets sessionsValidAfter = now (every
+ *   other session of the user stops working at once; their items are then deleted as cleanup) and
+ *   extends this session to now + 30 days. This session's createdAt is re-stamped to the same time in
+ *   the same transaction, so it stays valid.
  * 400 VALIDATION_FAILED currentPassword "Current password is incorrect" (400, not 401, so the app
  *   does not treat it as signed out) | newPassword length | new password equals the current one
  * 401 UNAUTHORIZED (from withHandler, or the user record vanished)
@@ -61,52 +88,68 @@ module.exports.handler = middleware.withHandler(
             ]);
         }
 
+        const passwordHash = await hashPassword(newPassword);
+        // Taken after hashing, right before the write, so a sign-in with the old password in the
+        // meantime is still before sessionsValidAfter.
         const now = new Date();
-        let updated;
+        const nowIso = now.toISOString();
+
+        // One transaction: this session's createdAt is re-stamped to the sessionsValidAfter value written
+        // on the user, so this session stays valid (common auth rejects sessions created before
+        // sessionsValidAfter; equal is valid) and every other session stops working at once.
+        // passwordHash = :old: a concurrent change or reset since the read wins; this one is refused and
+        // this session is not re-stamped.
         try {
-            const out = await database.doc.send(
-                new UpdateCommand({
-                    TableName: process.env.USERS_TABLE,
-                    Key: { email: item.email },
-                    UpdateExpression: 'SET passwordHash = :hash, updatedAt = :now REMOVE passwordState, tempPasswordExpiresAt',
-                    // passwordHash = :old: a concurrent change or reset since the read wins; this one is refused.
-                    ConditionExpression: 'userId = :me AND passwordHash = :old',
-                    ExpressionAttributeValues: {
-                        ':hash': await hashPassword(newPassword),
-                        ':now': now.toISOString(),
-                        ':me': user.userId,
-                        ':old': item.passwordHash,
-                    },
-                    ReturnValues: 'ALL_NEW',
+            await database.doc.send(
+                new TransactWriteCommand({
+                    TransactItems: [
+                        {
+                            Update: {
+                                TableName: process.env.SESSIONS_TABLE,
+                                Key: { tokenHash: session.tokenHash },
+                                UpdateExpression: 'SET createdAt = :now',
+                                ConditionExpression: 'attribute_exists(tokenHash)',
+                                ExpressionAttributeValues: { ':now': nowIso },
+                            },
+                        },
+                        {
+                            Update: {
+                                TableName: process.env.USERS_TABLE,
+                                Key: { email: item.email },
+                                UpdateExpression:
+                                    'SET passwordHash = :hash, sessionsValidAfter = :now, updatedAt = :now ' +
+                                    'REMOVE passwordState, tempPasswordExpiresAt',
+                                ConditionExpression: 'userId = :me AND passwordHash = :old',
+                                ExpressionAttributeValues: {
+                                    ':hash': passwordHash,
+                                    ':now': nowIso,
+                                    ':me': user.userId,
+                                    ':old': item.passwordHash,
+                                },
+                            },
+                        },
+                    ],
                 })
             );
-            updated = out.Attributes;
         } catch (err) {
-            if (err && err.name === 'ConditionalCheckFailedException') throw errors.validationFailed([WRONG_CURRENT]);
+            if (!err || err.name !== 'TransactionCanceledException') throw err;
+            const reasons = (err.CancellationReasons || []).map((r) => r && r.Code);
+            // This session was deleted meanwhile (sign-out elsewhere): sign in again.
+            if (reasons[0] === 'ConditionalCheckFailed') throw errors.unauthorized();
+            if (reasons[1] === 'ConditionalCheckFailed') throw errors.validationFailed([WRONG_CURRENT]);
             throw err;
         }
+        const updated = { ...item, passwordHash, sessionsValidAfter: nowIso, updatedAt: nowIso };
+        delete updated.passwordState;
+        delete updated.tempPasswordExpiresAt;
 
-        // Only after the password update succeeded: end the user's other sessions, keep this one.
+        // Only after the password update succeeded: the other sessions already fail (sessionsValidAfter);
+        // delete their items as cleanup, keep this one.
         const revoked = await revokeSessions(user.userId, { exceptTokenHash: session.tokenHash });
 
         const expires = new Date(now.getTime() + SESSION_DAYS * 24 * 60 * 60 * 1000);
         const expiresAt = expires.toISOString();
-        try {
-            await database.doc.send(
-                new UpdateCommand({
-                    TableName: process.env.SESSIONS_TABLE,
-                    Key: { tokenHash: session.tokenHash },
-                    UpdateExpression: 'SET expiresAt = :exp, #ttl = :ttl',
-                    ConditionExpression: 'attribute_exists(tokenHash)',
-                    ExpressionAttributeNames: { '#ttl': 'ttl' },
-                    ExpressionAttributeValues: { ':exp': expiresAt, ':ttl': Math.floor(expires.getTime() / 1000) },
-                })
-            );
-        } catch (err) {
-            // This session was deleted meanwhile (sign-out elsewhere): the password is changed, but sign in again.
-            if (err && err.name === 'ConditionalCheckFailedException') throw errors.unauthorized();
-            throw err;
-        }
+        await extendOwnSession(session.tokenHash, expires);
 
         logger.info('password changed', { userId: user.userId, sessionsEnded: revoked });
         return http.ok({ user: await sessionUser(updated), expiresAt }, { 'Cache-Control': 'no-store' });

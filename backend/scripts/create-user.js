@@ -10,7 +10,9 @@
  * The password is read from the terminal twice with echo off; it is never taken as an argument.
  * New accounts are admins unless --member is given.
  * --overwrite replaces name and password of an existing account, clears any temporary password and
- * keeps its userId, createdAt, role and Worker link. --member makes it a member; --worker-id replaces
+ * keeps its userId, createdAt, role and Worker link. It also ends every session of that account:
+ * sessionsValidAfter = now on the user (common auth refuses older sessions at once), then the
+ * Sessions items are deleted (Sessions GSI byUserId) as cleanup. --member makes it a member; --worker-id replaces
  * the link. There is no flag to promote: use the Users screen.
  * --worker-id links the account to an existing ACTIVE Worker that is not linked to another account.
  * The user item and the WorkerLinks items are written in one transaction.
@@ -106,10 +108,17 @@ async function main() {
     const tableName = `${SLUG}-auth-${args.stage}-users`;
     const linksTable = `${SLUG}-auth-${args.stage}-worker-links`;
     const workersTable = `${SLUG}-workers-${args.stage}-workers`;
+    const sessionsTable = `${SLUG}-auth-${args.stage}-sessions`;
     console.log(`Account ${account}, region ${args.region}, table ${tableName}`);
 
     const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-    const { DynamoDBDocumentClient, GetCommand, QueryCommand, TransactWriteCommand } = require('@aws-sdk/lib-dynamodb');
+    const {
+        DynamoDBDocumentClient,
+        GetCommand,
+        QueryCommand,
+        DeleteCommand,
+        TransactWriteCommand,
+    } = require('@aws-sdk/lib-dynamodb');
     const doc = DynamoDBDocumentClient.from(new DynamoDBClient({ region: args.region }));
 
     const existing = (await doc.send(new GetCommand({ TableName: tableName, Key: { email: args.email }, ConsistentRead: true })))
@@ -146,18 +155,21 @@ async function main() {
         }
     }
 
+    const passwordHash = await hashPassword(password);
     const now = new Date().toISOString();
     const item = {
         email: args.email,
         userId,
         name: args.name,
-        passwordHash: await hashPassword(password),
+        passwordHash,
         isAdmin,
         entity: 'USER',
         createdAt: existing ? existing.createdAt : now,
         updatedAt: now,
     };
     if (workerId) item.workerId = workerId;
+    // --overwrite ends every existing session of the account (checked on every request by common auth).
+    if (existing) item.sessionsValidAfter = now;
     // passwordState / tempPasswordExpiresAt are left out: a full Put clears any temporary password.
 
     const items = [
@@ -206,10 +218,41 @@ async function main() {
         }
         throw err;
     }
+    let sessionsEnded = 0;
+    if (existing) sessionsEnded = await deleteSessions(doc, { QueryCommand, DeleteCommand }, sessionsTable, userId);
+
     console.log(
         `${existing ? 'Updated' : 'Created'} account ${args.email} (userId ${userId}, ${isAdmin ? 'admin' : 'member'}, ` +
-            `${workerId ? `worker ${workerId}` : 'no worker'})`
+            `${workerId ? `worker ${workerId}` : 'no worker'})` +
+            (existing ? `; all sessions ended (${sessionsEnded} deleted)` : '')
     );
+}
+
+/**
+ * Deletes every Sessions item of a user (GSI byUserId), as services/auth/utils/sessions.js does.
+ * Cleanup only: sessionsValidAfter already refuses them. Returns the number deleted.
+ */
+async function deleteSessions(doc, { QueryCommand, DeleteCommand }, sessionsTable, userId) {
+    const hashes = [];
+    let ExclusiveStartKey;
+    do {
+        const res = await doc.send(
+            new QueryCommand({
+                TableName: sessionsTable,
+                IndexName: 'byUserId',
+                KeyConditionExpression: 'userId = :id',
+                ExpressionAttributeValues: { ':id': userId },
+                ProjectionExpression: 'tokenHash',
+                ExclusiveStartKey,
+            })
+        );
+        for (const s of res.Items || []) if (s.tokenHash) hashes.push(s.tokenHash);
+        ExclusiveStartKey = res.LastEvaluatedKey;
+    } while (ExclusiveStartKey);
+    for (const tokenHash of new Set(hashes)) {
+        await doc.send(new DeleteCommand({ TableName: sessionsTable, Key: { tokenHash } }));
+    }
+    return new Set(hashes).size;
 }
 
 main().catch((err) => {

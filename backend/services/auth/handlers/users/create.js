@@ -1,9 +1,9 @@
 'use strict';
 
-const { GetCommand, QueryCommand, TransactWriteCommand } = require('@aws-sdk/lib-dynamodb');
+const { GetCommand, TransactWriteCommand } = require('@aws-sdk/lib-dynamodb');
 const { middleware, database, errors, http, logger, validators } = require('common');
 const { hashPassword } = require('../../utils/password');
-const { toUser } = require('../../utils/user');
+const { toUser, getUserByEmail, findUserById } = require('../../utils/user');
 const { generateTemporaryPassword, temporaryPasswordExpiry } = require('../../utils/tempPassword');
 
 const { check, normalizeString, parseEmail, isUuidV4, FieldError } = validators;
@@ -37,34 +37,6 @@ function validate(body) {
     });
     if (details.length) throw errors.validationFailed(details);
     return { id, name, email, isAdmin, workerId };
-}
-
-async function getUserByEmail(email) {
-    const res = await database.doc.send(
-        new GetCommand({ TableName: process.env.USERS_TABLE, Key: { email }, ConsistentRead: true })
-    );
-    return res.Item || null;
-}
-
-/**
- * Current Users item with this userId, or null. The byUserId GSI is eventually consistent, so each
- * candidate is re-read by its email (consistent) and kept only if it still carries this userId.
- */
-async function findUserById(userId) {
-    const res = await database.doc.send(
-        new QueryCommand({
-            TableName: process.env.USERS_TABLE,
-            IndexName: 'byUserId',
-            KeyConditionExpression: 'userId = :id',
-            ExpressionAttributeValues: { ':id': userId },
-            ProjectionExpression: 'email',
-        })
-    );
-    for (const candidate of res.Items || []) {
-        const item = await getUserByEmail(candidate.email);
-        if (item && item.userId === userId) return item;
-    }
-    return null;
 }
 
 async function getWorker(workerId) {

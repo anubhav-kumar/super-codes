@@ -142,6 +142,15 @@ functions:
           path: auth/users
           method: post
           cors: true
+  resetPassword:
+    handler: handlers/users/resetPassword.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: auth/users/{id}/reset-password
+          method: post
+          cors: true
 
 resources:
   Resources:

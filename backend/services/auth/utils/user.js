@@ -6,12 +6,41 @@
  * User object of the admin user-management routes (/auth/users, P-25): see toUser.
  */
 
-const { GetCommand } = require('@aws-sdk/lib-dynamodb');
+const { GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { database, auth } = require('common');
 
 /** Users written before FR1 have no isAdmin and are admins (never use !!item.isAdmin). */
 function isAdminItem(item) {
     return auth.effectiveIsAdmin(item);
+}
+
+/** Users item with this email (consistent read), or null. */
+async function getUserByEmail(email) {
+    const res = await database.doc.send(
+        new GetCommand({ TableName: process.env.USERS_TABLE, Key: { email }, ConsistentRead: true })
+    );
+    return res.Item || null;
+}
+
+/**
+ * Current Users item with this userId, or null. The byUserId GSI is eventually consistent, so each
+ * candidate is re-read by its email (consistent) and kept only if it still carries this userId.
+ */
+async function findUserById(userId) {
+    const res = await database.doc.send(
+        new QueryCommand({
+            TableName: process.env.USERS_TABLE,
+            IndexName: 'byUserId',
+            KeyConditionExpression: 'userId = :id',
+            ExpressionAttributeValues: { ':id': userId },
+            ProjectionExpression: 'email',
+        })
+    );
+    for (const candidate of res.Items || []) {
+        const item = await getUserByEmail(candidate.email);
+        if (item && item.userId === userId) return item;
+    }
+    return null;
 }
 
 /** Name of the linked Worker, or null when there is no link or the Worker record is missing. */
@@ -86,4 +115,13 @@ function toUser(item, workers = new Map(), now = Date.now()) {
     };
 }
 
-module.exports = { isAdminItem, loadWorkerName, toSessionUser, sessionUser, userStatus, toUser };
+module.exports = {
+    isAdminItem,
+    getUserByEmail,
+    findUserById,
+    loadWorkerName,
+    toSessionUser,
+    sessionUser,
+    userStatus,
+    toUser,
+};
