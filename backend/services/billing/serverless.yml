@@ -13,6 +13,7 @@ custom:
   peopleTable: ca-crm-directory-${sls:stage}-people
   companiesTable: ca-crm-directory-${sls:stage}-companies
   ordersTable: ca-crm-orders-${sls:stage}-orders
+  assignmentsTable: ca-crm-orders-${sls:stage}-order-assignments
   sessionsTable: ca-crm-auth-${sls:stage}-sessions
   usersTable: ca-crm-auth-${sls:stage}-users
 
@@ -35,6 +36,7 @@ provider:
     PEOPLE_TABLE: ${self:custom.peopleTable}
     COMPANIES_TABLE: ${self:custom.companiesTable}
     ORDERS_TABLE: ${self:custom.ordersTable}
+    ASSIGNMENTS_TABLE: ${self:custom.assignmentsTable}
     SESSIONS_TABLE: ${self:custom.sessionsTable}
     USERS_TABLE: ${self:custom.usersTable}
   iam:
@@ -63,6 +65,17 @@ provider:
             - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.peopleTable}
             - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.companiesTable}
             - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.ordersTable}
+        # Member scope (P-26 F-56): is an order visible to a member, and which orders are.
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.assignmentsTable}
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.assignmentsTable}/index/*
         - Effect: Allow
           Action:
             - dynamodb:GetItem

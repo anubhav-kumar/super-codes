@@ -17,6 +17,7 @@ const { toInvoiceDetail } = require('../../utils/enrich');
  * 201 Invoice detail (baseStatus DRAFT or ISSUED as requested, invoiceNumber assigned, payments [])
  * 200 Invoice detail when an invoice with this id already exists (nothing written, stored baseStatus kept)
  * 400 VALIDATION_FAILED, 400 REFERENCE_NOT_FOUND
+ * Admin only: a member gets 404 NOT_FOUND.
  *
  * Flow: validate -> GetItem id -> check references -> increment counter -> PutItem with
  * attribute_not_exists(id). Billed-to is never derived from the order. A counter number lost to a
@@ -53,4 +54,4 @@ module.exports.handler = middleware.withHandler(async ({ body }) => {
 
     logger.info('invoice created', { invoiceId: id, invoiceNumber: item.invoiceNumber });
     return http.created(toInvoiceDetail(item, [], lookups));
-});
+}, { adminOnly: true });
