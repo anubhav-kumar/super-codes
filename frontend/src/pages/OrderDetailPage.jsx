@@ -7,6 +7,7 @@ import FactList from '../components/FactList.jsx';
 import Money from '../components/Money.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
 import OrderBillingSection from '../components/orders/OrderBillingSection.jsx';
+import { orderBilling } from '../components/orders/orderBilling.js';
 import OrderWorkersSection from '../components/orders/OrderWorkersSection.jsx';
 import StatusControl from '../components/orders/StatusControl.jsx';
 import PageBody from '../components/PageBody.jsx';
@@ -17,6 +18,7 @@ import Section from '../components/Section.jsx';
 import { orderUpdateBody, updateOrder } from '../api/orders.js';
 import { clientPath, orderStatusLabel } from '../constants/orders.js';
 import useInlineSave from '../hooks/useInlineSave.js';
+import { useOrderInvoices } from '../hooks/useInvoices.js';
 import useOnlineStatus from '../hooks/useOnlineStatus.js';
 import { useOrder } from '../hooks/useOrders.js';
 import useRecordVisit from '../hooks/useRecordVisit.js';
@@ -60,6 +62,11 @@ function OrderDetail({ order, reload }) {
     const status = useInlineSave(order.status);
     const shown = { ...order, status: status.value };
     const editTo = `/orders/${order.id}/edit`;
+    // Loaded once here and passed to Billing, so the Raise invoice variant and the figures agree (F-44).
+    const invoices = useOrderInvoices(order.id);
+    const billing = invoices.status === 'loaded' ? orderBilling(order, invoices.data || []) : null;
+    // Primary while something is left to bill, the order has no amount, or invoices are not loaded.
+    const raiseVariant = billing && billing.amount !== null && billing.notBilled === 0 ? 'secondary' : 'primary';
 
     const changeStatus = async (next) => {
         if (!next || next === status.value) return;
@@ -100,7 +107,7 @@ function OrderDetail({ order, reload }) {
                 ]}
                 actions={
                     <>
-                        <Button icon="raise-invoice" to={`/invoices/new?orderId=${encodeURIComponent(order.id)}`} disabled={!online}>
+                        <Button variant={raiseVariant} icon="raise-invoice" to={`/invoices/new?orderId=${encodeURIComponent(order.id)}`} disabled={!online}>
                             Raise invoice
                         </Button>
                         <Button variant="secondary" icon="edit" to={editTo} disabled={!online}>
@@ -137,7 +144,7 @@ function OrderDetail({ order, reload }) {
                         </div>
                     )}
                 </div>
-                <OrderBillingSection order={order} className="order-2 lg:order-none" />
+                <OrderBillingSection order={order} invoices={invoices} className="order-2 lg:order-none" />
             </div>
         </>
     );
