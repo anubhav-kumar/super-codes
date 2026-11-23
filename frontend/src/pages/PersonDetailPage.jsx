@@ -46,7 +46,7 @@ function PersonDetails({ person: p }) {
  * Person profile, summary first (F-27): header with PAN and contact buttons, key figures
  * (Outstanding, Overdue, Open orders), New order / New invoice with this person preselected,
  * then Open orders, Invoices, Companies, Orders requested and Details.
- * Phones: one column in that order. lg+: figures, details and companies left; orders and invoices right.
+ * Phones: one column in that order. lg+: figures in one full-width row, then details and companies left; orders and invoices right.
  * Orders and invoices load once here and feed both the figures and their sections.
  */
 export default function PersonDetailPage() {
@@ -103,16 +103,18 @@ export default function PersonDetailPage() {
                             </RecordHeader>
 
                             {wide ? (
-                                <div className="grid grid-cols-[minmax(0,5fr)_minmax(0,7fr)] items-start gap-6">
-                                    <div className="flex flex-col gap-4">
-                                        {figures}
-                                        {details}
-                                        {companies}
-                                    </div>
-                                    <div className="flex flex-col gap-4">
-                                        {openOrders}
-                                        {billed}
-                                        {requested}
+                                <div className="flex flex-col gap-4">
+                                    {figures}
+                                    <div className="grid grid-cols-[minmax(0,5fr)_minmax(0,7fr)] items-start gap-6">
+                                        <div className="flex flex-col gap-4">
+                                            {details}
+                                            {companies}
+                                        </div>
+                                        <div className="flex flex-col gap-4">
+                                            {openOrders}
+                                            {billed}
+                                            {requested}
+                                        </div>
                                     </div>
                                 </div>
                             ) : (
