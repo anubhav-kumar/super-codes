@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
-const { GetCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
+const { GetCommand, TransactWriteCommand } = require('@aws-sdk/lib-dynamodb');
 const { middleware, database, errors, auth, http, logger } = require('common');
 const { verifyPassword, dummyHash } = require('../utils/password');
 const { sessionUser } = require('../utils/user');
@@ -9,6 +9,40 @@ const { sessionUser } = require('../utils/user');
 const SESSION_DAYS = 30;
 const INVALID_CREDENTIALS = 'Incorrect email or password';
 const TEMPORARY_PASSWORD_EXPIRED = 'This temporary password has expired. Ask an admin to reset your password.';
+const TEMPORARY = 'TEMPORARY';
+
+/**
+ * ConditionCheck on the Users item: it still has the userId, passwordHash, temporary-password state
+ * and sessionsValidAfter that this login verified. A password change, admin reset, delete or
+ * re-keyed email between the verification and the session write makes the condition fail.
+ */
+function verifiedStateCheck(user) {
+    const names = { '#ps': 'passwordState', '#sva': 'sessionsValidAfter' };
+    const values = { ':uid': user.userId, ':hash': user.passwordHash, ':temp': TEMPORARY };
+    const parts = ['userId = :uid', 'passwordHash = :hash'];
+    if (auth.hasTemporaryPassword(user)) {
+        names['#exp'] = 'tempPasswordExpiresAt';
+        values[':exp'] = user.tempPasswordExpiresAt;
+        parts.push('#ps = :temp', '#exp = :exp');
+    } else {
+        parts.push('(attribute_not_exists(#ps) OR #ps <> :temp)');
+    }
+    if (user.sessionsValidAfter !== undefined) {
+        values[':sva'] = user.sessionsValidAfter;
+        parts.push('#sva = :sva');
+    } else {
+        parts.push('attribute_not_exists(#sva)');
+    }
+    return {
+        ConditionCheck: {
+            TableName: process.env.USERS_TABLE,
+            Key: { email: user.email },
+            ConditionExpression: parts.join(' AND '),
+            ExpressionAttributeNames: names,
+            ExpressionAttributeValues: values,
+        },
+    };
+}
 
 function validate(body) {
     const details = [];
@@ -43,6 +77,9 @@ function validate(body) {
  * 400 VALIDATION_FAILED, 401 INVALID_CREDENTIALS,
  * 401 TEMPORARY_PASSWORD_EXPIRED (correct but expired temporary password; checked only after the
  *   password matched, so a wrong password never reveals that the email holds a temporary password)
+ * The session is written in one transaction with a ConditionCheck on the Users item (the verified
+ * password hash and temporary-password state). If the user changed meanwhile (password change, reset,
+ * delete) no session is written and the answer is 401 INVALID_CREDENTIALS.
  */
 module.exports.handler = middleware.withHandler(
     async ({ body }) => {
@@ -76,21 +113,37 @@ module.exports.handler = middleware.withHandler(
         const token = crypto.randomBytes(32).toString('base64url');
         const expiresAt = expires.toISOString();
 
-        await database.doc.send(
-            new PutCommand({
-                TableName: process.env.SESSIONS_TABLE,
-                Item: {
-                    tokenHash: auth.hashToken(token),
-                    userId: user.userId,
-                    email: user.email,
-                    name: user.name,
-                    createdAt: now.toISOString(),
-                    expiresAt,
-                    ttl: Math.floor(expires.getTime() / 1000),
-                },
-                ConditionExpression: 'attribute_not_exists(tokenHash)',
-            })
-        );
+        try {
+            await database.doc.send(
+                new TransactWriteCommand({
+                    TransactItems: [
+                        verifiedStateCheck(user),
+                        {
+                            Put: {
+                                TableName: process.env.SESSIONS_TABLE,
+                                Item: {
+                                    tokenHash: auth.hashToken(token),
+                                    userId: user.userId,
+                                    email: user.email,
+                                    name: user.name,
+                                    createdAt: now.toISOString(),
+                                    expiresAt,
+                                    ttl: Math.floor(expires.getTime() / 1000),
+                                },
+                                ConditionExpression: 'attribute_not_exists(tokenHash)',
+                            },
+                        },
+                    ],
+                })
+            );
+        } catch (err) {
+            const reasons = (err && err.name === 'TransactionCanceledException' && err.CancellationReasons) || [];
+            if (reasons[0] && reasons[0].Code === 'ConditionalCheckFailed') {
+                logger.info('sign-in lost a race with a user change', { userId: user.userId });
+                throw new errors.ApiError(401, 'INVALID_CREDENTIALS', INVALID_CREDENTIALS);
+            }
+            throw err;
+        }
 
         logger.info('signed in', { userId: user.userId, temporaryPassword: auth.hasTemporaryPassword(user) });
         return http.ok(

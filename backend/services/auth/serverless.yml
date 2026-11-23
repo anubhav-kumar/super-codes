@@ -32,6 +32,7 @@ provider:
     role:
       statements:
         # Scan: named exception for the admin-only Users list and admin count (P-25).
+        # ConditionCheckItem: login re-checks the verified password state when it writes the session.
         - Effect: Allow
           Action:
             - dynamodb:GetItem
@@ -39,6 +40,7 @@ provider:
             - dynamodb:UpdateItem
             - dynamodb:DeleteItem
             - dynamodb:Scan
+            - dynamodb:ConditionCheckItem
           Resource:
             - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.usersTable}
         - Effect: Allow
@@ -150,6 +152,15 @@ functions:
       - http:
           path: auth/users/{id}
           method: put
+          cors: true
+  deleteUser:
+    handler: handlers/users/delete.handler
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: auth/users/{id}
+          method: delete
           cors: true
   resetPassword:
     handler: handlers/users/resetPassword.handler
