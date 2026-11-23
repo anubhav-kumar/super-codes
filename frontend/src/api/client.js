@@ -138,3 +138,59 @@ export async function request(
 
     return { data, status: res.status, fromCache, fetchedAt };
 }
+
+/**
+ * Uploads a file's bytes straight to storage with a pre-signed URL (frontend-architecture.md 15.1).
+ *
+ *   uploadFile(uploadUrl, uploadHeaders, file, { onProgress, signal }) -> Promise<void>
+ *
+ * A PUT to `uploadUrl` with exactly `uploadHeaders` and no others: no Authorization, no API base
+ * URL (the signature covers those headers, so any other or changed header fails with 403). Uses
+ * XMLHttpRequest because fetch has no upload progress. `onProgress(fraction)` gets 0..1. Abort with
+ * `signal` (rejects with an AbortError). Resolves on 2xx; otherwise rejects with ApiError
+ * { status } (403 expired / changed headers, 412 key exists: the caller requests a new upload URL)
+ * or { offline: true } on a network failure. Storage is not the API, so connectivity is not
+ * reported to network.js. The URL is never logged or kept.
+ */
+export function uploadFile(uploadUrl, uploadHeaders, file, { onProgress, signal } = {}) {
+    return new Promise((resolve, reject) => {
+        const abortError = () => new DOMException('Upload aborted', 'AbortError');
+        if (signal && signal.aborted) {
+            reject(abortError());
+            return;
+        }
+        const xhr = new XMLHttpRequest();
+        const onAbort = () => xhr.abort();
+        const cleanup = () => {
+            if (signal) signal.removeEventListener('abort', onAbort);
+        };
+
+        xhr.open('PUT', uploadUrl);
+        Object.entries(uploadHeaders || {}).forEach(([name, value]) => xhr.setRequestHeader(name, value));
+        if (onProgress) {
+            xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable && e.total > 0) onProgress(Math.min(1, e.loaded / e.total));
+            };
+        }
+        xhr.onload = () => {
+            cleanup();
+            if (xhr.status >= 200 && xhr.status < 300) {
+                if (onProgress) onProgress(1);
+                resolve();
+                return;
+            }
+            reject(new ApiError(`Upload failed with status ${xhr.status}`, { status: xhr.status }));
+        };
+        xhr.onerror = () => {
+            cleanup();
+            reject(new ApiError('Upload failed', { offline: true }));
+        };
+        xhr.ontimeout = xhr.onerror;
+        xhr.onabort = () => {
+            cleanup();
+            reject(abortError());
+        };
+        if (signal) signal.addEventListener('abort', onAbort);
+        xhr.send(file);
+    });
+}

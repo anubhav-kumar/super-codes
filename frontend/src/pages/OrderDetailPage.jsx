@@ -7,6 +7,7 @@ import FactList from '../components/FactList.jsx';
 import Money from '../components/Money.jsx';
 import OfflineActionHint from '../components/OfflineActionHint.jsx';
 import OrderBillingSection from '../components/orders/OrderBillingSection.jsx';
+import OrderFilesSection from '../components/orders/OrderFilesSection.jsx';
 import { orderBilling } from '../components/orders/orderBilling.js';
 import OrderWorkersSection from '../components/orders/OrderWorkersSection.jsx';
 import StatusControl from '../components/orders/StatusControl.jsx';
@@ -148,6 +149,7 @@ function OrderDetail({ order, reload }) {
                     <div className="order-3 lg:order-none">
                         <OrderWorkersSection assignments={order.assignments || []} linkWorkerId={linkWorkerId} />
                     </div>
+                    <OrderFilesSection order={order} className="order-3 lg:order-none" />
                     {present(order.description) && (
                         <div className="order-4 lg:order-none">
                             <TextSection title="Description" text={order.description} />
