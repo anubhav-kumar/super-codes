@@ -89,7 +89,9 @@ function useStatusChange(invoice, reload) {
 function InvoiceDetail({ invoice, reload }) {
     const { online } = useOnlineStatus();
     const { isAdmin } = useRole();
-    const toBilledTo = clientPath(invoice.billedTo);
+    // A member may see who an invoice is billed to without being able to open that client
+    // (billedTo.canOpen === false): name as plain text. Missing canOpen counts as true.
+    const toBilledTo = invoice.billedTo && invoice.billedTo.canOpen === false ? null : clientPath(invoice.billedTo);
     const billedToName = (invoice.billedTo && invoice.billedTo.name) || 'Unknown';
     const look = outstandingLook(invoice);
     const orderLabel = useRelatedOrderLabel(invoice.order);
