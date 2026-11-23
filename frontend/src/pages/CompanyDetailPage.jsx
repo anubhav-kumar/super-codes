@@ -48,7 +48,7 @@ function CompanyDetails({ company: c }) {
  * Company profile, summary first (F-28): header with entity type, PAN and contact buttons, key
  * figures (Outstanding, Overdue, Open orders), New order / New invoice with this company
  * preselected, then Open orders, Invoices, People and Details.
- * Phones: one column in that order. lg+: figures, details and people left; orders and invoices right.
+ * Phones: one column in that order. lg+: figures in one full-width row, then details and people left; orders and invoices right.
  * Orders and invoices load once here and feed both the figures and their sections.
  */
 export default function CompanyDetailPage() {
@@ -96,15 +96,17 @@ export default function CompanyDetailPage() {
                             </RecordHeader>
 
                             {wide ? (
-                                <div className="grid grid-cols-[minmax(0,5fr)_minmax(0,7fr)] items-start gap-6">
-                                    <div className="flex flex-col gap-4">
-                                        {figures}
-                                        {details}
-                                        {people}
-                                    </div>
-                                    <div className="flex flex-col gap-4">
-                                        {openOrders}
-                                        {billed}
+                                <div className="flex flex-col gap-4">
+                                    {figures}
+                                    <div className="grid grid-cols-[minmax(0,5fr)_minmax(0,7fr)] items-start gap-6">
+                                        <div className="flex flex-col gap-4">
+                                            {details}
+                                            {people}
+                                        </div>
+                                        <div className="flex flex-col gap-4">
+                                            {openOrders}
+                                            {billed}
+                                        </div>
                                     </div>
                                 </div>
                             ) : (
