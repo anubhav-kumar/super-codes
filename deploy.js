@@ -112,13 +112,13 @@ async function main() {
 
     const args = ['--stage', stage, '--region', region];
 
-    const backendCode = await runPrefixed('backend', path.join(ROOT, 'backend', 'deploy.js'), args);
+    const [backendCode, frontendCode] = await Promise.all([runPrefixed('backend', path.join(ROOT, 'backend', 'deploy.js'), args) ,runPrefixed('frontend', path.join(ROOT, 'frontend', 'deploy.js'), args)])
+    
     if (backendCode !== 0) {
         console.error(`Backend deployment failed (exit ${backendCode}). Frontend not deployed.`);
         process.exit(1);
     }
 
-    const frontendCode = await runPrefixed('frontend', path.join(ROOT, 'frontend', 'deploy.js'), args);
     if (frontendCode !== 0) {
         console.error(`Frontend deployment failed (exit ${frontendCode}).`);
         process.exit(1);
