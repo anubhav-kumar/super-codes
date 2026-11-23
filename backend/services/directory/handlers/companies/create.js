@@ -18,6 +18,7 @@ const {
  * 201 Company detail
  * 200 Company detail when a company with this id already exists (nothing written)
  * 400 VALIDATION_FAILED, 400 REFERENCE_NOT_FOUND, 409 PAN_TAKEN
+ * Admin only: a member gets 404 NOT_FOUND (F-55).
  *
  * One TransactWriteItems: the company, each quick-added person that does not exist yet, and every
  * association. Quick-add ids that already exist are reused, not rewritten.
@@ -100,4 +101,4 @@ module.exports.handler = middleware.withHandler(async ({ body }) => {
         quickAddedPeople: newPeople.length,
     });
     return http.created(toCompanyDetail(company, associations, people));
-});
+}, { adminOnly: true });

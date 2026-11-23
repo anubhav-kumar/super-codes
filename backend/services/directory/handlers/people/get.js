@@ -2,6 +2,7 @@
 
 const { middleware, database, errors, validators, http } = require('common');
 const { toPerson, getPerson } = require('../../models/person');
+const { loadClientScope, canOpenPerson, canOpenCompany } = require('../../utils/scope');
 
 function byCompanyName(a, b) {
     const an = a.companyName === null ? null : a.companyName.toLowerCase();
@@ -16,13 +17,17 @@ function byCompanyName(a, b) {
 
 /**
  * GET /directory/people/{id}
- * 200 Person object + "companies": [ { companyId, companyName, entityType, relationshipType } ]
- *     sorted by company name
- * 404 NOT_FOUND
+ * 200 Person object + "companies": [ { companyId, companyName, entityType, relationshipType, canOpen } ]
+ *     sorted by company name. canOpen is always true for an admin; for a member it is true only for
+ *     companies that are visible clients.
+ * 404 NOT_FOUND  (also for a member when the person is not a visible client)
  */
-module.exports.handler = middleware.withHandler(async ({ event }) => {
+module.exports.handler = middleware.withHandler(async ({ event, user }) => {
     const id = event.pathParameters && event.pathParameters.id;
     if (!validators.isUuidV4(id)) throw errors.notFound();
+
+    const clientScope = await loadClientScope(user);
+    if (!canOpenPerson(clientScope, id)) throw errors.notFound();
 
     const item = await getPerson(id);
     if (!item) throw errors.notFound();
@@ -50,6 +55,7 @@ module.exports.handler = middleware.withHandler(async ({ event }) => {
                 companyName: company ? company.name : null,
                 entityType: company ? company.entityType || null : null,
                 relationshipType: a.relationshipType,
+                canOpen: canOpenCompany(clientScope, a.companyId),
             };
         })
         .sort(byCompanyName);

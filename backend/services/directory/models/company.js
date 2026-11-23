@@ -2,6 +2,7 @@
 
 const { GetCommand } = require('@aws-sdk/lib-dynamodb');
 const { database, errors, validators } = require('common');
+const { canOpenPerson } = require('../utils/scope');
 
 const COMPANIES_TABLE = () => process.env.COMPANIES_TABLE;
 const ASSOCIATIONS_TABLE = () => process.env.ASSOCIATIONS_TABLE;
@@ -43,14 +44,18 @@ function buildCompanyItem(id, fields, { createdAt, updatedAt }) {
     };
 }
 
-/** CompanyAssociations item + People item (or undefined) -> Association object of the API. */
-function toAssociation(item, person) {
+/**
+ * CompanyAssociations item + People item (or undefined) -> Association object of the API.
+ * canOpen false (member, person not a visible client): name only, personPhone and personEmail null.
+ */
+function toAssociation(item, person, canOpen = true) {
     return {
         companyId: item.companyId,
         personId: item.personId,
         personName: person ? person.name : null,
-        personPhone: person ? person.phone || null : null,
-        personEmail: person ? person.email || null : null,
+        personPhone: canOpen && person ? person.phone || null : null,
+        personEmail: canOpen && person ? person.email || null : null,
+        canOpen,
         relationshipType: item.relationshipType,
         createdAt: item.createdAt,
         updatedAt: item.updatedAt,
@@ -68,11 +73,16 @@ function byPersonName(a, b) {
     return a.personId < b.personId ? -1 : a.personId > b.personId ? 1 : 0;
 }
 
-/** Company detail = Company object + associations sorted by person name. people: Map id -> item. */
-function toCompanyDetail(company, associationItems, people) {
+/**
+ * Company detail = Company object + associations sorted by person name. people: Map id -> item.
+ * clientScope: null for an admin, else the member's scope from utils/scope (sets canOpen per person).
+ */
+function toCompanyDetail(company, associationItems, people, clientScope = null) {
     return {
         ...toCompany(company),
-        associations: associationItems.map((a) => toAssociation(a, people.get(a.personId))).sort(byPersonName),
+        associations: associationItems
+            .map((a) => toAssociation(a, people.get(a.personId), canOpenPerson(clientScope, a.personId)))
+            .sort(byPersonName),
     };
 }
 
@@ -90,8 +100,11 @@ async function getAssociation(companyId, personId) {
     return res.Item || null;
 }
 
-/** Reads the company's associations (consistent) and the linked people, returns Company detail. */
-async function loadCompanyDetail(company) {
+/**
+ * Reads the company's associations (consistent) and the linked people, returns Company detail.
+ * clientScope: null for an admin, else the member's scope (see toCompanyDetail).
+ */
+async function loadCompanyDetail(company, clientScope = null) {
     const associations = await database.queryAll({
         TableName: ASSOCIATIONS_TABLE(),
         KeyConditionExpression: '#companyId = :id',
@@ -105,7 +118,7 @@ async function loadCompanyDetail(company) {
         associations.map((a) => a.personId),
         ['name', 'phone', 'email']
     );
-    return toCompanyDetail(company, associations, people);
+    return toCompanyDetail(company, associations, people, clientScope);
 }
 
 /** Throws 409 PAN_TAKEN when another company (not exceptId) already has this PAN. */
