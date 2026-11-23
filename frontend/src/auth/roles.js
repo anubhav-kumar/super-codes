@@ -1,6 +1,6 @@
 /**
  * Role helpers for the session user (FR1 decisions 1, 2, 4). Screens ask through useRole(), not here.
- * Session user shape: { id, email, name, isAdmin, workerId, mustChangePassword }.
+ * Session user shape: { id, email, name, isAdmin, workerId, workerName, mustChangePassword }.
  */
 
 /** Admin unless the server says otherwise: a missing isAdmin (users and sessions from before FR1) means admin. */
